@@ -1,0 +1,59 @@
+{
+  "products": [
+    {
+      "brand_en": "rom&nd",
+      "brand_ko": "롬앤",
+      "product_name_ko": "[1등틴트/NEW컬러] 롬앤 | 미피 더 쥬시 래스팅 틴트 기획/단품",
+      "price": 13000,
+      "shade": null,
+      "image_url": "https://image.oliveyoung.co.kr/cfimages/cf-goods/uploads/images/thumbnails/10/0000/0024/A00000024121067ko.jpg?l=ko",
+      "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000241210&dispCatNo=1000001000200060003&trackingCd=Result_1",
+      "goods_no": "A000000241210",
+      "keywords": ["romand", "rom&nd", "롬앤", "틴트", "립"]
+    },
+    {
+      "brand_en": "rom&nd",
+      "brand_ko": "롬앤",
+      "product_name_ko": "[아일릿 원희 PICK] 롬앤 | 미피 글래스팅 컬러 글로스",
+      "price": 13000,
+      "shade": null,
+      "image_url": "https://image.oliveyoung.co.kr/cfimages/cf-goods/uploads/images/thumbnails/10/0000/0019/A00000019723190ko.jpg?l=ko",
+      "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000197231&dispCatNo=1000001000200060002&trackingCd=Result_2",
+      "goods_no": "A000000197231",
+      "keywords": ["romand", "rom&nd", "롬앤", "글로스", "립"]
+    },
+    {
+      "brand_en": "FOR BEAUT",
+      "brand_ko": "포뷰트",
+      "product_name_ko": "포뷰트 텍스처 쉐이크 스프레이 100ml",
+      "price": 24000,
+      "shade": null,
+      "image_url": "https://image.oliveyoung.co.kr/cfimages/cf-goods/uploads/images/thumbnails/10/0000/0023/A00000023246211ko.jpg?l=ko",
+      "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000232462&dispCatNo=1000001000400110002,1000001000700090013&trackingCd=Result_1",
+      "goods_no": "A000000232462",
+      "keywords": ["FOR BEAUT", "포뷰트", "헤어", "스프레이"]
+    },
+    {
+      "brand_en": "FOR BEAUT",
+      "brand_ko": "포뷰트",
+      "product_name_ko": "포뷰트 두피 타투15g 블랙/브라운 단품/기획",
+      "price": 24000,
+      "shade": null,
+      "image_url": "https://image.oliveyoung.co.kr/cfimages/cf-goods/uploads/images/thumbnails/10/0000/0022/A00000022355214ko.jpg?l=ko",
+      "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000223552&dispCatNo=1000001000400100007,1000001000700090012&trackingCd=Result_2",
+      "goods_no": "A000000223552",
+      "keywords": ["FOR BEAUT", "포뷰트", "두피", "헤어"]
+    },
+    {
+      "brand_en": "SHINGMULNARA",
+      "brand_ko": "식물나라",
+      "product_name_ko": "식물나라 가벼운 수분 선 젤 60ml 단품/2입 기획",
+      "price": 25800,
+      "shade": null,
+      "image_url": "https://image.oliveyoung.co.kr/uploads/images/goods/10/0000/0022/A00000022522401ko.jpg",
+      "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000225224",
+      "goods_no": "A000000225224",
+      "keywords": ["SHINGMULNARA", "식물나라", "선크림", "선 젤", "수분 선 젤"]
+    }
+  ]
+}

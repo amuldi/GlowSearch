@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: glowsearch-backend
+    env: docker
+    rootDir: backend
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: GLOWSEARCH_BROWSER_COLLECTOR_ENABLED
+        value: true
+      - key: GLOWSEARCH_BROWSER_HEADLESS
+        value: true
+      - key: GLOWSEARCH_BROWSER_TIMEOUT_SECONDS
+        value: 25
+      - key: GLOWSEARCH_MUSINSA_BRAND_LOOKUP_ENABLED
+        value: true
+      - key: GLOWSEARCH_MUSINSA_PRODUCT_COLLECTOR_ENABLED
+        value: true
+      - key: GLOWSEARCH_MUSINSA_BEAUTY_CATEGORY_CODE
+        value: 104
+      - key: GLOWSEARCH_CORS_ORIGINS
+        value: http://localhost:3000

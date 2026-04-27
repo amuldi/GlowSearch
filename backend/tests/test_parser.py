@@ -1,0 +1,113 @@
+from app.parser.oliveyoung_html import parse_detail_page, parse_search_results
+
+
+BASE_URL = "https://www.oliveyoung.co.kr"
+
+
+def test_parse_search_results_from_oliveyoung_listing_markup() -> None:
+    html = """
+    <ul class="cate_prd_list">
+      <li>
+        <div class="prd_info">
+          <a href="javascript:common.link.moveGoodsDetail('A000000113988');">
+            <img src="//image.oliveyoung.co.kr/item.jpg" alt="상품명 이미지" />
+          </a>
+          <div class="prd_name">
+            <a>
+              <span class="tx_brand">BRTC</span>
+              <p class="tx_name">BRTC V10 비타민 화이트닝 슬리핑팩 100ml</p>
+            </a>
+          </div>
+          <p class="prd_price">
+            <span class="tx_org"><span class="tx_num">24,000</span>원</span>
+          </p>
+        </div>
+      </li>
+    </ul>
+    """
+
+    records = parse_search_results(html, base_url=BASE_URL, limit=10)
+
+    assert len(records) == 1
+    assert records[0].source_brand_name == "BRTC"
+    assert records[0].product_name_ko == "BRTC V10 비타민 화이트닝 슬리핑팩 100ml"
+    assert records[0].regular_price == 24000
+    assert records[0].image_url == "https://image.oliveyoung.co.kr/item.jpg"
+    assert records[0].source_product_id == "A000000113988"
+    assert records[0].source_url == (
+        "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000113988"
+    )
+
+
+def test_parse_display_price_range_from_official_source() -> None:
+    html = """
+    <ul class="cate_prd_list">
+      <li>
+        <span class="tx_brand">브랜드</span>
+        <p class="tx_name">옵션 가격 상품</p>
+        <p class="prd_price"><span class="tx_cur">19,900 원 ~</span></p>
+      </li>
+    </ul>
+    """
+
+    records = parse_search_results(html, base_url=BASE_URL, limit=10)
+
+    assert records[0].regular_price == 19900
+
+
+def test_parse_modern_oliveyoung_brand_name_markup() -> None:
+    html = """
+    <ul>
+      <li data-ref-goodsno="A000000111111">
+        <a href="/store/goods/getGoodsDetail.do?goodsNo=A000000111111">
+          <img src="https://image.oliveyoung.co.kr/item.jpg" />
+        </a>
+        <p class="ProductCard_brand__abc">식물나라</p>
+        <h3 data-qa-name="text-product-title">식물나라 가벼운 수분 선 젤 60ml 단품/2입 기획</h3>
+        <span data-qa-name="text-product-original-price">25,800원</span>
+      </li>
+    </ul>
+    """
+
+    records = parse_search_results(html, base_url=BASE_URL, limit=10)
+
+    assert records[0].source_brand_name == "식물나라"
+    assert records[0].product_name_ko == "식물나라 가벼운 수분 선 젤 60ml 단품/2입 기획"
+    assert records[0].regular_price == 25800
+
+
+def test_parse_next_detail_page_price_and_name() -> None:
+    html = """
+    <div class="GoodsDetailInfo_title-area__unu7g" data-qa-name="text-product-title">
+      <h3 class="GoodsDetailInfo_title__Vl_IP">[NEW] 공식 제품명</h3>
+    </div>
+    <span class="GoodsDetailInfo_price__AoTh8" data-qa-name="text-product-discount-price">
+      <span>13,000</span><span>원 ~</span>
+    </span>
+    """
+
+    record = parse_detail_page(html, base_url=BASE_URL)
+
+    assert record.product_name_ko == "[NEW] 공식 제품명"
+    assert record.regular_price == 13000
+
+
+def test_parse_detail_shades_from_option_markup() -> None:
+    html = """
+    <html>
+      <head><meta property="og:title" content="컬러 립 틴트 | 올리브영" /></head>
+      <body>
+        <button class="prd_brand">fwee</button>
+        <ul class="prd_option_box">
+          <li>01. 베이비 핑크</li>
+          <li>02. 로지 코랄</li>
+        </ul>
+      </body>
+    </html>
+    """
+
+    record = parse_detail_page(html, base_url=BASE_URL)
+
+    assert record.product_name_ko == "컬러 립 틴트"
+    assert record.source_brand_name == "fwee"
+    assert record.shade == "01. 베이비 핑크, 02. 로지 코랄"
