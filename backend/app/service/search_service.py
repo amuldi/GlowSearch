@@ -157,7 +157,7 @@ class SearchService:
         criteria: SearchCriteria,
         brand_match: BrandMatch | None,
     ) -> tuple[list[ProductSearchResult], int]:
-        normalized = [self._normalizer.normalize(record) for record in records]
+        normalized = self._dedupe_results([self._normalizer.normalize(record) for record in records])
         complete_results = self._only_core_complete(normalized)
         filtered = self._apply_filters(complete_results, criteria)
         relevant, top_score = self._rank_query_matches(
@@ -338,6 +338,23 @@ class SearchService:
             for product in results
             if product.brand_en and product.product_name_ko
         ]
+
+    @classmethod
+    def _dedupe_results(cls, results: list[ProductSearchResult]) -> list[ProductSearchResult]:
+        deduped: list[ProductSearchResult] = []
+        seen: set[str] = set()
+        for product in results:
+            brand_key = cls._key(product.brand_en)
+            name_key = cls._key(product.product_name_ko)
+            if not brand_key or not name_key:
+                deduped.append(product)
+                continue
+            key = f"{brand_key}:{name_key}"
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(product)
+        return deduped
 
     @classmethod
     def _rank_query_matches(

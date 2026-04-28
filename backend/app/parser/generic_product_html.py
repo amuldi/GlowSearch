@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterator
 from urllib.parse import urljoin
 
@@ -110,7 +111,7 @@ def _record_from_mapping(
     if str(item.get("@type", "")).casefold() not in {"product", ""}:
         return None
 
-    name = clean_text(item.get("name"))
+    name = _clean_product_name(item.get("name"))
     offers = item.get("offers") if isinstance(item.get("offers"), dict) else {}
     price = (
         parse_krw_price(item.get("price"))
@@ -174,7 +175,7 @@ def _card_name(node: Tag) -> str | None:
         found = node.select_one(selector)
         if not found:
             continue
-        text = clean_text(found.get("title") or found.get_text(" ", strip=True))
+        text = _clean_product_name(found.get("title") or found.get_text(" ", strip=True))
         if text and not _is_noise(text):
             return text
     return None
@@ -257,11 +258,20 @@ def _is_noise(text: str) -> bool:
     return normalized in exact_noise or any(item in normalized for item in contains_noise)
 
 
+def _clean_product_name(value: object | None) -> str | None:
+    text = clean_text(value)
+    if text is None:
+        return None
+    text = re.sub(r"^\s*(?:상품명|제품명)\s*[:：]\s*", "", text)
+    return clean_text(text)
+
+
 def _dedupe(records: list[ProductSourceRecord]) -> list[ProductSourceRecord]:
     deduped: list[ProductSourceRecord] = []
     seen: set[str] = set()
     for record in records:
-        key = record.source_url or f"{record.source_brand_name}:{record.product_name_ko}"
+        name_key = re.sub(r"[\s\-_./|+&'():\[\],]+", "", record.product_name_ko or "").casefold()
+        key = f"{record.source_brand_name}:{name_key}" if name_key else record.source_url
         if not key or key in seen:
             continue
         seen.add(key)

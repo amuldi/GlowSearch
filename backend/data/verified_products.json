@@ -274,6 +274,28 @@
       "goods_no": "hwahae-2163268",
       "source": "hwahae",
       "keywords": ["EITHER&", "이더앤", "듀이시럽틴트 5번", "듀이 시럽 틴트 5번", "05 이더웨이", "이더웨이"]
+    },
+    {
+      "brand_en": "mixsoon",
+      "brand_ko": "믹순",
+      "product_name_ko": "믹순 히알레배 포어 블러링 크림 50ml",
+      "price": 14900,
+      "shade": null,
+      "image_url": "https://mixsoon.co.kr/web/product/big/202511/5b5074d7d8145d4258a16a5ab395d0c7.jpg",
+      "source_url": "https://mixsoon.co.kr/product/detail.html?product_no=922",
+      "goods_no": "mixsoon-922",
+      "source": "official",
+      "keywords": [
+        "mixsoon",
+        "믹순",
+        "히알레배 포어 블러링 크림",
+        "히알레배 포어블러링 크림",
+        "히알레배 크림",
+        "포어 블러링 크림",
+        "올리브영 히알레배",
+        "oliveyoung",
+        "GA251135399"
+      ]
     }
   ]
 }

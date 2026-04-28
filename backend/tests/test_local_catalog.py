@@ -1,8 +1,12 @@
 import json
+from pathlib import Path
 
 import pytest
 
 from app.data_collector.local_catalog import LocalVerifiedCatalogCollector
+
+
+PROJECT_CATALOG_PATH = Path(__file__).resolve().parents[1] / "data" / "verified_products.json"
 
 
 @pytest.mark.asyncio
@@ -36,3 +40,15 @@ async def test_local_catalog_returns_verified_matching_products(tmp_path) -> Non
     assert records[0].product_name_ko == "롬앤 틴트"
     assert records[0].regular_price == 13000
     assert records[0].source_url == "https://example.com/product"
+
+
+@pytest.mark.asyncio
+async def test_project_catalog_returns_mixsoon_hyalraebae_cream() -> None:
+    collector = LocalVerifiedCatalogCollector(PROJECT_CATALOG_PATH)
+
+    records = await collector.search("믹순 히알레배 포어 블러링 크림", limit=5)
+
+    assert len(records) == 1
+    assert records[0].source_brand_name == "믹순"
+    assert records[0].product_name_ko == "믹순 히알레배 포어 블러링 크림 50ml"
+    assert records[0].regular_price == 14900
