@@ -13,10 +13,6 @@ export async function searchProducts(
   const url = new URL("/search", API_BASE_URL);
   url.searchParams.set("q", params.query);
 
-  if (params.brand) url.searchParams.set("brand", params.brand);
-  if (params.minPrice) url.searchParams.set("min_price", params.minPrice);
-  if (params.maxPrice) url.searchParams.set("max_price", params.maxPrice);
-  if (params.hasShade !== undefined) url.searchParams.set("has_shade", String(params.hasShade));
   if (params.limit) url.searchParams.set("limit", String(params.limit));
 
   const response = await fetch(url, {

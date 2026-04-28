@@ -18,9 +18,5 @@ export type SearchResponse = {
 
 export type SearchParams = {
   query: string;
-  brand?: string;
-  minPrice?: string;
-  maxPrice?: string;
-  hasShade?: boolean;
   limit?: number;
 };

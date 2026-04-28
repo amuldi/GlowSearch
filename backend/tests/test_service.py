@@ -256,7 +256,11 @@ class PartialMusinsaBrandCollector:
 class BrowserOliveYoungBrandCollector:
     name = "oliveyoung:browser"
 
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, int]] = []
+
     async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        self.calls.append((keyword, limit))
         if keyword not in {"에뛰드", "에뛰드 마스카라"}:
             return []
         return [
@@ -530,7 +534,7 @@ async def test_search_service_uses_network_collectors_for_specific_search(tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_search_service_supplements_partial_brand_results_with_oliveyoung_browser(
+async def test_search_service_returns_fast_results_without_browser_supplement(
     tmp_path,
 ) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -538,8 +542,9 @@ async def test_search_service_supplements_partial_brand_results_with_oliveyoung_
         '{"entries":[{"official_en":"ETUDE","aliases":["에뛰드"],"sources":[]}]}',
         encoding="utf-8",
     )
+    browser = BrowserOliveYoungBrandCollector()
     service = SearchService(
-        collectors=[PartialMusinsaBrandCollector(), BrowserOliveYoungBrandCollector()],
+        collectors=[PartialMusinsaBrandCollector(), browser],
         normalizer=ProductNormalizer(
             BrandResolver(registry_path),
             base_url="https://www.oliveyoung.co.kr",
@@ -549,13 +554,10 @@ async def test_search_service_supplements_partial_brand_results_with_oliveyoung_
 
     response = await service.search("에뛰드", SearchCriteria(limit=48))
 
-    assert response.count == 3
-    assert [product.source for product in response.results[:2]] == ["oliveyoung", "oliveyoung"]
-    assert {product.product_name_ko for product in response.results} == {
-        "에뛰드 컬 픽스 마스카라",
-        "에뛰드 그림자 쉐딩",
-        "에뛰드 무신사 상품",
-    }
+    assert response.count == 1
+    assert response.results[0].source == "musinsa"
+    assert response.results[0].product_name_ko == "에뛰드 무신사 상품"
+    assert browser.calls == []
 
 
 @pytest.mark.asyncio

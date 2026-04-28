@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, Search, SlidersHorizontal, X } from "lucide-react";
+import { Check, Copy, Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { searchProducts } from "@/lib/api";
@@ -24,17 +24,14 @@ const jpyFormatter = new Intl.NumberFormat("ja-JP", {
   maximumFractionDigits: 0,
 });
 
-const DEFAULT_RESULT_LIMIT = 48;
+const RESULT_PAGE_SIZE = 24;
+const DEFAULT_RESULT_LIMIT = RESULT_PAGE_SIZE;
 const MAX_RESULT_LIMIT = 480;
 
 export default function Home() {
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [searchRun, setSearchRun] = useState(0);
-  const [brand, setBrand] = useState("");
-  const [minPrice, setMinPrice] = useState("");
-  const [maxPrice, setMaxPrice] = useState("");
-  const [hasShade, setHasShade] = useState(false);
   const [resultLimit, setResultLimit] = useState(DEFAULT_RESULT_LIMIT);
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -54,14 +51,13 @@ export default function Home() {
   const submittedQueryCount = submittedQueryTerms.length;
   const isInputBatchQuery = queryCount > 1;
   const isSubmittedBatchQuery = submittedQueryCount > 1;
-  const hasActiveFilters = Boolean(brand || minPrice || maxPrice || hasShade);
   const canLoadMore = Boolean(
     response && !isSubmittedBatchQuery && response.count >= resultLimit && resultLimit < MAX_RESULT_LIMIT,
   );
 
   useEffect(() => {
     setResultLimit(DEFAULT_RESULT_LIMIT);
-  }, [brand, hasShade, maxPrice, minPrice, trimmedSubmittedQuery]);
+  }, [trimmedSubmittedQuery]);
 
   useEffect(() => {
     if (!trimmedSubmittedQuery) {
@@ -78,10 +74,6 @@ export default function Home() {
         const data = await searchProducts(
           {
             query: trimmedSubmittedQuery,
-            brand: brand.trim() || undefined,
-            minPrice: minPrice || undefined,
-            maxPrice: maxPrice || undefined,
-            hasShade: hasShade ? true : undefined,
             limit: isSubmittedBatchQuery ? Math.min(submittedQueryCount, MAX_RESULT_LIMIT) : resultLimit,
           },
           controller.signal,
@@ -101,11 +93,7 @@ export default function Home() {
       controller.abort();
     };
   }, [
-    brand,
-    hasShade,
     isSubmittedBatchQuery,
-    maxPrice,
-    minPrice,
     resultLimit,
     searchRun,
     submittedQueryCount,
@@ -135,13 +123,6 @@ export default function Home() {
     trimmedSubmittedQuery,
   ]);
 
-  const clearFilters = () => {
-    setBrand("");
-    setMinPrice("");
-    setMaxPrice("");
-    setHasShade(false);
-  };
-
   const clearSearchInput = () => {
     setQuery("");
   };
@@ -159,16 +140,7 @@ export default function Home() {
     <main className="min-h-screen bg-[#fafafa] px-4 py-8 text-ink sm:px-6 lg:px-8">
       <section className="mx-auto flex w-full max-w-3xl flex-col items-center gap-5 pt-6 sm:pt-10">
         <div className="flex w-full items-start gap-2 rounded-lg border border-line bg-white px-4 py-3 shadow-soft">
-          <button
-            type="button"
-            onClick={submitSearch}
-            disabled={!trimmedQuery || isLoading}
-            className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-md text-mint transition hover:bg-[#eaf5f1] disabled:cursor-not-allowed disabled:text-neutral-300 disabled:hover:bg-transparent"
-            aria-label="검색"
-            title="검색"
-          >
-            <Search className="h-5 w-5" aria-hidden="true" />
-          </button>
+          <Search className="mt-2.5 h-5 w-5 shrink-0 text-mint" aria-hidden="true" />
           <textarea
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -188,58 +160,17 @@ export default function Home() {
               <X className="h-4 w-4" aria-hidden="true" />
             </button>
           ) : null}
-        </div>
-
-        <div className="w-full rounded-lg border border-line bg-white p-3">
-          <div className="flex items-center gap-2 pb-3 text-sm font-medium">
-            <SlidersHorizontal className="h-4 w-4 text-mint" aria-hidden="true" />
-            <span>필터</span>
-            {hasActiveFilters ? (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="ml-auto grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100"
-                aria-label="필터 지우기"
-                title="필터 지우기"
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            ) : null}
-          </div>
-          <div className="grid gap-2 sm:grid-cols-[1fr_120px_120px_auto]">
-            <input
-              value={brand}
-              onChange={(event) => setBrand(event.target.value)}
-              placeholder="브랜드"
-              className="h-10 rounded-md border border-line px-3 text-sm outline-none focus:border-mint"
-              aria-label="브랜드 필터"
-            />
-            <input
-              value={minPrice}
-              onChange={(event) => setMinPrice(event.target.value.replace(/[^\d]/g, ""))}
-              placeholder="최소가"
-              inputMode="numeric"
-              className="h-10 rounded-md border border-line px-3 text-sm outline-none focus:border-mint"
-              aria-label="최소 가격"
-            />
-            <input
-              value={maxPrice}
-              onChange={(event) => setMaxPrice(event.target.value.replace(/[^\d]/g, ""))}
-              placeholder="최대가"
-              inputMode="numeric"
-              className="h-10 rounded-md border border-line px-3 text-sm outline-none focus:border-mint"
-              aria-label="최대 가격"
-            />
-            <label className="flex h-10 items-center gap-2 rounded-md border border-line px-3 text-sm">
-              <input
-                type="checkbox"
-                checked={hasShade}
-                onChange={(event) => setHasShade(event.target.checked)}
-                className="h-4 w-4 accent-mint"
-              />
-              색상 있음
-            </label>
-          </div>
+          <button
+            type="button"
+            onClick={submitSearch}
+            disabled={!trimmedQuery || isLoading}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-mint px-3 text-sm font-semibold text-white hover:bg-[#26765f] disabled:cursor-not-allowed disabled:bg-neutral-300"
+            aria-label="검색"
+            title="검색"
+          >
+            <Search className="h-4 w-4" aria-hidden="true" />
+            검색
+          </button>
         </div>
       </section>
 
@@ -262,7 +193,7 @@ export default function Home() {
           <div className="mt-5 flex justify-center">
             <button
               type="button"
-              onClick={() => setResultLimit((current) => Math.min(current + 48, MAX_RESULT_LIMIT))}
+              onClick={() => setResultLimit((current) => Math.min(current + RESULT_PAGE_SIZE, MAX_RESULT_LIMIT))}
               className="h-10 rounded-md border border-line bg-white px-4 text-sm font-medium text-neutral-800 hover:border-mint hover:text-mint"
             >
               더 보기

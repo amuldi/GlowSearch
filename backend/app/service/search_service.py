@@ -276,11 +276,8 @@ class SearchService:
         return _CollectedResult(records=records, errors=errors)
 
     @staticmethod
-    def _needs_browser_supplement(records: list[ProductSourceRecord], limit: int) -> bool:
-        if not records:
-            return True
-        has_live_oliveyoung = any(record.source == "oliveyoung" for record in records)
-        return len(records) < limit or not has_live_oliveyoung
+    def _needs_browser_supplement(records: list[ProductSourceRecord], _limit: int) -> bool:
+        return not records
 
     @classmethod
     def _collect_queries(
