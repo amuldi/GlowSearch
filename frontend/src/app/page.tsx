@@ -29,6 +29,8 @@ const MAX_RESULT_LIMIT = 96;
 
 export default function Home() {
   const [query, setQuery] = useState("");
+  const [submittedQuery, setSubmittedQuery] = useState("");
+  const [searchRun, setSearchRun] = useState(0);
   const [brand, setBrand] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
@@ -39,23 +41,30 @@ export default function Home() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const trimmedQuery = query.trim();
+  const trimmedSubmittedQuery = submittedQuery.trim();
   const queryTerms = useMemo(
     () => query.split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
     [query],
   );
+  const submittedQueryTerms = useMemo(
+    () => submittedQuery.split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
+    [submittedQuery],
+  );
   const queryCount = queryTerms.length;
-  const isBatchQuery = queryCount > 1;
+  const submittedQueryCount = submittedQueryTerms.length;
+  const isInputBatchQuery = queryCount > 1;
+  const isSubmittedBatchQuery = submittedQueryCount > 1;
   const hasActiveFilters = Boolean(brand || minPrice || maxPrice || hasShade);
   const canLoadMore = Boolean(
-    response && !isBatchQuery && response.count >= resultLimit && resultLimit < MAX_RESULT_LIMIT,
+    response && !isSubmittedBatchQuery && response.count >= resultLimit && resultLimit < MAX_RESULT_LIMIT,
   );
 
   useEffect(() => {
     setResultLimit(DEFAULT_RESULT_LIMIT);
-  }, [brand, hasShade, maxPrice, minPrice, trimmedQuery]);
+  }, [brand, hasShade, maxPrice, minPrice, trimmedSubmittedQuery]);
 
   useEffect(() => {
-    if (!trimmedQuery) {
+    if (!trimmedSubmittedQuery || trimmedQuery !== trimmedSubmittedQuery) {
       setResponse(null);
       setIsLoading(false);
       setErrorMessage(null);
@@ -63,18 +72,18 @@ export default function Home() {
     }
 
     const controller = new AbortController();
-    const timer = window.setTimeout(async () => {
+    const runSearch = async () => {
       setIsLoading(true);
       setErrorMessage(null);
       try {
         const data = await searchProducts(
           {
-            query: trimmedQuery,
+            query: trimmedSubmittedQuery,
             brand: brand.trim() || undefined,
             minPrice: minPrice || undefined,
             maxPrice: maxPrice || undefined,
             hasShade: hasShade ? true : undefined,
-            limit: isBatchQuery ? Math.min(queryCount, MAX_RESULT_LIMIT) : resultLimit,
+            limit: isSubmittedBatchQuery ? Math.min(submittedQueryCount, MAX_RESULT_LIMIT) : resultLimit,
           },
           controller.signal,
         );
@@ -86,34 +95,73 @@ export default function Home() {
       } finally {
         setIsLoading(false);
       }
-    }, 250);
+    };
+    void runSearch();
 
     return () => {
-      window.clearTimeout(timer);
       controller.abort();
     };
-  }, [brand, hasShade, isBatchQuery, maxPrice, minPrice, queryCount, resultLimit, trimmedQuery]);
+  }, [
+    brand,
+    hasShade,
+    isSubmittedBatchQuery,
+    maxPrice,
+    minPrice,
+    resultLimit,
+    searchRun,
+    submittedQueryCount,
+    trimmedQuery,
+    trimmedSubmittedQuery,
+  ]);
 
   const statusText = useMemo(() => {
-    if (!trimmedQuery) return "";
+    if (!trimmedSubmittedQuery || trimmedQuery !== trimmedSubmittedQuery) return "";
     if (isLoading) return "검색 중입니다.";
     if (errorMessage) return errorMessage;
     if (response && response.count === 0) return "검색 결과가 없습니다.";
-    if (response && isBatchQuery) {
-      return `${queryCount.toLocaleString("ko-KR")}개 검색어 중 ${response.count.toLocaleString("ko-KR")}개 결과`;
+    if (response && isSubmittedBatchQuery) {
+      return `${submittedQueryCount.toLocaleString("ko-KR")}개 검색어 중 ${response.count.toLocaleString("ko-KR")}개 결과`;
     }
-    if (response && !isBatchQuery && response.count >= resultLimit) {
+    if (response && !isSubmittedBatchQuery && response.count >= resultLimit) {
       return `${response.count.toLocaleString("ko-KR")}개 결과 표시 중`;
     }
     if (response) return `${response.count.toLocaleString("ko-KR")}개 결과`;
     return "";
-  }, [errorMessage, isBatchQuery, isLoading, queryCount, response, resultLimit, trimmedQuery]);
+  }, [
+    errorMessage,
+    isLoading,
+    isSubmittedBatchQuery,
+    response,
+    resultLimit,
+    submittedQueryCount,
+    trimmedQuery,
+    trimmedSubmittedQuery,
+  ]);
 
   const clearFilters = () => {
     setBrand("");
     setMinPrice("");
     setMaxPrice("");
     setHasShade(false);
+  };
+
+  const clearSearch = () => {
+    setQuery("");
+    setSubmittedQuery("");
+    setResponse(null);
+    setErrorMessage(null);
+    setIsLoading(false);
+    setResultLimit(DEFAULT_RESULT_LIMIT);
+  };
+
+  const submitSearch = () => {
+    if (!trimmedQuery) {
+      clearSearch();
+      return;
+    }
+    setSubmittedQuery(trimmedQuery);
+    setResultLimit(DEFAULT_RESULT_LIMIT);
+    setSearchRun((current) => current + 1);
   };
 
   return (
@@ -124,7 +172,7 @@ export default function Home() {
           <textarea
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            rows={isBatchQuery ? Math.min(queryCount, 6) : 1}
+            rows={isInputBatchQuery ? Math.min(queryCount, 6) : 1}
             placeholder="관련 검색어"
             className="min-h-10 min-w-0 flex-1 resize-y border-0 bg-transparent py-2 text-base leading-6 outline-none placeholder:text-neutral-400"
             aria-label="관련 검색어"
@@ -132,7 +180,7 @@ export default function Home() {
           {query ? (
             <button
               type="button"
-              onClick={() => setQuery("")}
+              onClick={clearSearch}
               className="grid h-9 w-9 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100"
               aria-label="검색어 지우기"
               title="검색어 지우기"
@@ -140,6 +188,17 @@ export default function Home() {
               <X className="h-4 w-4" aria-hidden="true" />
             </button>
           ) : null}
+          <button
+            type="button"
+            onClick={submitSearch}
+            disabled={!trimmedQuery || isLoading}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-mint px-3 text-sm font-semibold text-white hover:bg-[#26765f] disabled:cursor-not-allowed disabled:bg-neutral-300"
+            aria-label="검색"
+            title="검색"
+          >
+            <Search className="h-4 w-4" aria-hidden="true" />
+            검색
+          </button>
         </div>
 
         <div className="w-full rounded-lg border border-line bg-white p-3">
