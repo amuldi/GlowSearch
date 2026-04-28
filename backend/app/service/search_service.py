@@ -211,15 +211,12 @@ class SearchService:
             if source_records:
                 records = self._dedupe_records([*records, *source_records])
 
-        if records:
-            return _CollectedResult(records=records[: max(limit, 1) * 2], errors=[])
-
-        if allow_browser_fallback:
+        if allow_browser_fallback and self._needs_browser_supplement(records, limit):
             browser_collected = await self._collect_browser(queries, limit)
             errors.extend(browser_collected.errors)
             if browser_collected.records:
                 has_successful_source = True
-                records = self._dedupe_records([*records, *browser_collected.records])
+                records = self._dedupe_records([*browser_collected.records, *records])
 
         if records:
             return _CollectedResult(records=records[: max(limit, 1) * 2], errors=[])
@@ -277,6 +274,13 @@ class SearchService:
             if len(records) >= limit:
                 break
         return _CollectedResult(records=records, errors=errors)
+
+    @staticmethod
+    def _needs_browser_supplement(records: list[ProductSourceRecord], limit: int) -> bool:
+        if not records:
+            return True
+        has_live_oliveyoung = any(record.source == "oliveyoung" for record in records)
+        return len(records) < limit or not has_live_oliveyoung
 
     @classmethod
     def _collect_queries(

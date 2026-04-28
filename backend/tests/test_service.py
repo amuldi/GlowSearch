@@ -235,6 +235,50 @@ class RecordingNetworkCollector:
         return []
 
 
+class PartialMusinsaBrandCollector:
+    name = "musinsa"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        if keyword != "에뛰드":
+            return []
+        return [
+            ProductSourceRecord(
+                source_brand_name="ETUDE",
+                product_name_ko="에뛰드 무신사 상품",
+                regular_price=16000,
+                shade=None,
+                image_url=None,
+                source="musinsa",
+            )
+        ]
+
+
+class BrowserOliveYoungBrandCollector:
+    name = "oliveyoung:browser"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        if keyword != "에뛰드":
+            return []
+        return [
+            ProductSourceRecord(
+                source_brand_name="에뛰드",
+                product_name_ko="에뛰드 컬 픽스 마스카라",
+                regular_price=15400,
+                shade=None,
+                image_url=None,
+                source="oliveyoung",
+            ),
+            ProductSourceRecord(
+                source_brand_name="에뛰드",
+                product_name_ko="에뛰드 그림자 쉐딩",
+                regular_price=16000,
+                shade=None,
+                image_url=None,
+                source="oliveyoung",
+            ),
+        ]
+
+
 @pytest.mark.asyncio
 async def test_search_service_applies_price_filter(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -483,6 +527,35 @@ async def test_search_service_uses_network_collectors_for_specific_search(tmp_pa
     assert response.count == 1
     assert response.results[0].brand_en == "MEDIHEAL"
     assert "메디힐 비타민씨 브라이트닝 패드" in network.calls
+
+
+@pytest.mark.asyncio
+async def test_search_service_supplements_partial_brand_results_with_oliveyoung_browser(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"ETUDE","aliases":["에뛰드"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    service = SearchService(
+        collectors=[PartialMusinsaBrandCollector(), BrowserOliveYoungBrandCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search("에뛰드", SearchCriteria(limit=48))
+
+    assert response.count == 3
+    assert [product.source for product in response.results[:2]] == ["oliveyoung", "oliveyoung"]
+    assert {product.product_name_ko for product in response.results} == {
+        "에뛰드 컬 픽스 마스카라",
+        "에뛰드 그림자 쉐딩",
+        "에뛰드 무신사 상품",
+    }
 
 
 @pytest.mark.asyncio
