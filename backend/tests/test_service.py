@@ -54,6 +54,23 @@ class IncompleteCollector:
         ]
 
 
+class SoldOutCollector:
+    name = "sold-out"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        return [
+            ProductSourceRecord(
+                source_brand_name="더샘",
+                product_name_ko="품절 공식 상품",
+                regular_price=None,
+                shade=None,
+                image_url="https://example.test/item.jpg",
+                source="official",
+                source_url="https://example.test/product/1",
+            )
+        ]
+
+
 class SecondFakeCollector:
     name = "second"
 
@@ -216,13 +233,6 @@ class RecordingNetworkCollector:
     async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
         self.calls.append(keyword)
         return []
-
-
-class ShouldNotRunCollector:
-    name = "network"
-
-    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
-        raise AssertionError("network collector should not run for verified shortcut")
 
 
 @pytest.mark.asyncio
@@ -452,14 +462,15 @@ async def test_search_service_shortcuts_verified_batch_matches(tmp_path) -> None
 
 
 @pytest.mark.asyncio
-async def test_search_service_shortcuts_verified_specific_search(tmp_path) -> None:
+async def test_search_service_uses_network_collectors_for_specific_search(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text(
         '{"entries":[{"official_en":"MEDIHEAL","aliases":["메디힐"],"sources":[]}]}',
         encoding="utf-8",
     )
+    network = RecordingNetworkCollector()
     service = SearchService(
-        collectors=[VerifiedCacheCollector(), ShouldNotRunCollector()],
+        collectors=[VerifiedCacheCollector(), network],
         normalizer=ProductNormalizer(
             BrandResolver(registry_path),
             base_url="https://www.oliveyoung.co.kr",
@@ -471,6 +482,7 @@ async def test_search_service_shortcuts_verified_specific_search(tmp_path) -> No
 
     assert response.count == 1
     assert response.results[0].brand_en == "MEDIHEAL"
+    assert "메디힐 비타민씨 브라이트닝 패드" in network.calls
 
 
 @pytest.mark.asyncio
@@ -510,3 +522,26 @@ async def test_search_service_filters_results_missing_core_fields(tmp_path) -> N
 
     assert response.count == 0
     assert response.results == []
+
+
+@pytest.mark.asyncio
+async def test_search_service_keeps_sold_out_results_without_price(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"the SAEM","aliases":["더샘"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    service = SearchService(
+        collectors=[SoldOutCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search("더샘 품절 공식 상품", SearchCriteria(limit=24))
+
+    assert response.count == 1
+    assert response.results[0].brand_en == "the SAEM"
+    assert response.results[0].price is None

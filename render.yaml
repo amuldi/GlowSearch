@@ -19,5 +19,11 @@ services:
         value: true
       - key: GLOWSEARCH_MUSINSA_BEAUTY_CATEGORY_CODE
         value: 104
+      - key: GLOWSEARCH_OFFICIAL_BRAND_SITE_COLLECTOR_ENABLED
+        value: true
+      - key: GLOWSEARCH_OFFICIAL_BRAND_SITE_TIMEOUT_SECONDS
+        value: 1.5
+      - key: GLOWSEARCH_OFFICIAL_BRAND_SITE_MAX_SEARCH_URLS
+        value: 2
       - key: GLOWSEARCH_CORS_ORIGINS
         value: http://localhost:3000

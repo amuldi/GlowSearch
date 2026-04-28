@@ -8,6 +8,7 @@ from app.data_collector.browser_oliveyoung import BrowserOliveYoungCollector
 from app.data_collector.local_catalog import LocalVerifiedCatalogCollector
 from app.data_collector.musinsa import MusinsaProductCollector
 from app.data_collector.oliveyoung import OliveYoungCollector
+from app.data_collector.official_brand import OfficialBrandSiteCollector
 from app.normalizer.brand import BrandResolver
 from app.normalizer.musinsa import MusinsaBrandResolver
 from app.normalizer.product import ProductNormalizer
@@ -24,6 +25,8 @@ def get_search_service() -> SearchService:
     collectors.append(LocalVerifiedCatalogCollector(settings.verified_catalog_path))
     if settings.musinsa_product_collector_enabled:
         collectors.append(MusinsaProductCollector(settings))
+    if settings.official_brand_site_collector_enabled:
+        collectors.append(OfficialBrandSiteCollector(settings, settings.brand_registry_path))
     if settings.browser_collector_enabled:
         collectors.append(BrowserOliveYoungCollector(settings))
 

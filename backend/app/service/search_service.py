@@ -336,7 +336,7 @@ class SearchService:
         return [
             product
             for product in results
-            if product.brand_en and product.product_name_ko and product.price is not None
+            if product.brand_en and product.product_name_ko
         ]
 
     @classmethod
@@ -447,16 +447,7 @@ class SearchService:
 
     @classmethod
     def _can_use_verified_shortcut(cls, query: str, require_relevant: bool) -> bool:
-        if require_relevant:
-            return True
-        meaningful_tokens = [
-            token
-            for token in cls._tokens(query)
-            if len(cls._key(token)) >= 2
-            and not cls._key(token).isdigit()
-            and not cls._is_color_token(cls._key(token))
-        ]
-        return len(meaningful_tokens) >= 2
+        return require_relevant
 
     @staticmethod
     def _is_color_token(token_key: str) -> bool:

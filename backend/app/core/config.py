@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     musinsa_timeout_seconds: float = 2.5
     musinsa_beauty_category_code: str = "104"
 
+    official_brand_site_collector_enabled: bool = True
+    official_brand_site_timeout_seconds: float = 1.5
+    official_brand_site_max_brands: int = 1
+    official_brand_site_max_sources_per_brand: int = 1
+    official_brand_site_max_search_urls: int = 2
+
     brand_registry_path: Path = BACKEND_DIR / "data" / "brand_registry.json"
     verified_catalog_path: Path = BACKEND_DIR / "data" / "verified_products.json"
 
