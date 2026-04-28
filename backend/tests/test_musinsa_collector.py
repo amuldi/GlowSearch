@@ -64,3 +64,38 @@ async def test_musinsa_product_collector_uses_beauty_category_only() -> None:
         records = await collector.search("푸마", 3)
 
     assert records == []
+
+
+@pytest.mark.asyncio
+async def test_musinsa_product_collector_paginates_for_large_limits() -> None:
+    seen_pages: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        page = request.url.params["page"]
+        seen_pages.append(page)
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "list": [
+                        {
+                            "goodsNo": f"{page}01",
+                            "goodsName": f"틴트 {page}",
+                            "goodsLinkUrl": f"https://www.musinsa.com/products/{page}01",
+                            "thumbnail": "https://image.msscdn.net/item.jpg",
+                            "normalPrice": 18000,
+                            "brand": "fwee",
+                            "brandName": "퓌",
+                        }
+                    ]
+                },
+                "meta": {"result": "SUCCESS"},
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        collector = MusinsaProductCollector(Settings(), client=client)
+        records = await collector.search("틴트", 96)
+
+    assert seen_pages == ["1", "2"]
+    assert len(records) == 2

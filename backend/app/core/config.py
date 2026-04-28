@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     )
 
     cache_ttl_seconds: int = 180
-    max_results: int = 48
+    max_results: int = 96
     detail_enrichment_enabled: bool = True
     detail_concurrency: int = 6
 

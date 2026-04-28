@@ -22,6 +22,7 @@ class _CollectedResult:
 
 class SearchService:
     _BATCH_CONCURRENCY = 4
+    _COLLECTOR_TIMEOUT_SECONDS = 3.0
 
     def __init__(
         self,
@@ -196,16 +197,19 @@ class SearchService:
             collector for collector in self._collectors if collector.name != "oliveyoung:browser"
         ]
 
-        for query in queries:
-            for collector in fast_collectors:
-                try:
-                    source_records = await collector.search(query, limit)
-                except SourceUnavailableError as exc:
-                    errors.append(f"{collector.name}: {exc}")
-                    continue
-                has_successful_source = True
-                if source_records:
-                    records = self._dedupe_records([*records, *source_records])
+        collected = await asyncio.gather(
+            *(
+                self._collect_from_source(collector, query, limit)
+                for query in queries
+                for collector in fast_collectors
+            )
+        )
+        for source_records, error, source_succeeded in collected:
+            has_successful_source = has_successful_source or source_succeeded
+            if error:
+                errors.append(error)
+            if source_records:
+                records = self._dedupe_records([*records, *source_records])
 
         if records:
             return _CollectedResult(records=records[: max(limit, 1) * 2], errors=[])
@@ -222,6 +226,23 @@ class SearchService:
         if has_successful_source:
             return _CollectedResult(records=[], errors=[])
         return _CollectedResult(records=[], errors=errors)
+
+    async def _collect_from_source(
+        self,
+        collector: ProductCollector,
+        query: str,
+        limit: int,
+    ) -> tuple[list[ProductSourceRecord], str | None, bool]:
+        try:
+            source_records = await asyncio.wait_for(
+                collector.search(query, limit),
+                timeout=self._COLLECTOR_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            return [], f"{collector.name}: request timed out", False
+        except SourceUnavailableError as exc:
+            return [], f"{collector.name}: {exc}", False
+        return source_records, None, True
 
     async def _collect_verified_cache(self, queries: list[str], limit: int) -> _CollectedResult:
         records: list[ProductSourceRecord] = []

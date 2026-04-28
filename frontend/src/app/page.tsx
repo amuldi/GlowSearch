@@ -24,12 +24,16 @@ const jpyFormatter = new Intl.NumberFormat("ja-JP", {
   maximumFractionDigits: 0,
 });
 
+const DEFAULT_RESULT_LIMIT = 48;
+const MAX_RESULT_LIMIT = 96;
+
 export default function Home() {
   const [query, setQuery] = useState("");
   const [brand, setBrand] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [hasShade, setHasShade] = useState(false);
+  const [resultLimit, setResultLimit] = useState(DEFAULT_RESULT_LIMIT);
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -42,6 +46,13 @@ export default function Home() {
   const queryCount = queryTerms.length;
   const isBatchQuery = queryCount > 1;
   const hasActiveFilters = Boolean(brand || minPrice || maxPrice || hasShade);
+  const canLoadMore = Boolean(
+    response && !isBatchQuery && response.count >= resultLimit && resultLimit < MAX_RESULT_LIMIT,
+  );
+
+  useEffect(() => {
+    setResultLimit(DEFAULT_RESULT_LIMIT);
+  }, [brand, hasShade, maxPrice, minPrice, trimmedQuery]);
 
   useEffect(() => {
     if (!trimmedQuery) {
@@ -63,7 +74,7 @@ export default function Home() {
             minPrice: minPrice || undefined,
             maxPrice: maxPrice || undefined,
             hasShade: hasShade ? true : undefined,
-            limit: isBatchQuery ? Math.min(queryCount, 48) : undefined,
+            limit: isBatchQuery ? Math.min(queryCount, MAX_RESULT_LIMIT) : resultLimit,
           },
           controller.signal,
         );
@@ -81,7 +92,7 @@ export default function Home() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [brand, hasShade, isBatchQuery, maxPrice, minPrice, queryCount, trimmedQuery]);
+  }, [brand, hasShade, isBatchQuery, maxPrice, minPrice, queryCount, resultLimit, trimmedQuery]);
 
   const statusText = useMemo(() => {
     if (!trimmedQuery) return "";
@@ -91,9 +102,12 @@ export default function Home() {
     if (response && isBatchQuery) {
       return `${queryCount.toLocaleString("ko-KR")}개 검색어 중 ${response.count.toLocaleString("ko-KR")}개 결과`;
     }
+    if (response && !isBatchQuery && response.count >= resultLimit) {
+      return `${response.count.toLocaleString("ko-KR")}개 결과 표시 중`;
+    }
     if (response) return `${response.count.toLocaleString("ko-KR")}개 결과`;
     return "";
-  }, [errorMessage, isBatchQuery, isLoading, queryCount, response, trimmedQuery]);
+  }, [errorMessage, isBatchQuery, isLoading, queryCount, response, resultLimit, trimmedQuery]);
 
   const clearFilters = () => {
     setBrand("");
@@ -195,6 +209,18 @@ export default function Home() {
             <ProductCard key={`${product.source}-${product.product_name_ko ?? index}`} product={product} />
           ))}
         </div>
+
+        {canLoadMore ? (
+          <div className="mt-5 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setResultLimit((current) => Math.min(current + 48, MAX_RESULT_LIMIT))}
+              className="h-10 rounded-md border border-line bg-white px-4 text-sm font-medium text-neutral-800 hover:border-mint hover:text-mint"
+            >
+              더 보기
+            </button>
+          </div>
+        ) : null}
       </section>
     </main>
   );

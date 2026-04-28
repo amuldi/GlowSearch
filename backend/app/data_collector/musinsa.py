@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 from typing import Any
 
@@ -25,7 +26,7 @@ class MusinsaProductCollector:
             return []
 
         if self._client is not None:
-            payload = await self._fetch(self._client, keyword, limit)
+            payloads = await self._fetch_pages(self._client, keyword, limit)
         else:
             async with httpx.AsyncClient(
                 timeout=self._settings.musinsa_timeout_seconds,
@@ -35,28 +36,50 @@ class MusinsaProductCollector:
                     "User-Agent": self._settings.request_user_agent,
                 },
             ) as client:
-                payload = await self._fetch(client, keyword, limit)
-
-        items = payload.get("data", {}).get("list", [])
-        if not isinstance(items, list):
-            return []
+                payloads = await self._fetch_pages(client, keyword, limit)
 
         records: list[ProductSourceRecord] = []
-        for item in items:
-            if not isinstance(item, dict):
+        for payload in payloads:
+            items = payload.get("data", {}).get("list", [])
+            if not isinstance(items, list):
                 continue
-            record = self._record_from_item(item)
-            if record:
-                records.append(record)
-            if len(records) >= limit:
-                break
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                record = self._record_from_item(item)
+                if record:
+                    records.append(record)
+                if len(records) >= limit:
+                    return records[:limit]
         return records
+
+    async def _fetch_pages(
+        self,
+        client: httpx.AsyncClient,
+        keyword: str,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        page_size = min(max(limit, 1), 48)
+        page_count = max(1, (limit + page_size - 1) // page_size)
+        results = await asyncio.gather(
+            *(
+                self._fetch(client, keyword, page=page, size=page_size)
+                for page in range(1, page_count + 1)
+            ),
+            return_exceptions=True,
+        )
+        payloads = [result for result in results if isinstance(result, dict)]
+        if not payloads and results and isinstance(results[0], SourceUnavailableError):
+            raise results[0]
+        return payloads
 
     async def _fetch(
         self,
         client: httpx.AsyncClient,
         keyword: str,
-        limit: int,
+        *,
+        page: int,
+        size: int,
     ) -> dict[str, Any]:
         try:
             response = await client.get(
@@ -65,8 +88,8 @@ class MusinsaProductCollector:
                     "caller": "SEARCH",
                     "gf": "A",
                     "keyword": keyword,
-                    "page": 1,
-                    "size": min(max(limit, 1), 48),
+                    "page": page,
+                    "size": size,
                     "sortCode": "POPULAR",
                     "category": self._settings.musinsa_beauty_category_code,
                 },

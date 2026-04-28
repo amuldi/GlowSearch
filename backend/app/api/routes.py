@@ -25,7 +25,7 @@ async def search(
     min_price: Annotated[int | None, Query(ge=0, description="최소 가격")] = None,
     max_price: Annotated[int | None, Query(ge=0, description="최대 가격")] = None,
     has_shade: Annotated[bool | None, Query(description="색상/호수 존재 여부")] = None,
-    limit: Annotated[int, Query(ge=1, le=48, description="반환 개수")] = 24,
+    limit: Annotated[int, Query(ge=1, le=96, description="반환 개수")] = 48,
     service: SearchService = Depends(get_search_service),
 ) -> SearchResponse:
     term = (q or keyword or "").strip()
