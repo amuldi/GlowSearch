@@ -61,6 +61,7 @@ class SearchService:
                     per_query_criteria,
                     require_relevant=True,
                     allow_browser_retry=allow_browser_retry,
+                    allow_browser_fallback=False,
                 )
 
         responses = await asyncio.gather(*(run_query(query) for query in limited_queries))
@@ -82,6 +83,7 @@ class SearchService:
         *,
         require_relevant: bool = False,
         allow_browser_retry: bool = False,
+        allow_browser_fallback: bool = True,
     ) -> SearchResponse:
         cleaned_query = query.strip()
         if not cleaned_query:
@@ -94,7 +96,11 @@ class SearchService:
         cache_key = f"{'|'.join(query.casefold() for query in collect_queries)}:{collect_limit}"
         collected = await self._cache.get(cache_key)
         if collected is None:
-            collected = await self._collect(collect_queries, collect_limit)
+            collected = await self._collect(
+                collect_queries,
+                collect_limit,
+                allow_browser_fallback=allow_browser_fallback,
+            )
             await self._cache.set(cache_key, collected)
 
         results, top_score = self._build_results(
@@ -159,7 +165,13 @@ class SearchService:
             queries.append(text)
         return queries or [query.strip()]
 
-    async def _collect(self, queries: list[str], limit: int) -> _CollectedResult:
+    async def _collect(
+        self,
+        queries: list[str],
+        limit: int,
+        *,
+        allow_browser_fallback: bool = True,
+    ) -> _CollectedResult:
         errors: list[str] = []
         records: list[ProductSourceRecord] = []
         has_successful_source = False
@@ -181,11 +193,12 @@ class SearchService:
         if records:
             return _CollectedResult(records=records[: max(limit, 1) * 2], errors=[])
 
-        browser_collected = await self._collect_browser(queries, limit)
-        errors.extend(browser_collected.errors)
-        if browser_collected.records:
-            has_successful_source = True
-            records = self._dedupe_records([*records, *browser_collected.records])
+        if allow_browser_fallback:
+            browser_collected = await self._collect_browser(queries, limit)
+            errors.extend(browser_collected.errors)
+            if browser_collected.records:
+                has_successful_source = True
+                records = self._dedupe_records([*records, *browser_collected.records])
 
         if records:
             return _CollectedResult(records=records[: max(limit, 1) * 2], errors=[])

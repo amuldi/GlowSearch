@@ -8,7 +8,7 @@ services:
     autoDeploy: true
     envVars:
       - key: GLOWSEARCH_BROWSER_COLLECTOR_ENABLED
-        value: true
+        value: false
       - key: GLOWSEARCH_BROWSER_HEADLESS
         value: true
       - key: GLOWSEARCH_BROWSER_TIMEOUT_SECONDS
