@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"]
     )
+    cors_origin_regex: str | None = r"https://.*\.vercel\.app"
 
     oliveyoung_base_url: str = "https://www.oliveyoung.co.kr"
     request_timeout_seconds: float = 12.0
