@@ -8,11 +8,13 @@ services:
     autoDeploy: true
     envVars:
       - key: GLOWSEARCH_BROWSER_COLLECTOR_ENABLED
-        value: false
+        value: true
       - key: GLOWSEARCH_BROWSER_HEADLESS
         value: true
       - key: GLOWSEARCH_BROWSER_TIMEOUT_SECONDS
         value: 25
+      - key: GLOWSEARCH_DETAIL_ENRICHMENT_MAX_RECORDS
+        value: 4
       - key: GLOWSEARCH_MUSINSA_BRAND_LOOKUP_ENABLED
         value: true
       - key: GLOWSEARCH_MUSINSA_PRODUCT_COLLECTOR_ENABLED

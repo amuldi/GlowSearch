@@ -64,6 +64,10 @@ def test_project_registry_maps_oliveyoung_korean_brand_names() -> None:
     assert resolver.resolve("투쿨포스쿨") == "TOO COOL FOR SCHOOL"
     assert resolver.resolve("믹순") == "mixsoon"
     assert resolver.match_text("투쿨포스쿨 스킨틴트").official_en == "TOO COOL FOR SCHOOL"
+    etude_match = resolver.match_text("에뛰ㄷ")
+    assert etude_match.official_en == "ETUDE"
+    assert etude_match.matched_alias == "에뛰드"
+    assert etude_match.matched_text == "에뛰ㄷ"
 
 
 def test_product_normalizer_preserves_nulls(tmp_path) -> None:

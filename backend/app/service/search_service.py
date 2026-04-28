@@ -335,7 +335,10 @@ class SearchService:
     def _product_query(cls, query: str, brand_match: BrandMatch | None) -> str:
         if brand_match is None:
             return query
-        return cls._query_without_brand(query, brand_match.matched_alias)
+        return cls._query_without_brand(
+            query,
+            brand_match.matched_text or brand_match.matched_alias,
+        )
 
     @classmethod
     def _dedupe_records(cls, records: list[ProductSourceRecord]) -> list[ProductSourceRecord]:

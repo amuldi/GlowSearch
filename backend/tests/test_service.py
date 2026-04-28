@@ -257,7 +257,7 @@ class BrowserOliveYoungBrandCollector:
     name = "oliveyoung:browser"
 
     async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
-        if keyword != "에뛰드":
+        if keyword not in {"에뛰드", "에뛰드 마스카라"}:
             return []
         return [
             ProductSourceRecord(
@@ -556,6 +556,31 @@ async def test_search_service_supplements_partial_brand_results_with_oliveyoung_
         "에뛰드 그림자 쉐딩",
         "에뛰드 무신사 상품",
     }
+
+
+@pytest.mark.asyncio
+async def test_search_service_corrects_partial_korean_brand_input_for_oliveyoung(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"ETUDE","aliases":["에뛰드"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    service = SearchService(
+        collectors=[BrowserOliveYoungBrandCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search("에뛰ㄷ 마스카라", SearchCriteria(limit=48))
+
+    assert response.count == 1
+    assert response.results[0].brand_en == "ETUDE"
+    assert response.results[0].product_name_ko == "에뛰드 컬 픽스 마스카라"
 
 
 @pytest.mark.asyncio

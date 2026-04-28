@@ -25,6 +25,7 @@ class BrandRegistry(BaseModel):
 class BrandMatch:
     official_en: str
     matched_alias: str
+    matched_text: str | None = None
 
 
 class ExternalBrandResolver(Protocol):
@@ -77,7 +78,17 @@ class BrandResolver:
             return None
         for alias_key, alias, official in self._scan_aliases:
             if alias_key and alias_key in key:
-                return BrandMatch(official_en=official, matched_alias=alias)
+                return BrandMatch(official_en=official, matched_alias=alias, matched_text=alias)
+        text = clean_text(value)
+        if text:
+            for _, alias, official in self._scan_aliases:
+                matched_text = self._loose_alias_match(text, alias)
+                if matched_text:
+                    return BrandMatch(
+                        official_en=official,
+                        matched_alias=alias,
+                        matched_text=matched_text,
+                    )
         return None
 
     def _load_registry(self, registry_path: Path) -> None:
@@ -103,6 +114,56 @@ class BrandResolver:
         if text is None:
             return ""
         return re.sub(r"[\s\-_./]+", "", text).casefold()
+
+    @classmethod
+    def _loose_alias_match(cls, text: str, alias: str) -> str | None:
+        if not has_hangul(alias):
+            return None
+        candidates = re.findall(r"[0-9A-Za-z가-힣ㄱ-ㅎㅏ-ㅣ]+", text)
+        candidates.append(cls._key(text))
+        seen: set[str] = set()
+        for candidate in candidates:
+            key = cls._key(candidate)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            if cls._is_loose_brand_prefix(key, cls._key(alias)):
+                return candidate
+        return None
+
+    @classmethod
+    def _is_loose_brand_prefix(cls, query_key: str, alias_key: str) -> bool:
+        if len(query_key) < 2 or len(alias_key) < 2:
+            return False
+
+        query_index = 0
+        alias_index = 0
+        while query_index < len(query_key) and alias_index < len(alias_key):
+            query_char = query_key[query_index]
+            alias_char = alias_key[alias_index]
+            if query_char == alias_char:
+                query_index += 1
+                alias_index += 1
+                continue
+            if cls._is_compat_initial(query_char) and query_char == cls._hangul_initial(alias_char):
+                query_index += 1
+                alias_index += 1
+                continue
+            return False
+
+        return query_index == len(query_key) or alias_index == len(alias_key)
+
+    @staticmethod
+    def _is_compat_initial(char: str) -> bool:
+        return char in "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"
+
+    @staticmethod
+    def _hangul_initial(char: str) -> str | None:
+        initials = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"
+        code = ord(char)
+        if not 0xAC00 <= code <= 0xD7A3:
+            return None
+        return initials[(code - 0xAC00) // 588]
 
     @staticmethod
     def _clean_latin_brand(value: str | None) -> str | None:

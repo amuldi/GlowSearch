@@ -213,6 +213,11 @@ class BrowserOliveYoungCollector:
             try:
                 self._browser = await self._playwright.chromium.launch(
                     headless=self._settings.browser_headless,
+                    args=[
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu",
+                        "--no-sandbox",
+                    ],
                 )
             except Exception:
                 await self._stop_playwright()
