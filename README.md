@@ -92,7 +92,7 @@ Supported query params:
 - `min_price`: minimum KRW price
 - `max_price`: maximum KRW price
 - `has_shade`: `true` or `false`
-- `limit`: `1` to `200`
+- `limit`: `1` to `480`
 
 Example API response:
 

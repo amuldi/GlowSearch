@@ -25,7 +25,7 @@ const jpyFormatter = new Intl.NumberFormat("ja-JP", {
 });
 
 const DEFAULT_RESULT_LIMIT = 48;
-const MAX_RESULT_LIMIT = 200;
+const MAX_RESULT_LIMIT = 480;
 
 export default function Home() {
   const [query, setQuery] = useState("");
