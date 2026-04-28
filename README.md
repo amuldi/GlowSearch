@@ -27,7 +27,7 @@ GlowSearch/
 
 ## Data Strategy
 
-- Primary source: Korean Olive Young search page.
+- Primary source: Korean Olive Young search page. The collector requests 48-item pages and paginates up to the configured result limit.
 - Local fallback: Playwright opens Olive Young search/detail pages in Chromium when direct HTTP collection is blocked.
 - Optional managed fallback: Apify Olive Young search actor when `GLOWSEARCH_APIFY_TOKEN` is configured.
 - Musinsa product fallback: when Olive Young live collection is blocked, Musinsa's public product search endpoint can return verified product name, normal price, image URL, and source URL for brands/products listed there.
@@ -36,7 +36,7 @@ GlowSearch/
   - Olive Young already returns a Latin brand name, or
   - `backend/data/brand_registry.json` contains a verified mapping from Musinsa, Instagram, or the official brand website.
 - Musinsa brand fallback: when a Korean brand name is parsed from Olive Young but is not in the local registry, the backend queries Musinsa's public brand search endpoint and uses `brandNameEng` only on an exact brand match.
-- Browser detail enrichment follows each result's Olive Young product URL to improve official product name, displayed official price, image, and source URL.
+- Browser detail enrichment follows smaller Olive Young result sets to improve official product name, displayed official price, image, and source URL without exhausting the free deployment memory limit.
 - Results are returned only when the core fields `brand_en`, `product_name_ko`, and `price` are all verified. Other missing values are returned as `null`. Values are never guessed.
 - When Olive Young blocks live collection, `backend/data/verified_products.json` is used as a last-resort verified cache. This cache contains only products previously observed from Olive Young responses and should be expanded from verified source data, not guessed.
 - If Olive Young blocks both direct HTTP and browser access, the API returns an empty result set with `source_errors`; it never fabricates product data.
@@ -92,7 +92,7 @@ Supported query params:
 - `min_price`: minimum KRW price
 - `max_price`: maximum KRW price
 - `has_shade`: `true` or `false`
-- `limit`: `1` to `48`
+- `limit`: `1` to `200`
 
 Example API response:
 

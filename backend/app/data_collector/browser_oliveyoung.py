@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlencode
@@ -54,22 +55,52 @@ class BrowserOliveYoungCollector:
         if not keyword:
             return []
 
-        html = await self._load_search_html(keyword)
-        if not html.strip():
-            raise SourceUnavailableError("Olive Young browser session returned empty HTML")
-        if self._is_blocked_html(html):
-            raise SourceUnavailableError("Olive Young browser session was blocked")
-
-        records = parse_search_results(html, base_url=self._base_url, limit=limit)
-        if self._settings.detail_enrichment_enabled and records:
+        records = await self._load_search_records(keyword, limit)
+        if self._should_enrich(records):
             records = await self._enrich_detail_pages(records)
         return records[:limit]
 
-    async def _load_search_html(self, keyword: str) -> str:
+    async def _load_search_records(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        page_size = max(1, min(self._settings.oliveyoung_search_page_size, 48))
+        max_pages = max(1, self._settings.oliveyoung_search_max_pages)
+        target_pages = min(max_pages, max(1, math.ceil(limit / page_size)))
+        records: list[ProductSourceRecord] = []
+        seen: set[str] = set()
+
+        for page in range(1, target_pages + 1):
+            html = await self._load_search_html(keyword, page=page, page_size=page_size)
+            if not html.strip():
+                raise SourceUnavailableError("Olive Young browser session returned empty HTML")
+            if self._is_blocked_html(html):
+                raise SourceUnavailableError("Olive Young browser session was blocked")
+
+            page_records = parse_search_results(html, base_url=self._base_url, limit=page_size)
+            new_records = []
+            for record in page_records:
+                key = record.source_product_id or f"{record.source_brand_name}:{record.product_name_ko}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                new_records.append(record)
+            if not new_records:
+                break
+            records.extend(new_records)
+            if len(records) >= limit:
+                break
+        return records
+
+    async def _load_search_html(self, keyword: str, *, page: int, page_size: int) -> str:
         if self._html_loader:
             return await self._html_loader(keyword)
 
-        query = urlencode({"query": keyword})
+        query = urlencode(
+            {
+                "query": keyword,
+                "pageIdx": page,
+                "rowsPerPage": page_size,
+                "sort": "WEIGHT/DESC",
+            }
+        )
         url = f"{self._base_url}/store/search/getSearchMain.do?{query}"
         return await self._load_url_html(url, wait_selector=READY_WAIT_SELECTOR)
 
@@ -153,6 +184,13 @@ class BrowserOliveYoungCollector:
                 )
 
         return await asyncio.gather(*(enrich(record) for record in records))
+
+    def _should_enrich(self, records: list[ProductSourceRecord]) -> bool:
+        return (
+            self._settings.detail_enrichment_enabled
+            and bool(records)
+            and len(records) <= self._settings.detail_enrichment_max_records
+        )
 
     async def _get_browser(self) -> Any:
         if self._browser and self._browser.is_connected():

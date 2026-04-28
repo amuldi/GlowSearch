@@ -76,6 +76,51 @@ def test_parse_modern_oliveyoung_brand_name_markup() -> None:
     assert records[0].regular_price == 25800
 
 
+def test_parse_oliveyoung_card_data_attributes() -> None:
+    html = """
+    <ul>
+      <li
+        data-goods-no="A000000238408"
+        data-brand-nm="믹순"
+        data-goods-nm="믹순 히알레배 포어 블러링 크림 50ml"
+        data-normal-price="14,900"
+        data-img-url="//image.oliveyoung.co.kr/item.jpg"
+      ></li>
+    </ul>
+    """
+
+    records = parse_search_results(html, base_url=BASE_URL, limit=10)
+
+    assert records[0].source_brand_name == "믹순"
+    assert records[0].product_name_ko == "믹순 히알레배 포어 블러링 크림 50ml"
+    assert records[0].regular_price == 14900
+    assert records[0].image_url == "https://image.oliveyoung.co.kr/item.jpg"
+    assert records[0].source_url == (
+        "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000238408"
+    )
+
+
+def test_parse_oliveyoung_embedded_product_literal() -> None:
+    html = """
+    <script>
+      window.searchGoods = [{
+        goodsNo: 'A000000238408',
+        onlBrndNm: '믹순',
+        goodsNm: '믹순 히알레배 포어 블러링 크림 50ml',
+        nrmlAmt: '14900',
+        mainImgUrl: '//image.oliveyoung.co.kr/item.jpg'
+      }];
+    </script>
+    """
+
+    records = parse_search_results(html, base_url=BASE_URL, limit=10)
+
+    assert records[0].source_brand_name == "믹순"
+    assert records[0].product_name_ko == "믹순 히알레배 포어 블러링 크림 50ml"
+    assert records[0].regular_price == 14900
+    assert records[0].source_product_id == "A000000238408"
+
+
 def test_parse_next_detail_page_price_and_name() -> None:
     html = """
     <div class="GoodsDetailInfo_title-area__unu7g" data-qa-name="text-product-title">

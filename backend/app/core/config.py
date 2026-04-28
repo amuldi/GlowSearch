@@ -26,9 +26,13 @@ class Settings(BaseSettings):
     )
 
     cache_ttl_seconds: int = 180
-    max_results: int = 96
+    max_results: int = 200
     detail_enrichment_enabled: bool = True
+    detail_enrichment_max_records: int = 12
     detail_concurrency: int = 6
+
+    oliveyoung_search_page_size: int = 48
+    oliveyoung_search_max_pages: int = 4
 
     browser_collector_enabled: bool = True
     browser_headless: bool = True

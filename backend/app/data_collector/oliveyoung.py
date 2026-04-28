@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from urllib.parse import urlencode
 
 import httpx
@@ -28,14 +29,61 @@ class OliveYoungCollector:
             headers=self._headers(),
             follow_redirects=True,
         ) as client:
-            html = await self._fetch_search_html(client, keyword)
-            records = parse_search_results(html, base_url=self._base_url, limit=limit)
-            if self._settings.detail_enrichment_enabled and records:
+            records = await self._fetch_search_records(client, keyword, limit)
+            if self._should_enrich(records):
                 records = await self._enrich_detail_pages(client, records)
             return records[:limit]
 
-    async def _fetch_search_html(self, client: httpx.AsyncClient, keyword: str) -> str:
-        query = urlencode({"query": keyword})
+    async def _fetch_search_records(
+        self,
+        client: httpx.AsyncClient,
+        keyword: str,
+        limit: int,
+    ) -> list[ProductSourceRecord]:
+        page_size = max(1, min(self._settings.oliveyoung_search_page_size, 48))
+        max_pages = max(1, self._settings.oliveyoung_search_max_pages)
+        target_pages = min(max_pages, max(1, math.ceil(limit / page_size)))
+        records: list[ProductSourceRecord] = []
+        seen: set[str] = set()
+
+        for page in range(1, target_pages + 1):
+            html = await self._fetch_search_html(
+                client,
+                keyword,
+                page=page,
+                page_size=page_size,
+            )
+            page_records = parse_search_results(html, base_url=self._base_url, limit=page_size)
+            new_records = []
+            for record in page_records:
+                key = record.source_product_id or f"{record.source_brand_name}:{record.product_name_ko}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                new_records.append(record)
+            if not new_records:
+                break
+            records.extend(new_records)
+            if len(records) >= limit:
+                break
+        return records
+
+    async def _fetch_search_html(
+        self,
+        client: httpx.AsyncClient,
+        keyword: str,
+        *,
+        page: int,
+        page_size: int,
+    ) -> str:
+        query = urlencode(
+            {
+                "query": keyword,
+                "pageIdx": page,
+                "rowsPerPage": page_size,
+                "sort": "WEIGHT/DESC",
+            }
+        )
         url = f"{self._base_url}/store/search/getSearchMain.do?{query}"
         try:
             response = await client.get(url)
@@ -52,6 +100,13 @@ class OliveYoungCollector:
             )
         response.raise_for_status()
         return response.text
+
+    def _should_enrich(self, records: list[ProductSourceRecord]) -> bool:
+        return (
+            self._settings.detail_enrichment_enabled
+            and bool(records)
+            and len(records) <= self._settings.detail_enrichment_max_records
+        )
 
     async def _enrich_detail_pages(
         self,

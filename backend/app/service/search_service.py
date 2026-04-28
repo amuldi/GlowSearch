@@ -265,14 +265,17 @@ class SearchService:
         browser_collectors = [
             collector for collector in self._collectors if collector.name == "oliveyoung:browser"
         ]
-        for collector in browser_collectors:
-            try:
-                source_records = await collector.search(queries[0], limit)
-            except SourceUnavailableError as exc:
-                errors.append(f"{collector.name}: {exc}")
-                continue
-            if source_records:
-                records = self._dedupe_records([*records, *source_records])
+        for query in queries:
+            for collector in browser_collectors:
+                try:
+                    source_records = await collector.search(query, limit)
+                except SourceUnavailableError as exc:
+                    errors.append(f"{collector.name}: {exc}")
+                    continue
+                if source_records:
+                    records = self._dedupe_records([*records, *source_records])
+            if len(records) >= limit:
+                break
         return _CollectedResult(records=records, errors=errors)
 
     @classmethod
