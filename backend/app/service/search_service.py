@@ -96,6 +96,23 @@ class SearchService:
         cache_key = f"{'|'.join(query.casefold() for query in collect_queries)}:{collect_limit}"
         collected = await self._cache.get(cache_key)
         if collected is None:
+            if self._can_use_verified_shortcut(cleaned_query, require_relevant):
+                verified_collected = await self._collect_verified_cache(collect_queries, collect_limit)
+                verified_results, verified_top_score = self._build_results(
+                    verified_collected.records,
+                    cleaned_query,
+                    effective_criteria,
+                    brand_match,
+                )
+                if verified_top_score > 0:
+                    await self._cache.set(cache_key, verified_collected)
+                    return SearchResponse(
+                        query=cleaned_query,
+                        count=len(verified_results),
+                        results=verified_results,
+                        source_errors=[],
+                    )
+
             collected = await self._collect(
                 collect_queries,
                 collect_limit,
@@ -205,6 +222,21 @@ class SearchService:
         if has_successful_source:
             return _CollectedResult(records=[], errors=[])
         return _CollectedResult(records=[], errors=errors)
+
+    async def _collect_verified_cache(self, queries: list[str], limit: int) -> _CollectedResult:
+        records: list[ProductSourceRecord] = []
+        verified_collectors = [
+            collector for collector in self._collectors if collector.name == "oliveyoung:verified-cache"
+        ]
+        for query in queries:
+            for collector in verified_collectors:
+                try:
+                    source_records = await collector.search(query, limit)
+                except SourceUnavailableError:
+                    continue
+                if source_records:
+                    records = self._dedupe_records([*records, *source_records])
+        return _CollectedResult(records=records[: max(limit, 1) * 2], errors=[])
 
     async def _collect_browser(self, queries: list[str], limit: int) -> _CollectedResult:
         errors: list[str] = []
@@ -412,6 +444,19 @@ class SearchService:
             if token_key in category_tokens or not token_key.isdigit():
                 keep.append(token)
         return clean_text(" ".join(keep)) or ""
+
+    @classmethod
+    def _can_use_verified_shortcut(cls, query: str, require_relevant: bool) -> bool:
+        if require_relevant:
+            return True
+        meaningful_tokens = [
+            token
+            for token in cls._tokens(query)
+            if len(cls._key(token)) >= 2
+            and not cls._key(token).isdigit()
+            and not cls._is_color_token(cls._key(token))
+        ]
+        return len(meaningful_tokens) >= 2
 
     @staticmethod
     def _is_color_token(token_key: str) -> bool:

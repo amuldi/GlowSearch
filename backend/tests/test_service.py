@@ -189,6 +189,42 @@ class BatchKeywordCollector:
         return []
 
 
+class VerifiedCacheCollector:
+    name = "oliveyoung:verified-cache"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        if keyword != "메디힐 비타민씨 브라이트닝 패드":
+            return []
+        return [
+            ProductSourceRecord(
+                source_brand_name="메디힐",
+                product_name_ko="비타민씨 브라이트닝 패드",
+                regular_price=24000,
+                shade=None,
+                image_url=None,
+                source="musinsa",
+            )
+        ]
+
+
+class RecordingNetworkCollector:
+    name = "network"
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        self.calls.append(keyword)
+        return []
+
+
+class ShouldNotRunCollector:
+    name = "network"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        raise AssertionError("network collector should not run for verified shortcut")
+
+
 @pytest.mark.asyncio
 async def test_search_service_applies_price_filter(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -386,6 +422,55 @@ async def test_search_service_handles_multiline_queries_as_one_result_each(tmp_p
     assert [product.brand_en for product in response.results] == ["MEDIHEAL", "the SAEM"]
     assert response.results[0].product_name_ko == "비타민씨 브라이트닝 패드"
     assert response.results[1].shade == "클리어 베이지"
+
+
+@pytest.mark.asyncio
+async def test_search_service_shortcuts_verified_batch_matches(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"MEDIHEAL","aliases":["메디힐"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    network = RecordingNetworkCollector()
+    service = SearchService(
+        collectors=[VerifiedCacheCollector(), network],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search(
+        "메디힐 비타민씨 브라이트닝 패드\n없는 상품",
+        SearchCriteria(limit=24),
+    )
+
+    assert response.count == 1
+    assert response.results[0].brand_en == "MEDIHEAL"
+    assert "메디힐 비타민씨 브라이트닝 패드" not in network.calls
+
+
+@pytest.mark.asyncio
+async def test_search_service_shortcuts_verified_specific_search(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"MEDIHEAL","aliases":["메디힐"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    service = SearchService(
+        collectors=[VerifiedCacheCollector(), ShouldNotRunCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search("메디힐 비타민씨 브라이트닝 패드", SearchCriteria(limit=24))
+
+    assert response.count == 1
+    assert response.results[0].brand_en == "MEDIHEAL"
 
 
 @pytest.mark.asyncio
