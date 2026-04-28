@@ -294,12 +294,17 @@ class SearchService:
         product_query = cls._product_query(query, brand_match)
         candidates = []
         if brand_search_term:
-            candidates.append(f"{brand_search_term} {product_query}")
-            compact_product_query = cls._compact_product_query(product_query)
-            if compact_product_query and compact_product_query != product_query:
-                candidates.append(f"{brand_search_term} {compact_product_query}")
-        candidates.append(query)
-        candidates.append(product_query)
+            if product_query:
+                candidates.append(f"{brand_search_term} {product_query}")
+                compact_product_query = cls._compact_product_query(product_query)
+                if compact_product_query and compact_product_query != product_query:
+                    candidates.append(f"{brand_search_term} {compact_product_query}")
+            else:
+                candidates.append(brand_search_term)
+        if brand_match is None:
+            candidates.append(query)
+        if product_query:
+            candidates.append(product_query)
         compact_product_query = cls._compact_product_query(product_query)
         if compact_product_query and compact_product_query != product_query:
             candidates.append(compact_product_query)
@@ -329,7 +334,7 @@ class SearchService:
     @staticmethod
     def _query_without_brand(query: str, matched_alias: str) -> str:
         stripped = re.sub(re.escape(matched_alias), " ", query, count=1, flags=re.IGNORECASE)
-        return clean_text(stripped) or query
+        return clean_text(stripped) or ""
 
     @classmethod
     def _product_query(cls, query: str, brand_match: BrandMatch | None) -> str:
@@ -395,7 +400,7 @@ class SearchService:
     ) -> tuple[list[ProductSearchResult], int]:
         query_key = cls._key(product_query)
         if not query_key:
-            return results, 0
+            return results, 1
         scored = [
             (cls._match_score(product, product_query, index), product)
             for index, product in enumerate(results)

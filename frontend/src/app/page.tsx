@@ -64,8 +64,7 @@ export default function Home() {
   }, [brand, hasShade, maxPrice, minPrice, trimmedSubmittedQuery]);
 
   useEffect(() => {
-    if (!trimmedSubmittedQuery || trimmedQuery !== trimmedSubmittedQuery) {
-      setResponse(null);
+    if (!trimmedSubmittedQuery) {
       setIsLoading(false);
       setErrorMessage(null);
       return;
@@ -110,12 +109,11 @@ export default function Home() {
     resultLimit,
     searchRun,
     submittedQueryCount,
-    trimmedQuery,
     trimmedSubmittedQuery,
   ]);
 
   const statusText = useMemo(() => {
-    if (!trimmedSubmittedQuery || trimmedQuery !== trimmedSubmittedQuery) return "";
+    if (!trimmedSubmittedQuery) return "";
     if (isLoading) return "검색 중입니다.";
     if (errorMessage) return errorMessage;
     if (response && response.count === 0) return "검색 결과가 없습니다.";
@@ -134,7 +132,6 @@ export default function Home() {
     response,
     resultLimit,
     submittedQueryCount,
-    trimmedQuery,
     trimmedSubmittedQuery,
   ]);
 
@@ -145,18 +142,12 @@ export default function Home() {
     setHasShade(false);
   };
 
-  const clearSearch = () => {
+  const clearSearchInput = () => {
     setQuery("");
-    setSubmittedQuery("");
-    setResponse(null);
-    setErrorMessage(null);
-    setIsLoading(false);
-    setResultLimit(DEFAULT_RESULT_LIMIT);
   };
 
   const submitSearch = () => {
     if (!trimmedQuery) {
-      clearSearch();
       return;
     }
     setSubmittedQuery(trimmedQuery);
@@ -168,7 +159,16 @@ export default function Home() {
     <main className="min-h-screen bg-[#fafafa] px-4 py-8 text-ink sm:px-6 lg:px-8">
       <section className="mx-auto flex w-full max-w-3xl flex-col items-center gap-5 pt-6 sm:pt-10">
         <div className="flex w-full items-start gap-2 rounded-lg border border-line bg-white px-4 py-3 shadow-soft">
-          <Search className="mt-2.5 h-5 w-5 shrink-0 text-mint" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={submitSearch}
+            disabled={!trimmedQuery || isLoading}
+            className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-md text-mint transition hover:bg-[#eaf5f1] disabled:cursor-not-allowed disabled:text-neutral-300 disabled:hover:bg-transparent"
+            aria-label="검색"
+            title="검색"
+          >
+            <Search className="h-5 w-5" aria-hidden="true" />
+          </button>
           <textarea
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -180,7 +180,7 @@ export default function Home() {
           {query ? (
             <button
               type="button"
-              onClick={clearSearch}
+              onClick={clearSearchInput}
               className="grid h-9 w-9 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100"
               aria-label="검색어 지우기"
               title="검색어 지우기"
@@ -188,17 +188,6 @@ export default function Home() {
               <X className="h-4 w-4" aria-hidden="true" />
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={submitSearch}
-            disabled={!trimmedQuery || isLoading}
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-mint px-3 text-sm font-semibold text-white hover:bg-[#26765f] disabled:cursor-not-allowed disabled:bg-neutral-300"
-            aria-label="검색"
-            title="검색"
-          >
-            <Search className="h-4 w-4" aria-hidden="true" />
-            검색
-          </button>
         </div>
 
         <div className="w-full rounded-lg border border-line bg-white p-3">

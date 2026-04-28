@@ -61,7 +61,7 @@ class BrowserOliveYoungCollector:
         return records[:limit]
 
     async def _load_search_records(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
-        page_size = max(1, min(self._settings.oliveyoung_search_page_size, 48))
+        page_size = max(1, min(self._settings.oliveyoung_search_page_size, max(limit, 1), 48))
         max_pages = max(1, self._settings.oliveyoung_search_max_pages)
         target_pages = min(max_pages, max(1, math.ceil(limit / page_size)))
         records: list[ProductSourceRecord] = []
