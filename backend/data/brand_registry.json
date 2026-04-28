@@ -482,7 +482,7 @@
     },
     {
       "official_en": "HWAHONG M",
-      "aliases": ["화홍", "화홍엠", "HWAHONG M", "Hwahong M", "HWAHONG"],
+      "aliases": ["화홍", "화홍엠", "HWAHONG M", "Hwahong M", "HWAHONG", "hwahongm"],
       "sources": ["https://hwahongm.com/"]
     },
     {
@@ -501,13 +501,18 @@
       "sources": ["https://www.jsmbeauty.com/"]
     },
     {
-      "official_en": "Moumou",
+      "official_en": "moumou",
       "aliases": ["모우모우", "Moumou", "moumou"],
       "sources": ["https://moumoucosmetic.com/"]
     },
     {
-      "official_en": "EITHERAND",
-      "aliases": ["이더앤", "EITHERAND", "eitherand"],
+      "official_en": "A.chi",
+      "aliases": ["에이치", "A.chi", "ACHI", "achi"],
+      "sources": ["https://www.hemekolab.com/brands/achi"]
+    },
+    {
+      "official_en": "EITHER&",
+      "aliases": ["이더앤", "EITHER&", "EITHERAND", "eitherand", "ETHER&"],
       "sources": ["https://www.musinsa.com/brands/eitherand"]
     },
     {

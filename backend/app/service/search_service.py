@@ -235,8 +235,14 @@ class SearchService:
         candidates = []
         if brand_search_term:
             candidates.append(f"{brand_search_term} {product_query}")
+            compact_product_query = cls._compact_product_query(product_query)
+            if compact_product_query and compact_product_query != product_query:
+                candidates.append(f"{brand_search_term} {compact_product_query}")
         candidates.append(query)
         candidates.append(product_query)
+        compact_product_query = cls._compact_product_query(product_query)
+        if compact_product_query and compact_product_query != product_query:
+            candidates.append(compact_product_query)
         if brand_search_term:
             candidates.append(brand_search_term)
 
@@ -317,7 +323,7 @@ class SearchService:
         ranked = sorted(scored, key=lambda item: item[0], reverse=True)
         if not ranked or ranked[0][0][0] <= 0:
             return results, 0
-        return [product for _, product in ranked], ranked[0][0][0]
+        return [product for score, product in ranked if score[0] > 0], ranked[0][0][0]
 
     @classmethod
     def _match_score(
@@ -361,12 +367,11 @@ class SearchService:
         category_words = (
             "패드",
             "컨실러",
-            "셰딩",
+            "섀딩",
             "브러시",
             "팔레트",
             "틴트",
             "라이너",
-            "렌즈",
             "밤",
             "크림",
             "스프레이",
@@ -392,6 +397,22 @@ class SearchService:
             tokens.append(token_key)
         return tokens
 
+    @classmethod
+    def _compact_product_query(cls, value: str) -> str:
+        category_tokens = set(cls._category_tokens(value))
+        keep: list[str] = []
+        for token in cls._tokens(value):
+            token_key = cls._key(token)
+            if (
+                len(token_key) < 2
+                or cls._is_color_token(token_key)
+                or token_key in {"호", "번", "no", "m"}
+            ):
+                continue
+            if token_key in category_tokens or not token_key.isdigit():
+                keep.append(token)
+        return clean_text(" ".join(keep)) or ""
+
     @staticmethod
     def _is_color_token(token_key: str) -> bool:
         color_words = (
@@ -412,6 +433,11 @@ class SearchService:
             "누드",
             "블랙",
             "화이트",
+            "gray",
+            "grey",
+            "brown",
+            "pink",
+            "peach",
         )
         return any(word in token_key for word in color_words)
 
@@ -462,13 +488,17 @@ class SearchService:
             filtered = [
                 product
                 for product in filtered
-                if product.price is not None and product.price >= criteria.min_price
+                if product.price is not None
+                and (product.currency or "KRW") == "KRW"
+                and product.price >= criteria.min_price
             ]
         if criteria.max_price is not None:
             filtered = [
                 product
                 for product in filtered
-                if product.price is not None and product.price <= criteria.max_price
+                if product.price is not None
+                and (product.currency or "KRW") == "KRW"
+                and product.price <= criteria.max_price
             ]
         if criteria.has_shade is not None:
             filtered = [
@@ -505,8 +535,26 @@ class SearchService:
         text = clean_text(value)
         if text is None:
             return ""
-        text = text.replace("브러쉬", "브러시").replace("쉐딩", "셰딩")
-        return re.sub(r"[\s\-_./|+&'():\[\],]+", "", text).casefold()
+        text = text.casefold()
+        text = (
+            text.replace("브러쉬", "브러시")
+            .replace("brush", "브러시")
+            .replace("eyeliner", "아이라이너")
+            .replace("eye shadow", "아이섀도")
+            .replace("glowy", "글로이")
+            .replace("tear", "티어")
+            .replace("gray", "그레이")
+            .replace("grey", "그레이")
+            .replace("쉐딩", "섀딩")
+            .replace("셰딩", "섀딩")
+            .replace("비타민씨", "비타")
+            .replace("여백살롱", "여백카롱")
+            .replace("및서재", "밑서재")
+            .replace("플로팅", "플러팅")
+            .replace("이즈핏", "이지핏")
+            .replace("땡큐요엠핑크", "요염핑")
+        )
+        return re.sub(r"[\s\-_./|+&'():\[\],]+", "", text)
 
     @staticmethod
     def _dedupe_errors(errors: Iterable[str]) -> list[str]:

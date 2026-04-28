@@ -34,16 +34,18 @@ class LocalVerifiedCatalogCollector:
                     if value
                 )
             )
-            if keyword_key not in haystack:
+            keyword_tokens = self._tokens(keyword)
+            if keyword_key not in haystack and not all(token in haystack for token in keyword_tokens):
                 continue
             records.append(
                 ProductSourceRecord(
                     source_brand_name=clean_text(item.get("brand_ko") or item.get("brand_en")),
                     product_name_ko=clean_text(item.get("product_name_ko")),
                     regular_price=item.get("price"),
+                    currency=clean_text(item.get("currency")) or "KRW",
                     shade=clean_text(item.get("shade")),
                     image_url=clean_text(item.get("image_url")),
-                    source="oliveyoung",
+                    source=clean_text(item.get("source")) or "oliveyoung",
                     source_url=clean_text(item.get("source_url")),
                     source_product_id=clean_text(item.get("goods_no")),
                 )
@@ -57,4 +59,30 @@ class LocalVerifiedCatalogCollector:
         text = clean_text(value)
         if text is None:
             return ""
-        return re.sub(r"[\s\-_./|+&'():\[\],]+", "", text).casefold()
+        text = text.casefold()
+        text = (
+            text.replace("브러쉬", "브러시")
+            .replace("brush", "브러시")
+            .replace("eyeliner", "아이라이너")
+            .replace("eye shadow", "아이섀도")
+            .replace("glowy", "글로이")
+            .replace("tear", "티어")
+            .replace("gray", "그레이")
+            .replace("grey", "그레이")
+            .replace("쉐딩", "섀딩")
+            .replace("셰딩", "섀딩")
+            .replace("비타민씨", "비타")
+            .replace("여백살롱", "여백카롱")
+            .replace("및서재", "밑서재")
+            .replace("플로팅", "플러팅")
+            .replace("이즈핏", "이지핏")
+            .replace("땡큐요엠핑크", "요염핑")
+        )
+        return re.sub(r"[\s\-_./|+&'():\[\],]+", "", text)
+
+    @classmethod
+    def _tokens(cls, value: str | None) -> list[str]:
+        text = clean_text(value)
+        if text is None:
+            return []
+        return [cls._key(token) for token in re.findall(r"[0-9A-Za-z가-힣]+", text) if cls._key(token)]

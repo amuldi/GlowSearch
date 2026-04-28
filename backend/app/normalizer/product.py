@@ -16,6 +16,7 @@ class ProductNormalizer:
             ),
             product_name_ko=clean_text(record.product_name_ko),
             price=record.regular_price,
+            currency=clean_text(record.currency) or "KRW",
             shade=clean_text(record.shade),
             image_url=normalize_image_url(record.image_url, self._base_url),
             source_url=normalize_image_url(record.source_url, self._base_url),

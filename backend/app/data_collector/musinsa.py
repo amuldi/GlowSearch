@@ -99,6 +99,7 @@ class MusinsaProductCollector:
             source_brand_name=brand,
             product_name_ko=name,
             regular_price=price,
+            currency="KRW",
             shade=self._extract_shade(name),
             image_url=image,
             source="musinsa",

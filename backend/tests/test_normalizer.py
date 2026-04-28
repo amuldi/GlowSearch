@@ -88,6 +88,7 @@ def test_product_normalizer_preserves_nulls(tmp_path) -> None:
         "brand_en": None,
         "product_name_ko": "제품",
         "price": None,
+        "currency": "KRW",
         "shade": None,
         "image_url": None,
         "source_url": None,

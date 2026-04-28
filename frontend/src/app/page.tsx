@@ -12,6 +12,18 @@ const currencyFormatter = new Intl.NumberFormat("ko-KR", {
   maximumFractionDigits: 0,
 });
 
+const usdFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 2,
+});
+
+const jpyFormatter = new Intl.NumberFormat("ja-JP", {
+  style: "currency",
+  currency: "JPY",
+  maximumFractionDigits: 0,
+});
+
 export default function Home() {
   const [query, setQuery] = useState("");
   const [brand, setBrand] = useState("");
@@ -190,7 +202,7 @@ export default function Home() {
 
 function ProductCard({ product }: { product: Product }) {
   const [copied, setCopied] = useState(false);
-  const priceText = product.price === null ? "가격 미확인" : currencyFormatter.format(product.price);
+  const priceText = formatPrice(product.price, product.currency);
   const copyText = [
     `브랜드명: ${product.brand_en ?? ""}`,
     `제품명: ${product.product_name_ko ?? ""}`,
@@ -307,4 +319,11 @@ function ProductCard({ product }: { product: Product }) {
       </div>
     </article>
   );
+}
+
+function formatPrice(price: number | null, currency?: string | null) {
+  if (price === null) return "가격 미확인";
+  if (currency === "USD") return usdFormatter.format(price);
+  if (currency === "JPY") return jpyFormatter.format(price);
+  return currencyFormatter.format(price);
 }
