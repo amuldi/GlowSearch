@@ -218,7 +218,6 @@ export default function Home() {
 function ProductCard({ product }: { product: Product }) {
   const [copied, setCopied] = useState(false);
   const originalPriceText = formatPrice(product.original_price ?? product.price, product.currency);
-  const salePriceText = formatPrice(product.sale_price ?? product.price, product.currency);
   const hasDiscount = Boolean(
     product.sale_price !== null
     && product.sale_price !== undefined
@@ -226,12 +225,15 @@ function ProductCard({ product }: { product: Product }) {
     && product.original_price !== undefined
     && product.sale_price < product.original_price,
   );
+  const salePriceText = hasDiscount && product.sale_price != null
+    ? formatPrice(product.sale_price, product.currency)
+    : null;
   const copyText = [
     `브랜드명: ${product.brand_ko ?? ""}`,
     `영문명: ${product.brand_en ?? ""}`,
     `제품명: ${product.product_name_ko ?? ""}`,
     `원가: ${originalPriceText}`,
-    `할인가: ${salePriceText}`,
+    hasDiscount ? `할인가: ${salePriceText}` : null,
     product.shade ? `호수: ${product.shade}` : null,
   ]
     .filter(Boolean)
@@ -328,17 +330,19 @@ function ProductCard({ product }: { product: Product }) {
                 {originalPriceText}
               </dd>
             </div>
-            <div>
-              <dt className="text-[11px] font-medium text-neutral-500">할인가</dt>
-              <dd className="text-sm font-semibold">
-                {salePriceText}
-                {product.discount_rate ? (
-                  <span className="ml-1 text-xs font-semibold text-rose-600">
-                    {product.discount_rate}%
-                  </span>
-                ) : null}
-              </dd>
-            </div>
+            {hasDiscount ? (
+              <div>
+                <dt className="text-[11px] font-medium text-neutral-500">할인가</dt>
+                <dd className="text-sm font-semibold">
+                  {salePriceText}
+                  {product.discount_rate ? (
+                    <span className="ml-1 text-xs font-semibold text-rose-600">
+                      {product.discount_rate}%
+                    </span>
+                  ) : null}
+                </dd>
+              </div>
+            ) : null}
             {product.shade ? (
               <div>
                 <dt className="text-[11px] font-medium text-neutral-500">호수</dt>

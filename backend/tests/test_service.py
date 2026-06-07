@@ -300,6 +300,29 @@ class BrowserOliveYoungBrandCollector:
         ]
 
 
+class BrandCollisionCollector:
+    name = "collision"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        return [
+            ProductSourceRecord(
+                source_brand_name="컬러그램",
+                product_name_ko="[NEW 컬러] 뮤드 글라세 립 틴트 3종 택1",
+                regular_price=17000,
+                source="oliveyoung",
+            ),
+            ProductSourceRecord(
+                source_brand_name="뮤드",
+                product_name_ko="뮤드 엔젤 허그 글레이즈 10종",
+                regular_price=17000,
+                sale_price=12600,
+                original_price=17000,
+                discount_rate=25,
+                source="oliveyoung",
+            ),
+        ]
+
+
 @pytest.mark.asyncio
 async def test_search_service_applies_price_filter(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -375,6 +398,36 @@ async def test_search_service_can_filter_to_oliveyoung_sources_only(tmp_path) ->
 
     assert response.count == 1
     assert response.results[0].source == "oliveyoung"
+
+
+@pytest.mark.asyncio
+async def test_search_service_treats_known_brand_query_as_brand_filter(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        (
+            '{"entries":['
+            '{"official_en":"mude","aliases":["뮤드"],"sources":[]},'
+            '{"official_en":"colorgram","aliases":["컬러그램"],"sources":[]}'
+            "]}"
+        ),
+        encoding="utf-8",
+    )
+    service = SearchService(
+        collectors=[BrandCollisionCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("뮤드", SearchCriteria(limit=24))
+
+    assert response.count == 1
+    assert response.results[0].brand_ko == "뮤드"
+    assert response.results[0].brand_en == "mude"
+    assert response.results[0].product_name_ko == "뮤드 엔젤 허그 글레이즈 10종"
 
 
 @pytest.mark.asyncio

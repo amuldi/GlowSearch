@@ -98,7 +98,8 @@ class SearchService:
 
         brand_match = None if criteria.brand else self._normalizer.match_brand_in_text(cleaned_query)
         effective_criteria = self._effective_criteria(criteria, brand_match)
-        collect_limit = self._collect_limit(effective_criteria)
+        product_query = self._product_query(cleaned_query, brand_match)
+        collect_limit = self._collect_limit(effective_criteria, product_query)
         collect_queries = self._collect_queries(cleaned_query, effective_criteria, brand_match)
         cache_key = f"{'|'.join(query.casefold() for query in collect_queries)}:{collect_limit}"
 
@@ -376,7 +377,7 @@ class SearchService:
     ) -> ProductSourceRecord:
         return existing.model_copy(
             update={
-                "source_brand_name": existing.source_brand_name or incoming.source_brand_name,
+                "source_brand_name": incoming.source_brand_name or existing.source_brand_name,
                 "product_name_ko": existing.product_name_ko or incoming.product_name_ko,
                 "regular_price": (
                     incoming.regular_price
@@ -604,16 +605,16 @@ class SearchService:
         return any(word in token_key for word in color_words)
 
     @staticmethod
-    def _collect_limit(criteria: SearchCriteria) -> int:
+    def _collect_limit(criteria: SearchCriteria, product_query: str = "") -> int:
         has_filters = any(
             [
-                criteria.brand,
                 criteria.min_price is not None,
                 criteria.max_price is not None,
                 criteria.has_shade is not None,
             ]
         )
-        if not has_filters:
+        needs_extra_matches = bool(criteria.brand and product_query)
+        if not has_filters and not needs_extra_matches:
             return criteria.limit
         return max(criteria.limit, 48)
 

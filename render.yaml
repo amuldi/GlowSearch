@@ -20,7 +20,7 @@ services:
       - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_BASE_URL
         value: https://mcp.aka.page
       - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_TIMEOUT_SECONDS
-        value: 4.0
+        value: 6.0
       - key: GLOWSEARCH_BROWSER_COLLECTOR_ENABLED
         value: true
       - key: GLOWSEARCH_BROWSER_HEADLESS

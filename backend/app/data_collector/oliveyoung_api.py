@@ -23,22 +23,48 @@ class OliveYoungPublicApiCollector:
         if not keyword or limit <= 0:
             return []
 
-        params = {"keyword": keyword, "size": min(max(limit, 1), 48)}
-        try:
-            if self._client is not None:
-                response = await self._client.get(
-                    f"{self._base_url}/api/oliveyoung/products",
-                    params=params,
+        records: list[ProductSourceRecord] = []
+        page = 1
+        page_size = min(max(limit, 1), 10)
+        async with self._client_context() as client:
+            while len(records) < limit:
+                payload = await self._fetch_page(client, keyword, page=page, size=page_size)
+                data = payload.get("data", {}) if isinstance(payload, dict) else {}
+                products = data.get("products", []) if isinstance(data, dict) else []
+                if not isinstance(products, list) or not products:
+                    break
+                records.extend(
+                    record
+                    for item in products
+                    if (record := self._record_from_item(item)) is not None
                 )
-            else:
-                async with httpx.AsyncClient(
-                    timeout=self._settings.oliveyoung_public_api_timeout_seconds,
-                    follow_redirects=True,
-                ) as client:
-                    response = await client.get(
-                        f"{self._base_url}/api/oliveyoung/products",
-                        params=params,
-                    )
+                if not data.get("nextPage"):
+                    break
+                page += 1
+        return records[:limit]
+
+    def _client_context(self):
+        if self._client is not None:
+            return _ExistingClientContext(self._client)
+        return httpx.AsyncClient(
+            timeout=self._settings.oliveyoung_public_api_timeout_seconds,
+            follow_redirects=True,
+        )
+
+    async def _fetch_page(
+        self,
+        client: httpx.AsyncClient,
+        keyword: str,
+        *,
+        page: int,
+        size: int,
+    ) -> dict[str, Any]:
+        params = {"keyword": keyword, "size": size, "page": page}
+        try:
+            response = await client.get(
+                f"{self._base_url}/api/oliveyoung/products",
+                params=params,
+            )
         except httpx.HTTPError as exc:
             raise SourceUnavailableError(f"Olive Young public API request failed: {exc}") from exc
 
@@ -51,11 +77,7 @@ class OliveYoungPublicApiCollector:
             payload = response.json()
         except ValueError as exc:
             raise SourceUnavailableError("Olive Young public API returned invalid JSON") from exc
-
-        products = payload.get("data", {}).get("products", []) if isinstance(payload, dict) else []
-        if not isinstance(products, list):
-            return []
-        return [record for item in products[:limit] if (record := self._record_from_item(item))]
+        return payload if isinstance(payload, dict) else {}
 
     def _record_from_item(self, item: object) -> ProductSourceRecord | None:
         if not isinstance(item, dict):
@@ -65,9 +87,17 @@ class OliveYoungPublicApiCollector:
         name = clean_text(item.get("goodsName") or item.get("productName"))
         image_url = clean_text(item.get("imageUrl"))
         original_price = parse_krw_price(item.get("originalPrice"))
-        sale_price = parse_krw_price(item.get("priceToPay"))
         discount_rate = _parse_int(item.get("discountRate"))
-        if not any([goods_no, name, image_url, original_price, sale_price]):
+        price_to_pay = parse_krw_price(item.get("priceToPay"))
+        has_discount = (
+            discount_rate is not None
+            and discount_rate > 0
+            and original_price is not None
+            and price_to_pay is not None
+            and price_to_pay < original_price
+        )
+        sale_price = price_to_pay if has_discount else None
+        if not any([goods_no, name, image_url, original_price, price_to_pay]):
             return None
 
         source_url = (
@@ -77,12 +107,12 @@ class OliveYoungPublicApiCollector:
             else None
         )
         return ProductSourceRecord(
-            source_brand_name=None,
+            source_brand_name=_infer_brand_from_name(name),
             product_name_ko=name,
-            regular_price=sale_price if sale_price is not None else original_price,
+            regular_price=sale_price if sale_price is not None else price_to_pay or original_price,
             original_price=original_price,
             sale_price=sale_price,
-            discount_rate=discount_rate,
+            discount_rate=discount_rate if has_discount else None,
             currency="KRW",
             image_url=image_url,
             source="oliveyoung",
@@ -102,3 +132,33 @@ def _parse_int(value: Any) -> int | None:
         digits = "".join(char for char in value if char.isdigit())
         return int(digits) if digits else None
     return None
+
+
+class _ExistingClientContext:
+    def __init__(self, client: httpx.AsyncClient):
+        self._client = client
+
+    async def __aenter__(self) -> httpx.AsyncClient:
+        return self._client
+
+    async def __aexit__(self, *args: object) -> None:
+        return None
+
+
+def _infer_brand_from_name(name: str | None) -> str | None:
+    text = clean_text(name)
+    if not text:
+        return None
+    text = _strip_leading_badges(text)
+    token = text.split(maxsplit=1)[0] if text else ""
+    return token or None
+
+
+def _strip_leading_badges(text: str) -> str:
+    stripped = text.strip()
+    while stripped.startswith("["):
+        end_index = stripped.find("]")
+        if end_index < 0:
+            break
+        stripped = stripped[end_index + 1 :].strip()
+    return stripped
