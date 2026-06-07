@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from app.cache.ttl import AsyncTTLCache
@@ -36,6 +38,21 @@ class EmptyCollector:
 
     async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
         return []
+
+
+class SlowCollector:
+    name = "slow"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        await asyncio.sleep(0.05)
+        return [
+            ProductSourceRecord(
+                source_brand_name="BRTC",
+                product_name_ko="느린 제품",
+                regular_price=24000,
+                source="oliveyoung",
+            )
+        ]
 
 
 class IncompleteCollector:
@@ -82,7 +99,7 @@ class SecondFakeCollector:
                 regular_price=18000,
                 shade=None,
                 image_url=None,
-                source="musinsa",
+                source="external",
             )
         ]
 
@@ -98,7 +115,7 @@ class DuplicateFakeCollector:
                 regular_price=12000,
                 shade=None,
                 image_url=None,
-                source="musinsa",
+                source="external",
             )
         ]
 
@@ -141,7 +158,7 @@ class RelatedKeywordCollector:
                 regular_price=25000,
                 shade=None,
                 image_url=None,
-                source="musinsa",
+                source="external",
             )
         ]
 
@@ -163,8 +180,8 @@ class ImplicitBrandKeywordCollector:
                 regular_price=24000,
                 shade=None,
                 image_url=None,
-                source="musinsa",
-                source_url="https://www.musinsa.com/products/123",
+                source="external",
+                source_url="https://example.test/products/123",
             ),
             ProductSourceRecord(
                 source_brand_name="BRTC",
@@ -172,7 +189,7 @@ class ImplicitBrandKeywordCollector:
                 regular_price=18000,
                 shade=None,
                 image_url=None,
-                source="musinsa",
+                source="external",
             ),
         ]
 
@@ -200,7 +217,7 @@ class BatchKeywordCollector:
                     regular_price=6000,
                     shade="클리어 베이지",
                     image_url=None,
-                    source="musinsa",
+                    source="external",
                 )
             ]
         return []
@@ -219,7 +236,7 @@ class VerifiedCacheCollector:
                 regular_price=24000,
                 shade=None,
                 image_url=None,
-                source="musinsa",
+                source="external",
             )
         ]
 
@@ -235,8 +252,8 @@ class RecordingNetworkCollector:
         return []
 
 
-class PartialMusinsaBrandCollector:
-    name = "musinsa"
+class PartialExternalBrandCollector:
+    name = "external"
 
     async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
         if keyword != "에뛰드":
@@ -244,11 +261,11 @@ class PartialMusinsaBrandCollector:
         return [
             ProductSourceRecord(
                 source_brand_name="ETUDE",
-                product_name_ko="에뛰드 무신사 상품",
+                product_name_ko="에뛰드 외부 상품",
                 regular_price=16000,
                 shade=None,
                 image_url=None,
-                source="musinsa",
+                source="external",
             )
         ]
 
@@ -337,7 +354,7 @@ async def test_search_service_merges_results_from_multiple_sources(tmp_path) -> 
     response = await service.search("제품", SearchCriteria(limit=24))
 
     assert response.count == 2
-    assert [result.source for result in response.results] == ["oliveyoung", "musinsa"]
+    assert [result.source for result in response.results] == ["oliveyoung", "external"]
 
 
 @pytest.mark.asyncio
@@ -467,7 +484,7 @@ async def test_search_service_infers_brand_from_query_and_returns_official_field
     assert response.results[0].brand_en == "TOO COOL FOR SCHOOL"
     assert response.results[0].product_name_ko == "베일 스킨 틴트 (+듀얼미러팔레트)"
     assert response.results[0].price == 24000
-    assert response.results[0].source_url == "https://www.musinsa.com/products/123"
+    assert response.results[0].source_url == "https://example.test/products/123"
 
 
 @pytest.mark.asyncio
@@ -564,7 +581,7 @@ async def test_search_service_returns_fast_results_without_browser_supplement(
     )
     browser = BrowserOliveYoungBrandCollector()
     service = SearchService(
-        collectors=[PartialMusinsaBrandCollector(), browser],
+        collectors=[PartialExternalBrandCollector(), browser],
         normalizer=ProductNormalizer(
             BrandResolver(registry_path),
             base_url="https://www.oliveyoung.co.kr",
@@ -575,8 +592,8 @@ async def test_search_service_returns_fast_results_without_browser_supplement(
     response = await service.search("에뛰드", SearchCriteria(limit=48))
 
     assert response.count == 1
-    assert response.results[0].source == "musinsa"
-    assert response.results[0].product_name_ko == "에뛰드 무신사 상품"
+    assert response.results[0].source == "external"
+    assert response.results[0].product_name_ko == "에뛰드 외부 상품"
     assert browser.calls == []
 
 
@@ -623,6 +640,26 @@ async def test_search_service_hides_failed_source_errors_after_empty_success(tmp
     assert response.count == 0
     assert response.results == []
     assert response.source_errors == []
+
+
+@pytest.mark.asyncio
+async def test_search_service_enforces_source_time_budget(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    service = SearchService(
+        collectors=[SlowCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        source_time_budget_seconds=0.001,
+    )
+
+    response = await service.search("제품", SearchCriteria(limit=24))
+
+    assert response.count == 0
+    assert response.source_errors == ["slow: request timed out"]
 
 
 @pytest.mark.asyncio

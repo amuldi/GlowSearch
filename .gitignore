@@ -9,5 +9,3 @@ node_modules/
 dist/
 build/
 *.tsbuildinfo
-backend/data/product_index.json
-backend/data/product_index.json.tmp
