@@ -11,6 +11,8 @@ export type Product = {
   image_url: string | null;
   source_url: string | null;
   source: string;
+  source_label?: string | null;
+  source_priority?: number | null;
 };
 
 export type SearchResponse = {

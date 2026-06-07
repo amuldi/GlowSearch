@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import re
 import asyncio
+from time import perf_counter
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 
@@ -14,6 +15,9 @@ from app.models.product import ProductSearchResult, ProductSourceRecord, SearchR
 from app.normalizer.brand import BrandMatch
 from app.normalizer.product import ProductNormalizer
 from app.normalizer.text import clean_text
+from app.observability.metrics import SearchMetrics, Timer
+from app.search.synonyms import related_query_expansions, search_key
+from app.service.source_policy import SourcePolicy
 
 
 @dataclass
@@ -45,6 +49,8 @@ class SearchService:
         source_time_budget_seconds: float = 3.0,
         source_time_budgets: dict[str, float] | None = None,
         allowed_result_source_prefixes: tuple[str, ...] | None = None,
+        source_policy: SourcePolicy | None = None,
+        metrics: SearchMetrics | None = None,
     ):
         self._collectors = collectors
         self._normalizer = normalizer
@@ -60,11 +66,31 @@ class SearchService:
         self._preserve_official_order = preserve_official_order
         self._source_time_budget_seconds = source_time_budget_seconds
         self._source_time_budgets = source_time_budgets or {}
-        self._allowed_result_source_prefixes = allowed_result_source_prefixes
+        self._source_policy = source_policy or SourcePolicy(
+            allowed_prefixes=allowed_result_source_prefixes
+        )
+        self._metrics = metrics or SearchMetrics()
         self._background_tasks: set[asyncio.Task[None]] = set()
         self._last_index_error: str | None = None
 
     async def search(self, query: str, criteria: SearchCriteria) -> SearchResponse:
+        started_at = perf_counter()
+        response: SearchResponse | None = None
+        failed = False
+        try:
+            response = await self._search(query, criteria)
+            return response
+        except Exception:
+            failed = True
+            raise
+        finally:
+            self._metrics.record_search(
+                elapsed_ms=(perf_counter() - started_at) * 1000,
+                result_count=response.count if response is not None else 0,
+                failed=failed,
+            )
+
+    async def _search(self, query: str, criteria: SearchCriteria) -> SearchResponse:
         cleaned_query = query.strip()
         if not cleaned_query:
             return SearchResponse(query=query, count=0, results=[])
@@ -129,6 +155,8 @@ class SearchService:
         cache_key = f"{'|'.join(query.casefold() for query in collect_queries)}:{collect_limit}"
 
         cached_collected = None if self._prefer_live_official_results else await self._cache.get(cache_key)
+        if not self._prefer_live_official_results:
+            self._metrics.record_cache_lookup(cached_collected is not None)
         if cached_collected is not None:
             cached_results, cached_top_score = self._build_results(
                 cached_collected.records,
@@ -172,6 +200,7 @@ class SearchService:
             brand_match,
             preserve_order=True,
         )
+        self._metrics.record_index_lookup(bool(indexed_collected.records))
         index_threshold = min(criteria.limit, self._index_min_results)
         index_has_enough_results = (
             len(indexed_results) >= self._broad_related_return_threshold(criteria.limit)
@@ -297,7 +326,9 @@ class SearchService:
         *,
         preserve_order: bool = False,
     ) -> tuple[list[ProductSearchResult], int]:
-        normalized = self._dedupe_results([self._normalizer.normalize(record) for record in records])
+        normalized = self._dedupe_results(
+            [self._with_source_metadata(self._normalizer.normalize(record)) for record in records]
+        )
         normalized = self._filter_allowed_sources(normalized)
         complete_results = self._only_core_complete(normalized)
         filtered = self._apply_filters(complete_results, criteria)
@@ -478,14 +509,24 @@ class SearchService:
         limit: int,
     ) -> tuple[list[ProductSourceRecord], str | None, bool]:
         try:
+            timer = Timer.start()
             source_records = await asyncio.wait_for(
                 collector.search(query, limit),
                 timeout=self._collector_timeout(collector),
             )
         except TimeoutError:
-            return [], f"{collector.name}: request timed out", False
+            error = f"{collector.name}: request timed out"
+            self._metrics.record_source_failure(collector.name, error, timeout=True)
+            return [], error, False
         except SourceUnavailableError as exc:
-            return [], f"{collector.name}: {exc}", False
+            error = f"{collector.name}: {exc}"
+            self._metrics.record_source_failure(collector.name, error)
+            return [], error, False
+        self._metrics.record_source_success(
+            collector.name,
+            elapsed_ms=timer.elapsed_ms(),
+            result_count=len(source_records),
+        )
         return source_records, None, True
 
     def _collector_timeout(self, collector: ProductCollector) -> float:
@@ -647,6 +688,7 @@ class SearchService:
             self._last_index_error = None
         except Exception as exc:
             self._last_index_error = f"{type(exc).__name__}: {exc}"
+            self._metrics.record_background_index_error(self._last_index_error)
             return
 
     async def _refresh_index_safely(
@@ -667,6 +709,7 @@ class SearchService:
             self._last_index_error = None
         except Exception as exc:
             self._last_index_error = f"{type(exc).__name__}: {exc}"
+            self._metrics.record_background_index_error(self._last_index_error)
             return
 
     async def warm_index(
@@ -710,6 +753,14 @@ class SearchService:
         stats["background_task_count"] = len(self._background_tasks)
         stats["last_index_error"] = self._last_index_error
         return stats
+
+    def diagnostics(self) -> dict[str, object]:
+        return {
+            "metrics": self._metrics.snapshot(),
+            "source_policy": self._source_policy.snapshot(),
+            "background_task_count": len(self._background_tasks),
+            "last_index_error": self._last_index_error,
+        }
 
     def _warm_seed_queries(self, queries: Iterable[str] | None = None) -> list[str]:
         if self._source_discovery_agent is None or self._ingestion_agent is None:
@@ -795,26 +846,7 @@ class SearchService:
 
     @classmethod
     def _related_query_expansions(cls, value: str) -> tuple[str, ...]:
-        expansions = {
-            "젤": (
-                "클렌징젤",
-                "필링젤",
-                "수딩젤",
-                "젤크림",
-            ),
-            "정샘물": (
-                "비긴스 바이 정샘물",
-                "정샘물 쿠션",
-                "정샘물 립",
-                "정샘물 브러쉬",
-            ),
-            "비긴스": (
-                "비긴스 바이 정샘물",
-                "비긴스 바이 정샘물 세럼",
-                "비긴스 바이 정샘물 선크림",
-            ),
-        }
-        return expansions.get(cls._key(value), ())
+        return related_query_expansions(value)
 
     @staticmethod
     def _effective_criteria(
@@ -938,16 +970,19 @@ class SearchService:
         self,
         results: list[ProductSearchResult],
     ) -> list[ProductSearchResult]:
-        if not self._allowed_result_source_prefixes:
-            return results
         return [
             product
             for product in results
-            if any(
-                product.source == prefix or product.source.startswith(f"{prefix}:")
-                for prefix in self._allowed_result_source_prefixes
-            )
+            if self._source_policy.allows(product.source)
         ]
+
+    def _with_source_metadata(self, product: ProductSearchResult) -> ProductSearchResult:
+        return product.model_copy(
+            update={
+                "source_label": self._source_policy.label(product.source),
+                "source_priority": self._source_policy.priority(product.source),
+            }
+        )
 
     @classmethod
     def _rank_query_matches(
@@ -1222,21 +1257,10 @@ class SearchService:
 
     @staticmethod
     def _key(value: str | None) -> str:
-        text = clean_text(value)
-        if text is None:
-            return ""
-        text = text.casefold()
+        text = search_key(value)
         text = (
-            text.replace("브러쉬", "브러시")
-            .replace("brush", "브러시")
-            .replace("eyeliner", "아이라이너")
-            .replace("eye shadow", "아이섀도")
-            .replace("glowy", "글로이")
+            text.replace("glowy", "글로이")
             .replace("tear", "티어")
-            .replace("gray", "그레이")
-            .replace("grey", "그레이")
-            .replace("쉐딩", "섀딩")
-            .replace("셰딩", "섀딩")
             .replace("비타민씨", "비타")
             .replace("여백살롱", "여백카롱")
             .replace("및서재", "밑서재")
@@ -1244,7 +1268,7 @@ class SearchService:
             .replace("이즈핏", "이지핏")
             .replace("땡큐요엠핑크", "요염핑")
         )
-        return re.sub(r"[\s\-_./|+&'():\[\],]+", "", text)
+        return text
 
     @staticmethod
     def _dedupe_errors(errors: Iterable[str]) -> list[str]:

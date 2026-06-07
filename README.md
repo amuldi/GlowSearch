@@ -1,18 +1,18 @@
 # GlowSearch
 
-Olive Young 상품을 빠르게 검색하고 브랜드명, 영문명, 원가, 할인가, 할인율, 이미지, 원본 링크를 확인하는 검색 앱입니다.
+Olive Young을 우선 소스로 사용하면서 Musinsa, 공식 브랜드 사이트, managed scraping API, barcode/GTIN API, global discovery API를 같은 검색 파이프라인에 붙일 수 있는 화장품 검색 앱입니다.
 
 서비스 주소: [https://glow-search.vercel.app/](https://glow-search.vercel.app/)
 
 ## 현재 방향
 
-- 검색 결과는 Olive Young 상품만 반환합니다.
+- 검색 결과는 Olive Young을 최우선으로 보지만, source policy가 허용한 Musinsa, 공식 브랜드, managed API, barcode/GTIN, discovery API 결과도 같은 `/search` 응답으로 반환할 수 있습니다.
 - 원본에서 확인하지 못한 값은 만들지 않고 `null`로 둡니다.
-- 검색은 SQLite 제품 인덱스에서 먼저 빠르게 반환하고, 부족하면 Olive Young 공식 검색을 실시간 보강합니다.
+- 검색은 캐시와 SQLite 제품 인덱스에서 먼저 빠르게 반환하고, 부족하면 빠른 live source를 병렬 보강합니다.
 - 실시간 수집 결과는 백그라운드에서 상세 페이지로 보강한 뒤 인덱스에 저장되어 다음 검색부터 빠르게 재사용됩니다.
 - 기본 검색은 인덱스/캐시 우선입니다. `GLOWSEARCH_OLIVEYOUNG_LIVE_SEARCH_REQUIRED=true`일 때만 매 요청에서 실시간 공식 검색을 강제합니다.
 - 빠른 소스는 병렬로 실행하고, 브라우저 수집은 기본 비활성화합니다. 꼭 필요할 때만 `GLOWSEARCH_BROWSER_COLLECTOR_ENABLED=true`로 켭니다.
-- 같은 Olive Young `goodsNo`는 하나의 상품으로 합칩니다.
+- 같은 Olive Young `goodsNo`는 하나의 상품으로 합칩니다. 다른 source는 source attribution과 priority를 유지합니다.
 - 브랜드 영문명은 `backend/data/brand_registry.json`의 공식 alias를 기준으로 정규화합니다.
 
 ## 검색 파이프라인
@@ -31,7 +31,9 @@ Next.js 검색 화면
        - OliveYoungPublicApiCollector: public API 가격/이미지
        - LocalVerifiedCatalogCollector: 검증된 로컬 보조 데이터
        - ApifyOliveYoungCollector: APIFY_TOKEN이 있을 때만 사용
-  -> 공식 HTML 결과가 있으면 해당 순서를 보존하고 보조 소스는 같은 상품 보강 또는 뒤쪽 보충에만 사용
+       - JsonApiProductCollector: configured managed/search/barcode API normalized JSON adapter
+  -> SourcePolicy가 source allow-list, label, priority를 적용
+  -> 공식 HTML 결과가 있으면 해당 순서를 보존하고 보조 소스는 같은 상품 보강 또는 뒤쪽 보충에 사용
   -> 브라우저 수집은 기본 검색 경로에서 제외하고, 환경변수로 명시적으로 켠 경우에만 fallback
   -> ProductIngestionAgent가 live 결과를 OliveYoungDetailEnrichmentAgent로 상세 보강
   -> SQLite 인덱스에 상품과 쿼리별 공식 검색 순서 저장
@@ -53,7 +55,9 @@ GlowSearch/
       indexing/         제품 인덱스 저장소와 수집 에이전트
       models/           API 응답/수집 스키마
       normalizer/       브랜드/상품 정규화
+      observability/    검색/소스/인덱스 메트릭
       parser/           HTML 파서
+      search/           검색 동의어와 key 정규화
       service/          검색 흐름 조립
     data/
       brand_registry.json
@@ -129,7 +133,9 @@ curl 'http://localhost:8000/search?q=선크림&limit=24'
       "shade": null,
       "image_url": "https://...",
       "source_url": "https://www.oliveyoung.co.kr/...",
-      "source": "oliveyoung"
+      "source": "oliveyoung",
+      "source_label": "Olive Young",
+      "source_priority": 10
     }
   ],
   "source_errors": []
@@ -146,6 +152,7 @@ GLOWSEARCH_CACHE_TTL_SECONDS=180
 GLOWSEARCH_MAX_RESULTS=480
 GLOWSEARCH_SOURCE_TIME_BUDGET_SECONDS=2.5
 GLOWSEARCH_MANAGED_SCRAPING_TIME_BUDGET_SECONDS=4.0
+GLOWSEARCH_RESULT_SOURCE_PREFIXES=oliveyoung,official,musinsa,managed,barcode,discovery,external
 
 GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_ENABLED=true
 GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_BASE_URL=https://mcp.aka.page
@@ -161,13 +168,28 @@ GLOWSEARCH_BROWSER_TIMEOUT_SECONDS=25
 GLOWSEARCH_APIFY_TOKEN=
 GLOWSEARCH_APIFY_ACTOR_ID=kitschy_marigold/oliveyoung-search-scraper
 
+# Optional normalized JSON adapters.
+# These should return real source-backed product JSON; GlowSearch does not fabricate fields.
+GLOWSEARCH_MANAGED_SEARCH_API_ENABLED=false
+GLOWSEARCH_MANAGED_SEARCH_API_BASE_URL=
+GLOWSEARCH_MANAGED_SEARCH_API_SOURCE=managed:json-api
+GLOWSEARCH_MANAGED_SEARCH_API_TIMEOUT_SECONDS=4.0
+GLOWSEARCH_GLOBAL_DISCOVERY_API_ENABLED=false
+GLOWSEARCH_GLOBAL_DISCOVERY_API_BASE_URL=
+GLOWSEARCH_GLOBAL_DISCOVERY_API_SOURCE=discovery:json-api
+GLOWSEARCH_GLOBAL_DISCOVERY_API_TIMEOUT_SECONDS=3.0
+GLOWSEARCH_BARCODE_LOOKUP_API_ENABLED=false
+GLOWSEARCH_BARCODE_LOOKUP_API_BASE_URL=
+GLOWSEARCH_BARCODE_LOOKUP_API_SOURCE=barcode:lookup
+GLOWSEARCH_BARCODE_LOOKUP_API_TIMEOUT_SECONDS=3.0
+
 # Product index
 GLOWSEARCH_PRODUCT_INDEX_ENABLED=true
 GLOWSEARCH_PRODUCT_INDEX_PATH=backend/data/product_index.sqlite3
 GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN=
 GLOWSEARCH_PRODUCT_INDEX_MIN_RESULTS=1
 GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_ENABLED=true
-GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP=true
+GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP=false
 GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT=48
 GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY=2
 GLOWSEARCH_PRODUCT_INDEX_MAX_SEED_QUERIES=180
@@ -188,11 +210,11 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## 데이터 원칙
 
-- 상품 데이터는 Olive Young HTML, Olive Young public API, 검증 카탈로그, 선택형 Apify 결과에서만 가져옵니다.
+- 상품 데이터는 원본 source가 제공한 값만 사용합니다. 현재 기본 source는 Olive Young HTML/public API, 검증 카탈로그, 선택형 Apify이고, 추가 source는 normalized JSON adapter 뒤에 둡니다.
 - 상품명, 가격, 이미지, 링크는 원본에 없으면 임의로 채우지 않습니다.
 - 영문 브랜드명이 없으면 `brand_registry.json`에 alias를 추가해 보강합니다.
 - SQLite 제품 인덱스는 검색 속도와 커버리지를 위한 저장소입니다. 가격/할인 정보는 live refresh 결과로 계속 갱신합니다.
-- 시작 시 `GLOWSEARCH_PRODUCT_INDEX_CATEGORY_QUERIES`, `GLOWSEARCH_PRODUCT_INDEX_BRAND_QUERIES`, `brand_registry.json`의 한글 alias를 Olive Young 공식 검색으로 백그라운드 수집합니다.
+- 시작 시 warmup은 기본 비활성화합니다. 운영에서는 `/index/warm`을 Render Cron 또는 수동 admin job으로 호출해 live 검색과 경쟁하지 않게 합니다.
 - 인덱스 저장 전 `OliveYoungDetailEnrichmentAgent`가 상품 상세 페이지를 가져와 브랜드명, 상품명, 가격, 이미지 정보를 보강합니다.
 - `GLOWSEARCH_OLIVEYOUNG_OFFICIAL_ORDER_ENABLED=true`이면 live 결과와 쿼리별 인덱스 결과가 Olive Young 공식 검색 순서를 보존합니다.
 - `GLOWSEARCH_OLIVEYOUNG_LIVE_SEARCH_REQUIRED=true`이면 속도보다 공식 live 일치를 우선해 캐시/인덱스 즉시 반환을 건너뜁니다. 기본값은 `false`입니다.
@@ -205,6 +227,15 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ```bash
 curl https://glowsearch-backend.onrender.com/index/status
+curl https://glowsearch-backend.onrender.com/diagnostics
+```
+
+간단한 검색 지연 벤치마크는 다음처럼 실행합니다.
+
+```bash
+cd backend
+.venv/bin/python scripts/benchmark_search.py --base-url http://localhost:8000 --repeat 3
+.venv/bin/python scripts/benchmark_search.py --base-url https://glowsearch-backend.onrender.com --repeat 3
 ```
 
 Render에서 `GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN`을 설정하면 워밍업을 수동 또는 Cron으로 트리거할 수 있습니다.
@@ -215,6 +246,30 @@ curl -X POST "https://glowsearch-backend.onrender.com/index/warm?token=$GLOWSEAR
 ```
 
 목표는 “검색 요청에서 모든 상품을 실시간으로 긁기”가 아니라, 카테고리/브랜드/상품 검색어를 백그라운드로 계속 수집해 DB에 쌓고 검색은 DB에서 즉시 반환하는 구조입니다. 전체 커버리지를 안정적으로 올리려면 SQLite에 Render persistent disk를 붙이거나 Postgres로 이전해야 합니다.
+
+## 아키텍처 노트와 롤아웃
+
+1. 현재 단계: SQLite index + TTL cache + SourcePolicy
+   - `/search` API는 그대로 유지합니다.
+   - 캐시 hit와 index hit는 즉시 반환하고 background refresh를 예약합니다.
+   - live source 실패는 사용자에게 과하게 노출하지 않고 `/diagnostics`에 source별 failure/timeout으로 남깁니다.
+
+2. 운영 저장소 1차 권장안: Render persistent disk
+   - 현재 SQLite를 유지하면서 `GLOWSEARCH_PRODUCT_INDEX_PATH`를 persistent disk 경로로 옮기면 재배포/재시작 후에도 warm index를 유지할 수 있습니다.
+   - 무료/소규모 운영에서는 가장 단순하고 안정적입니다.
+
+3. 운영 저장소 2차 권장안: Postgres full-text search
+   - 상품 수와 source가 늘면 Postgres로 `products`, `product_sources`, `query_products`, `brand_aliases`를 분리합니다.
+   - `tsvector` + trigram index로 한글/영문 alias, 오타, 상품명 variation을 검색합니다.
+
+4. 검색 전문 엔진 후보
+   - Meilisearch/Typesense: 빠른 prefix/typo search와 운영 단순성이 필요할 때.
+   - OpenSearch: 대규모 로그/검색 분석과 복잡한 ranking이 필요할 때.
+
+5. 추가 source rollout
+   - Musinsa/공식몰/managed scraping/barcode/global discovery는 먼저 normalized JSON adapter 뒤에 붙입니다.
+   - source prefix는 `musinsa`, `official`, `managed`, `barcode`, `discovery` 중 하나로 시작하게 둡니다.
+   - `GLOWSEARCH_RESULT_SOURCE_PREFIXES`와 `SourcePolicy` priority로 노출 여부와 표시 label을 통제합니다.
 
 ## 배포
 

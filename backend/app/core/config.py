@@ -34,6 +34,17 @@ class Settings(BaseSettings):
     max_results: int = 480
     source_time_budget_seconds: float = 2.5
     managed_scraping_time_budget_seconds: float = 4.0
+    result_source_prefixes: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: [
+            "oliveyoung",
+            "official",
+            "musinsa",
+            "managed",
+            "barcode",
+            "discovery",
+            "external",
+        ]
+    )
     detail_enrichment_enabled: bool = False
     detail_enrichment_max_records: int = 12
     detail_concurrency: int = 6
@@ -47,6 +58,18 @@ class Settings(BaseSettings):
 
     apify_token: str | None = None
     apify_actor_id: str = "kitschy_marigold/oliveyoung-search-scraper"
+    managed_search_api_enabled: bool = False
+    managed_search_api_base_url: str | None = None
+    managed_search_api_source: str = "managed:json-api"
+    managed_search_api_timeout_seconds: float = 4.0
+    global_discovery_api_enabled: bool = False
+    global_discovery_api_base_url: str | None = None
+    global_discovery_api_source: str = "discovery:json-api"
+    global_discovery_api_timeout_seconds: float = 3.0
+    barcode_lookup_api_enabled: bool = False
+    barcode_lookup_api_base_url: str | None = None
+    barcode_lookup_api_source: str = "barcode:lookup"
+    barcode_lookup_api_timeout_seconds: float = 3.0
 
     brand_registry_path: Path = BACKEND_DIR / "data" / "brand_registry.json"
     verified_catalog_path: Path = BACKEND_DIR / "data" / "verified_products.json"
@@ -56,7 +79,7 @@ class Settings(BaseSettings):
     product_index_admin_token: str | None = None
     product_index_min_results: int = 1
     product_index_background_refresh_enabled: bool = True
-    product_index_warmup_on_startup: bool = True
+    product_index_warmup_on_startup: bool = False
     product_index_warmup_limit: int = 48
     product_index_warmup_concurrency: int = 2
     product_index_max_seed_queries: int = 180
@@ -226,6 +249,7 @@ class Settings(BaseSettings):
         return value
 
     @field_validator(
+        "result_source_prefixes",
         "product_index_seed_queries",
         "product_index_category_queries",
         "product_index_brand_queries",

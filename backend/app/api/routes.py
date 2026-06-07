@@ -76,6 +76,26 @@ async def index_status(
     return stats
 
 
+@router.get("/diagnostics")
+async def diagnostics(
+    service: SearchService = Depends(get_search_service),
+) -> dict[str, object]:
+    settings = get_settings()
+    payload = service.diagnostics()
+    payload["index"] = await service.index_stats()
+    payload["config"] = {
+        "product_index_enabled": settings.product_index_enabled,
+        "warmup_on_startup": settings.product_index_warmup_on_startup,
+        "browser_collector_enabled": settings.browser_collector_enabled,
+        "live_search_required": settings.oliveyoung_live_search_required,
+        "result_source_prefixes": settings.result_source_prefixes,
+        "managed_search_api_enabled": settings.managed_search_api_enabled,
+        "global_discovery_api_enabled": settings.global_discovery_api_enabled,
+        "barcode_lookup_api_enabled": settings.barcode_lookup_api_enabled,
+    }
+    return payload
+
+
 @router.post("/index/warm")
 async def warm_index(
     request: Request,

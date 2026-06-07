@@ -5,6 +5,7 @@ from app.core.config import Settings, get_settings
 from app.data_collector.apify import ApifyOliveYoungCollector
 from app.data_collector.base import ProductCollector
 from app.data_collector.browser_oliveyoung import BrowserOliveYoungCollector
+from app.data_collector.json_api import JsonApiProductCollector
 from app.data_collector.local_catalog import LocalVerifiedCatalogCollector
 from app.data_collector.oliveyoung import OliveYoungCollector
 from app.data_collector.oliveyoung_api import OliveYoungPublicApiCollector
@@ -17,6 +18,7 @@ from app.indexing.store import SQLiteProductIndexStore
 from app.normalizer.brand import BrandResolver
 from app.normalizer.product import ProductNormalizer
 from app.service.search_service import SearchService
+from app.service.source_policy import SourcePolicy
 
 
 @lru_cache
@@ -71,8 +73,11 @@ def get_search_service() -> SearchService:
             "oliveyoung:public-api": settings.oliveyoung_public_api_timeout_seconds,
             "oliveyoung:apify": settings.managed_scraping_time_budget_seconds,
             "oliveyoung:browser": settings.browser_timeout_seconds,
+            settings.managed_search_api_source: settings.managed_search_api_timeout_seconds,
+            settings.global_discovery_api_source: settings.global_discovery_api_timeout_seconds,
+            settings.barcode_lookup_api_source: settings.barcode_lookup_api_timeout_seconds,
         },
-        allowed_result_source_prefixes=("oliveyoung",),
+        source_policy=SourcePolicy(allowed_prefixes=settings.result_source_prefixes),
     )
 
 
@@ -85,6 +90,31 @@ def _build_collectors(settings: Settings) -> list[ProductCollector]:
     collectors.append(LocalVerifiedCatalogCollector(settings.verified_catalog_path))
     if settings.apify_token:
         collectors.append(ApifyOliveYoungCollector(settings))
+    if settings.managed_search_api_enabled and settings.managed_search_api_base_url:
+        collectors.append(
+            JsonApiProductCollector(
+                name=settings.managed_search_api_source,
+                base_url=settings.managed_search_api_base_url,
+                timeout_seconds=settings.managed_search_api_timeout_seconds,
+            )
+        )
+    if settings.global_discovery_api_enabled and settings.global_discovery_api_base_url:
+        collectors.append(
+            JsonApiProductCollector(
+                name=settings.global_discovery_api_source,
+                base_url=settings.global_discovery_api_base_url,
+                timeout_seconds=settings.global_discovery_api_timeout_seconds,
+            )
+        )
+    if settings.barcode_lookup_api_enabled and settings.barcode_lookup_api_base_url:
+        collectors.append(
+            JsonApiProductCollector(
+                name=settings.barcode_lookup_api_source,
+                base_url=settings.barcode_lookup_api_base_url,
+                timeout_seconds=settings.barcode_lookup_api_timeout_seconds,
+                barcode_only=True,
+            )
+        )
     if settings.browser_collector_enabled:
         collectors.append(BrowserOliveYoungCollector(settings))
     return collectors

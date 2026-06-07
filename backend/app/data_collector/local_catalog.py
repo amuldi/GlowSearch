@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.models.product import ProductSourceRecord
 from app.normalizer.text import clean_text
+from app.search.synonyms import search_key
 
 
 class LocalVerifiedCatalogCollector:
@@ -56,21 +57,10 @@ class LocalVerifiedCatalogCollector:
 
     @staticmethod
     def _key(value: str | None) -> str:
-        text = clean_text(value)
-        if text is None:
-            return ""
-        text = text.casefold()
-        text = (
-            text.replace("브러쉬", "브러시")
-            .replace("brush", "브러시")
-            .replace("eyeliner", "아이라이너")
-            .replace("eye shadow", "아이섀도")
-            .replace("glowy", "글로이")
+        text = search_key(value)
+        return (
+            text.replace("glowy", "글로이")
             .replace("tear", "티어")
-            .replace("gray", "그레이")
-            .replace("grey", "그레이")
-            .replace("쉐딩", "섀딩")
-            .replace("셰딩", "섀딩")
             .replace("비타민씨", "비타")
             .replace("여백살롱", "여백카롱")
             .replace("및서재", "밑서재")
@@ -78,7 +68,6 @@ class LocalVerifiedCatalogCollector:
             .replace("이즈핏", "이지핏")
             .replace("땡큐요엠핑크", "요염핑")
         )
-        return re.sub(r"[\s\-_./|+&'():\[\],]+", "", text)
 
     @classmethod
     def _tokens(cls, value: str | None) -> list[str]:

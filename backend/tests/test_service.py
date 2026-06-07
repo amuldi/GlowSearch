@@ -495,6 +495,27 @@ class ExpandedOliveYoungApiGelCollector:
         return [record] if record and limit > 0 else []
 
 
+class TintSynonymCollector:
+    name = "musinsa"
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        self.calls.append(keyword)
+        if keyword != "립틴트":
+            return []
+        return [
+            ProductSourceRecord(
+                source_brand_name="롬앤",
+                product_name_ko="롬앤 글래스팅 립틴트",
+                regular_price=13000,
+                source="musinsa",
+                source_product_id="musinsa-tint-1",
+            )
+        ][:limit]
+
+
 class JungSaemMoolSubBrandCollector:
     name = "oliveyoung:public-api"
 
@@ -611,6 +632,7 @@ async def test_search_service_merges_results_from_multiple_sources(tmp_path) -> 
 
     assert response.count == 2
     assert [result.source for result in response.results] == ["oliveyoung", "external"]
+    assert [result.source_label for result in response.results] == ["Olive Young", "External source"]
 
 
 @pytest.mark.asyncio
@@ -809,6 +831,55 @@ async def test_search_service_expands_single_related_keyword_queries(
         "코스알엑스 약산성 굿모닝 젤 클렌저",
         "비플레인 녹두 밀크 필링 젤",
     ]
+
+
+@pytest.mark.asyncio
+async def test_search_service_expands_lip_tint_synonyms_across_sources(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"rom&nd","aliases":["롬앤"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    collector = TintSynonymCollector()
+    service = SearchService(
+        collectors=[collector],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search("틴트", SearchCriteria(limit=4))
+
+    assert "립틴트" in collector.calls
+    assert response.count == 1
+    assert response.results[0].source == "musinsa"
+    assert response.results[0].source_label == "Musinsa"
+
+
+@pytest.mark.asyncio
+async def test_search_service_keeps_source_failures_in_diagnostics_only(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    service = SearchService(
+        collectors=[FailingCollector(), FakeCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search("제품", SearchCriteria(limit=24))
+    diagnostics = service.diagnostics()
+
+    assert response.count == 1
+    assert response.source_errors == []
+    assert diagnostics["metrics"]["sources"]["failing"]["failures"] == 1
+    assert diagnostics["metrics"]["sources"]["fake"]["successes"] == 1
 
 
 @pytest.mark.asyncio

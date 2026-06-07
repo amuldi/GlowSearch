@@ -108,6 +108,8 @@ def test_product_normalizer_preserves_nulls(tmp_path) -> None:
         "image_url": None,
         "source_url": None,
         "source": "oliveyoung",
+        "source_label": None,
+        "source_priority": None,
     }
 
 

@@ -29,6 +29,8 @@ class ProductSearchResult(BaseModel):
     image_url: str | None = Field(default=None)
     source_url: str | None = Field(default=None)
     source: str
+    source_label: str | None = Field(default=None)
+    source_priority: int | None = Field(default=None)
 
 
 class SearchResponse(BaseModel):

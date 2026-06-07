@@ -200,9 +200,9 @@ export default function Home() {
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleSearchKeyDown}
             rows={isInputBatchQuery ? Math.min(queryCount, 6) : 1}
-            placeholder="관련 검색어"
+            placeholder="브랜드, 제품명, 성분 검색"
             className="min-h-10 min-w-0 flex-1 resize-y border-0 bg-transparent py-2 text-lg font-medium leading-6 text-ink outline-none placeholder:text-neutral-400 sm:text-xl"
-            aria-label="관련 검색어"
+            aria-label="브랜드, 제품명, 성분 검색"
           />
           {query ? (
             <button
@@ -247,7 +247,7 @@ export default function Home() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose opacity-70" />
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose" />
             </span>
-            올리브영 상품 정보를 불러오는 중
+            상품과 브랜드 정보를 찾는 중
           </div>
         ) : null}
       </section>
@@ -258,9 +258,9 @@ export default function Home() {
           <span>{statusText}</span>
         </div>
 
-        {response?.source_errors.length ? (
+        {response?.source_errors.length && response.results.length ? (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            원본 사이트에서 상품 정보를 가져오지 못했습니다.
+            일부 소스가 지연되어 확인 가능한 결과부터 표시합니다.
           </div>
         ) : null}
 
@@ -269,6 +269,15 @@ export default function Home() {
             {Array.from({ length: 6 }).map((_, index) => (
               <ProductSkeleton key={index} />
             ))}
+          </div>
+        ) : null}
+
+        {response && response.results.length === 0 && !isLoading ? (
+          <div className="rounded-lg border border-blush/55 bg-white/88 px-5 py-8 text-center shadow-soft">
+            <p className="text-base font-bold text-rosewood">검색 결과가 없습니다.</p>
+            <p className="mt-2 text-sm text-neutral-600">
+              브랜드명, 제품명, 성분명 또는 영문 표기로 다시 검색해 보세요.
+            </p>
           </div>
         ) : null}
 
@@ -411,6 +420,7 @@ function ProductCard({ product }: { product: Product }) {
     `원가: ${originalPriceText}`,
     hasDiscount ? `할인가: ${salePriceText}` : null,
     product.shade ? `호수: ${product.shade}` : null,
+    `출처: ${sourceLabel(product)}`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -472,6 +482,9 @@ function ProductCard({ product }: { product: Product }) {
       )}
 
       <div className="min-w-0">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <SourceBadge product={product} />
+        </div>
         <div className="flex items-start gap-2">
           <dl className="min-w-0 flex-1 space-y-1">
             <div>
@@ -541,6 +554,24 @@ function ProductCard({ product }: { product: Product }) {
       </div>
     </article>
   );
+}
+
+function SourceBadge({ product }: { product: Product }) {
+  return (
+    <span className="inline-flex max-w-full items-center rounded-full border border-blush/60 bg-blush-soft/70 px-2 py-0.5 text-[11px] font-bold text-rosewood">
+      <span className="truncate">{sourceLabel(product)}</span>
+    </span>
+  );
+}
+
+function sourceLabel(product: Product) {
+  if (product.source_label) return product.source_label;
+  if (product.source === "oliveyoung" || product.source.startsWith("oliveyoung:")) return "Olive Young";
+  if (product.source === "musinsa" || product.source.startsWith("musinsa:")) return "Musinsa";
+  if (product.source === "official" || product.source.startsWith("official:")) return "Official brand";
+  if (product.source === "barcode" || product.source.startsWith("barcode:")) return "Barcode/GTIN";
+  if (product.source === "discovery" || product.source.startsWith("discovery:")) return "Discovery";
+  return product.source;
 }
 
 function ProductSkeleton() {

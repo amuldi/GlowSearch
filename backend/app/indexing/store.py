@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import re
 import sqlite3
-from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
 from app.models.product import ProductSourceRecord
-from app.normalizer.text import clean_text
+from app.search.synonyms import search_key
 
 
 class ProductIndexStore(Protocol):
@@ -283,25 +281,4 @@ def _record_key(record: ProductSourceRecord) -> str:
 
 
 def _key(value: str | None) -> str:
-    text = clean_text(value)
-    if text is None:
-        return ""
-    text = _replace_aliases(text.casefold())
-    return re.sub(r"[\s\-_./|+&'():\[\],]+", "", text)
-
-
-def _replace_aliases(value: str) -> str:
-    replacements: Iterable[tuple[str, str]] = (
-        ("브러쉬", "브러시"),
-        ("brush", "브러시"),
-        ("eyeliner", "아이라이너"),
-        ("eye shadow", "아이섀도"),
-        ("쉐딩", "섀딩"),
-        ("셰딩", "섀딩"),
-        ("gray", "그레이"),
-        ("grey", "그레이"),
-    )
-    text = value
-    for source, target in replacements:
-        text = text.replace(source, target)
-    return text
+    return search_key(value)
