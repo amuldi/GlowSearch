@@ -61,6 +61,7 @@ class SearchService:
         self._source_time_budgets = source_time_budgets or {}
         self._allowed_result_source_prefixes = allowed_result_source_prefixes
         self._background_tasks: set[asyncio.Task[None]] = set()
+        self._last_index_error: str | None = None
 
     async def search(self, query: str, criteria: SearchCriteria) -> SearchResponse:
         cleaned_query = query.strip()
@@ -449,7 +450,9 @@ class SearchService:
             return
         try:
             await self._ingestion_agent.ingest_search_results(queries, records)
-        except Exception:
+            self._last_index_error = None
+        except Exception as exc:
+            self._last_index_error = f"{type(exc).__name__}: {exc}"
             return
 
     async def _refresh_index_safely(
@@ -467,7 +470,9 @@ class SearchService:
                 [original_query, *queries],
                 collected.records,
             )
-        except Exception:
+            self._last_index_error = None
+        except Exception as exc:
+            self._last_index_error = f"{type(exc).__name__}: {exc}"
             return
 
     async def warm_index(
@@ -504,8 +509,13 @@ class SearchService:
                 "product_count": 0,
                 "query_count": 0,
                 "last_refreshed_at": None,
+                "background_task_count": len(self._background_tasks),
+                "last_index_error": self._last_index_error,
             }
-        return await self._product_index.stats()
+        stats = await self._product_index.stats()
+        stats["background_task_count"] = len(self._background_tasks)
+        stats["last_index_error"] = self._last_index_error
+        return stats
 
     def _warm_seed_queries(self, queries: Iterable[str] | None = None) -> list[str]:
         if self._source_discovery_agent is None or self._ingestion_agent is None:
@@ -517,7 +527,9 @@ class SearchService:
     async def _warm_index_queries_safely(self, seeds: list[str], limit: int) -> None:
         try:
             await self._warm_index_queries(seeds, limit)
-        except Exception:
+            self._last_index_error = None
+        except Exception as exc:
+            self._last_index_error = f"{type(exc).__name__}: {exc}"
             return
 
     async def _warm_index_queries(self, seeds: list[str], limit: int) -> None:

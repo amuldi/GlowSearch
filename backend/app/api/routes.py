@@ -59,8 +59,21 @@ async def search(
 @router.get("/index/status")
 async def index_status(
     service: SearchService = Depends(get_search_service),
-) -> dict[str, int | str | None]:
-    return await service.index_stats()
+) -> dict[str, int | str | bool | None]:
+    settings = get_settings()
+    stats = await service.index_stats()
+    stats.update(
+        {
+            "product_index_enabled": settings.product_index_enabled,
+            "product_index_path": str(settings.product_index_path),
+            "warmup_on_startup": settings.product_index_warmup_on_startup,
+            "max_seed_queries": settings.product_index_max_seed_queries,
+            "browser_collector_enabled": settings.browser_collector_enabled,
+            "live_search_required": settings.oliveyoung_live_search_required,
+            "admin_token_configured": bool(settings.product_index_admin_token),
+        }
+    )
+    return stats
 
 
 @router.post("/index/warm")

@@ -15,6 +15,12 @@ services:
         value: 4.0
       - key: GLOWSEARCH_DETAIL_ENRICHMENT_ENABLED
         value: false
+      - key: GLOWSEARCH_MAX_RESULTS
+        value: 480
+      - key: GLOWSEARCH_OLIVEYOUNG_OFFICIAL_ORDER_ENABLED
+        value: true
+      - key: GLOWSEARCH_OLIVEYOUNG_LIVE_SEARCH_REQUIRED
+        value: false
       - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_ENABLED
         value: true
       - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_BASE_URL
@@ -22,10 +28,36 @@ services:
       - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_TIMEOUT_SECONDS
         value: 6.0
       - key: GLOWSEARCH_BROWSER_COLLECTOR_ENABLED
-        value: true
+        value: false
       - key: GLOWSEARCH_BROWSER_HEADLESS
         value: true
       - key: GLOWSEARCH_BROWSER_TIMEOUT_SECONDS
         value: 25
+      - key: GLOWSEARCH_PRODUCT_INDEX_ENABLED
+        value: true
+      - key: GLOWSEARCH_PRODUCT_INDEX_PATH
+        value: /tmp/glowsearch/product_index.sqlite3
+      - key: GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN
+        sync: false
+      - key: GLOWSEARCH_PRODUCT_INDEX_MIN_RESULTS
+        value: 8
+      - key: GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_ENABLED
+        value: true
+      - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP
+        value: true
+      - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT
+        value: 48
+      - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY
+        value: 2
+      - key: GLOWSEARCH_PRODUCT_INDEX_MAX_SEED_QUERIES
+        value: 120
+      - key: GLOWSEARCH_PRODUCT_INDEX_BRAND_REGISTRY_WARMUP_ENABLED
+        value: true
+      - key: GLOWSEARCH_PRODUCT_INDEX_BRAND_REGISTRY_WARMUP_LIMIT
+        value: 80
+      - key: GLOWSEARCH_PRODUCT_INDEX_DETAIL_ENRICHMENT_ENABLED
+        value: true
+      - key: GLOWSEARCH_PRODUCT_INDEX_DETAIL_ENRICHMENT_MAX_RECORDS
+        value: 12
       - key: GLOWSEARCH_CORS_ORIGINS
         value: http://localhost:3000,https://glow-search.vercel.app
