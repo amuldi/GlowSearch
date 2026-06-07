@@ -5,6 +5,9 @@ class ProductSourceRecord(BaseModel):
     source_brand_name: str | None = None
     product_name_ko: str | None = None
     regular_price: int | None = None
+    original_price: int | None = None
+    sale_price: int | None = None
+    discount_rate: int | None = None
     currency: str | None = "KRW"
     shade: str | None = None
     image_url: str | None = None
@@ -14,9 +17,13 @@ class ProductSourceRecord(BaseModel):
 
 
 class ProductSearchResult(BaseModel):
+    brand_ko: str | None = Field(default=None)
     brand_en: str | None = Field(default=None)
     product_name_ko: str | None = Field(default=None)
     price: int | None = Field(default=None)
+    original_price: int | None = Field(default=None)
+    sale_price: int | None = Field(default=None)
+    discount_rate: int | None = Field(default=None)
     currency: str | None = Field(default="KRW")
     shade: str | None = Field(default=None)
     image_url: str | None = Field(default=None)

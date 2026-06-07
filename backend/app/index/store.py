@@ -295,6 +295,21 @@ class JsonProductIndexStore:
                     if incoming.regular_price is not None
                     else existing.regular_price
                 ),
+                "original_price": (
+                    incoming.original_price
+                    if incoming.original_price is not None
+                    else existing.original_price
+                ),
+                "sale_price": (
+                    incoming.sale_price
+                    if incoming.sale_price is not None
+                    else existing.sale_price
+                ),
+                "discount_rate": (
+                    incoming.discount_rate
+                    if incoming.discount_rate is not None
+                    else existing.discount_rate
+                ),
                 "currency": incoming.currency or existing.currency,
                 "shade": incoming.shade or existing.shade,
                 "image_url": incoming.image_url or existing.image_url,

@@ -34,6 +34,7 @@ class SearchService:
         source_time_budget_seconds: float = 3.0,
         source_time_budgets: dict[str, float] | None = None,
         source_priorities: dict[str, int] | None = None,
+        allowed_result_source_prefixes: tuple[str, ...] | None = None,
         stale_revalidate_enabled: bool = False,
     ):
         self._collectors = collectors
@@ -43,6 +44,7 @@ class SearchService:
         self._source_time_budget_seconds = source_time_budget_seconds
         self._source_time_budgets = source_time_budgets or {}
         self._source_priorities = source_priorities or {}
+        self._allowed_result_source_prefixes = allowed_result_source_prefixes
         self._stale_revalidate_enabled = stale_revalidate_enabled
         self._refresh_tasks: dict[str, asyncio.Task[None]] = {}
 
@@ -286,6 +288,7 @@ class SearchService:
         brand_match: BrandMatch | None,
     ) -> tuple[list[ProductSearchResult], int]:
         normalized = self._dedupe_results([self._normalizer.normalize(record) for record in records])
+        normalized = self._filter_allowed_sources(normalized)
         complete_results = self._only_core_complete(normalized)
         filtered = self._apply_filters(complete_results, criteria)
         relevant, top_score = self._rank_query_matches(
@@ -477,14 +480,58 @@ class SearchService:
     @classmethod
     def _dedupe_records(cls, records: list[ProductSourceRecord]) -> list[ProductSourceRecord]:
         deduped: list[ProductSourceRecord] = []
-        seen: set[str] = set()
+        seen: dict[str, int] = {}
         for record in records:
             key = cls._record_key(record)
             if key in seen:
+                index = seen[key]
+                deduped[index] = cls._merge_records(deduped[index], record)
                 continue
-            seen.add(key)
+            seen[key] = len(deduped)
             deduped.append(record)
         return deduped
+
+    @staticmethod
+    def _merge_records(
+        existing: ProductSourceRecord,
+        incoming: ProductSourceRecord,
+    ) -> ProductSourceRecord:
+        return existing.model_copy(
+            update={
+                "source_brand_name": existing.source_brand_name or incoming.source_brand_name,
+                "product_name_ko": existing.product_name_ko or incoming.product_name_ko,
+                "regular_price": (
+                    incoming.regular_price
+                    if incoming.regular_price is not None
+                    and (
+                        existing.regular_price is None
+                        or incoming.original_price is not None
+                        or incoming.sale_price is not None
+                    )
+                    else existing.regular_price
+                ),
+                "original_price": (
+                    incoming.original_price
+                    if incoming.original_price is not None
+                    else existing.original_price
+                ),
+                "sale_price": (
+                    incoming.sale_price
+                    if incoming.sale_price is not None
+                    else existing.sale_price
+                ),
+                "discount_rate": (
+                    incoming.discount_rate
+                    if incoming.discount_rate is not None
+                    else existing.discount_rate
+                ),
+                "currency": incoming.currency or existing.currency,
+                "shade": existing.shade or incoming.shade,
+                "image_url": incoming.image_url or existing.image_url,
+                "source_url": existing.source_url or incoming.source_url,
+                "source_product_id": existing.source_product_id or incoming.source_product_id,
+            }
+        )
 
     @classmethod
     def _record_key(cls, record: ProductSourceRecord) -> str:
@@ -520,6 +567,21 @@ class SearchService:
             seen.add(key)
             deduped.append(product)
         return deduped
+
+    def _filter_allowed_sources(
+        self,
+        results: list[ProductSearchResult],
+    ) -> list[ProductSearchResult]:
+        if not self._allowed_result_source_prefixes:
+            return results
+        return [
+            product
+            for product in results
+            if any(
+                product.source == prefix or product.source.startswith(f"{prefix}:")
+                for prefix in self._allowed_result_source_prefixes
+            )
+        ]
 
     @classmethod
     def _rank_query_matches(

@@ -55,6 +55,27 @@ def test_parse_display_price_range_from_official_source() -> None:
     assert records[0].regular_price == 19900
 
 
+def test_parse_original_and_sale_prices_from_oliveyoung_listing_markup() -> None:
+    html = """
+    <ul class="cate_prd_list">
+      <li>
+        <span class="tx_brand">라운드랩</span>
+        <p class="tx_name">라운드랩 자작나무 수분 톤업 선크림</p>
+        <p class="prd_price">
+          <span class="tx_org"><span class="tx_num">25,000</span>원</span>
+          <span class="tx_cur"><span class="tx_num">23,900</span>원</span>
+        </p>
+      </li>
+    </ul>
+    """
+
+    records = parse_search_results(html, base_url=BASE_URL, limit=10)
+
+    assert records[0].regular_price == 23900
+    assert records[0].original_price == 25000
+    assert records[0].sale_price == 23900
+
+
 def test_parse_modern_oliveyoung_brand_name_markup() -> None:
     html = """
     <ul>
@@ -135,6 +156,7 @@ def test_parse_next_detail_page_price_and_name() -> None:
 
     assert record.product_name_ko == "[NEW] 공식 제품명"
     assert record.regular_price == 13000
+    assert record.sale_price == 13000
 
 
 def test_parse_detail_shades_from_option_markup() -> None:

@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Copy, Search, X } from "lucide-react";
+import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 import { searchProducts } from "@/lib/api";
@@ -136,6 +137,14 @@ export default function Home() {
     setSearchRun((current) => current + 1);
   };
 
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || event.shiftKey) {
+      return;
+    }
+    event.preventDefault();
+    submitSearch();
+  };
+
   return (
     <main className="min-h-screen bg-[#fafafa] px-4 py-8 text-ink sm:px-6 lg:px-8">
       <section className="mx-auto flex w-full max-w-3xl flex-col items-center gap-5 pt-6 sm:pt-10">
@@ -144,6 +153,7 @@ export default function Home() {
           <textarea
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={handleSearchKeyDown}
             rows={isInputBatchQuery ? Math.min(queryCount, 6) : 1}
             placeholder="관련 검색어"
             className="min-h-10 min-w-0 flex-1 resize-y border-0 bg-transparent py-2 text-base leading-6 outline-none placeholder:text-neutral-400"
@@ -207,11 +217,21 @@ export default function Home() {
 
 function ProductCard({ product }: { product: Product }) {
   const [copied, setCopied] = useState(false);
-  const priceText = formatPrice(product.price, product.currency);
+  const originalPriceText = formatPrice(product.original_price ?? product.price, product.currency);
+  const salePriceText = formatPrice(product.sale_price ?? product.price, product.currency);
+  const hasDiscount = Boolean(
+    product.sale_price !== null
+    && product.sale_price !== undefined
+    && product.original_price !== null
+    && product.original_price !== undefined
+    && product.sale_price < product.original_price,
+  );
   const copyText = [
-    `브랜드명: ${product.brand_en ?? ""}`,
+    `브랜드명: ${product.brand_ko ?? ""}`,
+    `영문명: ${product.brand_en ?? ""}`,
     `제품명: ${product.product_name_ko ?? ""}`,
-    `가격: ${priceText}`,
+    `원가: ${originalPriceText}`,
+    `할인가: ${salePriceText}`,
     product.shade ? `호수: ${product.shade}` : null,
   ]
     .filter(Boolean)
@@ -278,7 +298,11 @@ function ProductCard({ product }: { product: Product }) {
           <dl className="min-w-0 flex-1 space-y-1">
             <div>
               <dt className="text-[11px] font-medium text-neutral-500">브랜드명</dt>
-              <dd className="truncate text-sm font-semibold text-mint">{product.brand_en ?? "브랜드 미확인"}</dd>
+              <dd className="truncate text-sm font-semibold text-mint">{product.brand_ko ?? "브랜드 미확인"}</dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-medium text-neutral-500">영문명</dt>
+              <dd className="truncate text-xs font-medium text-neutral-700">{product.brand_en ?? "영문명 미확인"}</dd>
             </div>
             <div>
               <dt className="text-[11px] font-medium text-neutral-500">제품명</dt>
@@ -299,8 +323,21 @@ function ProductCard({ product }: { product: Product }) {
               </dd>
             </div>
             <div>
-              <dt className="text-[11px] font-medium text-neutral-500">가격</dt>
-              <dd className="text-sm font-semibold">{priceText}</dd>
+              <dt className="text-[11px] font-medium text-neutral-500">원가</dt>
+              <dd className={hasDiscount ? "text-xs text-neutral-500 line-through" : "text-sm font-semibold"}>
+                {originalPriceText}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-medium text-neutral-500">할인가</dt>
+              <dd className="text-sm font-semibold">
+                {salePriceText}
+                {product.discount_rate ? (
+                  <span className="ml-1 text-xs font-semibold text-rose-600">
+                    {product.discount_rate}%
+                  </span>
+                ) : null}
+              </dd>
             </div>
             {product.shade ? (
               <div>

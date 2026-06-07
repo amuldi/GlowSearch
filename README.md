@@ -18,13 +18,15 @@ GlowSearch는 화장품 정보를 찾을 때 여러 쇼핑몰과 브랜드 페�
 
 - **인덱스 우선 검색**: 검증 카탈로그와 런타임 수집 결과를 로컬 제품 인덱스에서 먼저 찾고, 있으면 외부 요청을 기다리지 않고 바로 반환합니다.
 
-- **원본 기반 상품 정보**: 브랜드명, 상품명, 가격, 이미지, 원본 링크는 라이브 소스나 검증된 데이터에서만 가져옵니다.
+- **올리브영 전용 상품 정보**: 기본 검색은 Musinsa/기타 소스를 제외하고 올리브영에 나온 상품만 반환합니다.
+
+- **실시간 가격 표시**: 올리브영 public 상품 API와 HTML 파서를 조합해 브랜드명, 영문명, 원가, 할인가, 할인율, 이미지, 원본 링크를 표시합니다.
 
 - **브랜드명 정규화**: 한국어 브랜드명을 공식 영문 표기로 맞추기 위해 로컬 브랜드 레지스트리와 Musinsa 브랜드 조회를 함께 사용합니다.
 
 - **수집 실패 대응**: Olive Young 직접 요청이 막히거나 결과가 부족할 수 있어 Musinsa, 공식 브랜드 사이트, 브라우저 수집, 검증 캐시를 보조 경로로 둡니다.
 
-- **확장 가능한 소스 어댑터**: SerpAPI, Bright Data, Bing Web Search, Google Programmable Search, Open Beauty Facts, Barcode Lookup, UPCitemDB를 env flag 뒤에 둔 선택형 어댑터로 연결할 수 있습니다.
+- **확장 가능한 소스 어댑터**: SerpAPI, Bright Data, Bing Web Search, Google Programmable Search, Open Beauty Facts, Barcode Lookup, UPCitemDB를 env flag 뒤에 둔 선택형 어댑터로 연결할 수 있습니다. 현재 기본 운영 모드는 올리브영 전용입니다.
 
 ## 기술 스택
 
@@ -109,15 +111,14 @@ GlowSearch는 화장품 정보를 찾을 때 여러 쇼핑몰과 브랜드 페�
 사용자 검색어
   -> Next.js frontend
   -> FastAPI /search
-  -> 제품 인덱스/검증 캐시 확인
-  -> 여러 수집기 실행
+  -> 올리브영 direct/API 수집기 실행
   -> HTML/API 응답 파싱
   -> 브랜드명 정규화
   -> 중복 제거 및 랭킹
   -> 상품 카드 렌더링
 ```
 
-요청 시점에는 인덱스에 있는 결과를 먼저 반환합니다. 인덱스 결과가 오래됐으면 stale 값을 즉시 반환한 뒤 백그라운드에서 재수집합니다. 인덱스가 비어 있을 때만 빠른 외부 수집기를 병렬로 호출하고, Playwright 브라우저 수집은 빠른 소스가 모두 실패하거나 결과가 없을 때만 사용합니다.
+현재 운영 모드에서는 실시간 올리브영 가격을 우선하기 위해 제품 인덱스와 TTL 응답 캐시를 검색 경로에서 끕니다. 외부 글로벌 어댑터와 제품 인덱스 구조는 남겨 두었고, `GLOWSEARCH_OLIVEYOUNG_ONLY_RESULTS=false`로 전역 커버리지 모드를 다시 켤 수 있습니다.
 
 자세한 확장 구조는 [검색 아키텍처 노트](docs/search-architecture.md)를 참고합니다.
 
@@ -218,8 +219,12 @@ curl 'http://localhost:8000/search?q=틴트&limit=24'
   "results": [
     {
       "brand_en": "rom&nd",
+      "brand_ko": "롬앤",
       "product_name_ko": "롬앤 글래스팅 컬러 글로스",
       "price": 13000,
+      "original_price": 15000,
+      "sale_price": 13000,
+      "discount_rate": 13,
       "currency": "KRW",
       "shade": null,
       "image_url": "https://example.com/item.jpg",
@@ -264,9 +269,13 @@ NEXT_PUBLIC_API_BASE_URL=https://your-backend-domain.onrender.com
 GLOWSEARCH_BROWSER_COLLECTOR_ENABLED=true
 GLOWSEARCH_BROWSER_HEADLESS=true
 GLOWSEARCH_BROWSER_TIMEOUT_SECONDS=25
+GLOWSEARCH_OLIVEYOUNG_ONLY_RESULTS=true
+GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_ENABLED=true
+GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_BASE_URL=https://mcp.aka.page
+GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_TIMEOUT_SECONDS=4.0
 GLOWSEARCH_SOURCE_TIME_BUDGET_SECONDS=2.5
 GLOWSEARCH_MANAGED_SCRAPING_TIME_BUDGET_SECONDS=4.0
-GLOWSEARCH_PRODUCT_INDEX_ENABLED=true
+GLOWSEARCH_PRODUCT_INDEX_ENABLED=false
 GLOWSEARCH_PRODUCT_INDEX_PATH=data/product_index.json
 GLOWSEARCH_PRODUCT_INDEX_SEED_VERIFIED_CATALOG=true
 GLOWSEARCH_PRODUCT_INDEX_FRESH_TTL_SECONDS=3600
@@ -302,7 +311,7 @@ GLOWSEARCH_GOOGLE_PROGRAMMABLE_SEARCH_API_KEY=
 GLOWSEARCH_GOOGLE_PROGRAMMABLE_SEARCH_ENGINE_ID=
 
 # Barcode / GTIN lookup
-GLOWSEARCH_OPEN_BEAUTY_FACTS_ENABLED=true
+GLOWSEARCH_OPEN_BEAUTY_FACTS_ENABLED=false
 GLOWSEARCH_BARCODE_LOOKUP_ENABLED=false
 GLOWSEARCH_BARCODE_LOOKUP_API_KEY=
 GLOWSEARCH_UPCITEMDB_ENABLED=false

@@ -13,12 +13,20 @@ services:
         value: true
       - key: GLOWSEARCH_BROWSER_TIMEOUT_SECONDS
         value: 25
+      - key: GLOWSEARCH_OLIVEYOUNG_ONLY_RESULTS
+        value: true
+      - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_ENABLED
+        value: true
+      - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_BASE_URL
+        value: https://mcp.aka.page
+      - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_TIMEOUT_SECONDS
+        value: 4.0
       - key: GLOWSEARCH_SOURCE_TIME_BUDGET_SECONDS
         value: 2.5
       - key: GLOWSEARCH_MANAGED_SCRAPING_TIME_BUDGET_SECONDS
         value: 4.0
       - key: GLOWSEARCH_PRODUCT_INDEX_ENABLED
-        value: true
+        value: false
       - key: GLOWSEARCH_PRODUCT_INDEX_PATH
         value: data/product_index.json
       - key: GLOWSEARCH_PRODUCT_INDEX_SEED_VERIFIED_CATALOG
@@ -32,7 +40,7 @@ services:
       - key: GLOWSEARCH_DETAIL_ENRICHMENT_MAX_RECORDS
         value: 4
       - key: GLOWSEARCH_OPEN_BEAUTY_FACTS_ENABLED
-        value: true
+        value: false
       - key: GLOWSEARCH_MUSINSA_BRAND_LOOKUP_ENABLED
         value: true
       - key: GLOWSEARCH_MUSINSA_PRODUCT_COLLECTOR_ENABLED

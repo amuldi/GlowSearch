@@ -1,7 +1,11 @@
 export type Product = {
+  brand_ko: string | null;
   brand_en: string | null;
   product_name_ko: string | null;
   price: number | null;
+  original_price?: number | null;
+  sale_price?: number | null;
+  discount_rate?: number | null;
   currency?: string | null;
   shade: string | null;
   image_url: string | null;

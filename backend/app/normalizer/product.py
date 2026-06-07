@@ -1,6 +1,6 @@
 from app.models.product import ProductSearchResult, ProductSourceRecord
 from app.normalizer.brand import BrandMatch, BrandResolver
-from app.normalizer.text import clean_text, normalize_image_url
+from app.normalizer.text import clean_text, has_hangul, normalize_image_url
 
 
 class ProductNormalizer:
@@ -9,13 +9,21 @@ class ProductNormalizer:
         self._base_url = base_url
 
     def normalize(self, record: ProductSourceRecord) -> ProductSearchResult:
+        brand_ko = self._brand_ko(record)
+        original_price = record.original_price or record.regular_price
+        sale_price = record.sale_price
+        display_price = sale_price if sale_price is not None else original_price
         return ProductSearchResult(
+            brand_ko=brand_ko,
             brand_en=self._brand_resolver.resolve(
                 record.source_brand_name,
                 record.product_name_ko,
             ),
             product_name_ko=clean_text(record.product_name_ko),
-            price=record.regular_price,
+            price=display_price,
+            original_price=original_price,
+            sale_price=sale_price,
+            discount_rate=record.discount_rate,
             currency=clean_text(record.currency) or "KRW",
             shade=clean_text(record.shade),
             image_url=normalize_image_url(record.image_url, self._base_url),
@@ -31,3 +39,12 @@ class ProductNormalizer:
 
     def close(self) -> None:
         self._brand_resolver.close()
+
+    def _brand_ko(self, record: ProductSourceRecord) -> str | None:
+        source_brand = clean_text(record.source_brand_name)
+        if source_brand and has_hangul(source_brand):
+            return source_brand
+        match = self._brand_resolver.match_text(record.product_name_ko)
+        if match and has_hangul(match.matched_alias):
+            return match.matched_alias
+        return None

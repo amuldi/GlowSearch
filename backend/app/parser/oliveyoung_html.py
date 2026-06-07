@@ -98,7 +98,10 @@ def parse_detail_page(html: str, *, base_url: str, source_url: str | None = None
     brand = base.source_brand_name or _first_text(soup, BRAND_SELECTORS)
     title = base.product_name_ko or _detail_title(soup)
     image = base.image_url or _meta_content(soup, "og:image") or _first_image(soup, base_url)
-    price = base.regular_price or _detail_price(soup)
+    original_price, sale_price = _detail_prices(soup)
+    original_price = base.original_price or original_price or base.regular_price
+    sale_price = base.sale_price or sale_price
+    price = sale_price if sale_price is not None else original_price
     shade = base.shade or _extract_shade(soup)
     goods_no = base.source_product_id or _extract_goods_no(source_url or "") or _extract_goods_no(str(soup))
 
@@ -106,6 +109,9 @@ def parse_detail_page(html: str, *, base_url: str, source_url: str | None = None
         source_brand_name=brand,
         product_name_ko=title,
         regular_price=price,
+        original_price=original_price,
+        sale_price=sale_price,
+        discount_rate=base.discount_rate,
         shade=shade,
         image_url=image,
         source="oliveyoung",
@@ -134,17 +140,29 @@ def _parse_product_node(node: Tag, *, base_url: str) -> ProductSourceRecord | No
         "aria-label",
     )
 
-    price = _node_price(node) or parse_krw_price(
+    original_price, sale_price = _node_prices(node)
+    attr_original_price = parse_krw_price(
         _first_attr(
             node,
             "data-normal-price",
             "data-regular-price",
             "data-org-price",
             "data-nrml-amt",
-            "data-price",
-            "data-sale-price",
         )
     )
+    attr_sale_price = parse_krw_price(
+        _first_attr(
+            node,
+            "data-sale-price",
+            "data-price-to-pay",
+            "data-current-price",
+            "data-discount-price",
+            "data-price",
+        )
+    )
+    original_price = original_price or attr_original_price
+    sale_price = sale_price or attr_sale_price
+    price = sale_price if sale_price is not None else original_price
     image = _first_image(node, base_url) or normalize_image_url(
         _first_attr(
             node,
@@ -180,6 +198,8 @@ def _parse_product_node(node: Tag, *, base_url: str) -> ProductSourceRecord | No
         source_brand_name=brand,
         product_name_ko=name,
         regular_price=price,
+        original_price=original_price,
+        sale_price=sale_price,
         shade=None,
         image_url=image,
         source="oliveyoung",
@@ -291,22 +311,37 @@ def _record_from_mapping(item: dict, *, base_url: str) -> ProductSourceRecord | 
         image_raw = next((value for value in image_raw if isinstance(value, str)), None)
 
     offers = item.get("offers") if isinstance(item.get("offers"), dict) else {}
-    price = (
+    original_price = parse_krw_price(
+        _pick(
+            item,
+            "regularPrice",
+            "normalPrice",
+            "originalPrice",
+            "nrmlAmt",
+            "stdPrc",
+            "orgPrice",
+            "listPrice",
+            "goodsPrc",
+        )
+    )
+    sale_price = (
         parse_krw_price(
             _pick(
                 item,
-                "regularPrice",
-                "normalPrice",
-                "nrmlAmt",
-                "stdPrc",
-                "orgPrice",
-                "listPrice",
-                "goodsPrc",
+                "priceToPay",
+                "salePrice",
+                "discountPrice",
+                "discountedPrice",
+                "currentPrice",
+                "finalPrice",
                 "price",
             )
         )
-        or parse_krw_price(_pick(offers, "price", "highPrice", "lowPrice"))
+        or parse_krw_price(_pick(offers, "price", "lowPrice"))
     )
+    if original_price is None:
+        original_price = parse_krw_price(_pick(offers, "highPrice"))
+    price = sale_price if sale_price is not None else original_price
     source_url = _pick(item, "url", "link", "goodsUrl", "goodsDetailUrl", "productUrl")
     source_url = urljoin(base_url, source_url) if isinstance(source_url, str) else None
     goods_no = _pick(
@@ -331,6 +366,9 @@ def _record_from_mapping(item: dict, *, base_url: str) -> ProductSourceRecord | 
         source_brand_name=clean_text(brand),
         product_name_ko=clean_text(name),
         regular_price=price,
+        original_price=original_price,
+        sale_price=sale_price,
+        discount_rate=_parse_int(_pick(item, "discountRate", "dcRate", "discount_rate")),
         shade=clean_text(_pick(item, "shade", "color", "optionName")),
         image_url=normalize_image_url(clean_text(image_raw), base_url),
         source="oliveyoung",
@@ -443,27 +481,51 @@ def _detail_title(soup: BeautifulSoup) -> str | None:
     return None
 
 
-def _detail_price(soup: BeautifulSoup) -> int | None:
+def _detail_prices(soup: BeautifulSoup) -> tuple[int | None, int | None]:
     price_meta = _meta_content(soup, "product:price:amount")
+    original_price, sale_price = _node_prices(soup)
     if price_meta:
-        return parse_krw_display_price(price_meta)
-    return _node_price(soup)
+        meta_price = parse_krw_display_price(price_meta)
+        sale_price = sale_price or meta_price
+    return original_price, sale_price
 
 
 def _node_price(node: Tag | BeautifulSoup) -> int | None:
+    original_price, sale_price = _node_prices(node)
+    return original_price or sale_price
+
+
+def _node_prices(node: Tag | BeautifulSoup) -> tuple[int | None, int | None]:
+    original_price = None
     for selector in OFFICIAL_PRICE_SELECTORS:
         found = node.select_one(selector)
         if found:
             price = parse_krw_price(found.get_text(" ", strip=True))
             if price is not None:
-                return price
+                original_price = price
+                break
 
+    sale_price = None
     for selector in CURRENT_PRICE_SELECTORS:
         found = node.select_one(selector)
         if found:
             price = parse_krw_display_price(found.get_text(" ", strip=True))
             if price is not None:
-                return price
+                sale_price = price
+                break
+    return original_price, sale_price
+
+
+def _parse_int(value: object | None) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        digits = re.sub(r"[^0-9]", "", value)
+        return int(digits) if digits else None
     return None
 
 

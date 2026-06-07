@@ -341,6 +341,26 @@ async def test_search_service_merges_results_from_multiple_sources(tmp_path) -> 
 
 
 @pytest.mark.asyncio
+async def test_search_service_can_filter_to_oliveyoung_sources_only(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    service = SearchService(
+        collectors=[FakeCollector(), SecondFakeCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("제품", SearchCriteria(limit=24))
+
+    assert response.count == 1
+    assert response.results[0].source == "oliveyoung"
+
+
+@pytest.mark.asyncio
 async def test_search_service_dedupes_same_product_from_later_sources(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text('{"entries":[]}', encoding="utf-8")

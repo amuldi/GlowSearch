@@ -90,9 +90,13 @@ def test_product_normalizer_preserves_nulls(tmp_path) -> None:
     )
 
     assert result.model_dump() == {
+        "brand_ko": "한글브랜드",
         "brand_en": None,
         "product_name_ko": "제품",
         "price": None,
+        "original_price": None,
+        "sale_price": None,
+        "discount_rate": None,
         "currency": "KRW",
         "shade": None,
         "image_url": None,
