@@ -13,8 +13,26 @@ services:
         value: true
       - key: GLOWSEARCH_BROWSER_TIMEOUT_SECONDS
         value: 25
+      - key: GLOWSEARCH_SOURCE_TIME_BUDGET_SECONDS
+        value: 2.5
+      - key: GLOWSEARCH_MANAGED_SCRAPING_TIME_BUDGET_SECONDS
+        value: 4.0
+      - key: GLOWSEARCH_PRODUCT_INDEX_ENABLED
+        value: true
+      - key: GLOWSEARCH_PRODUCT_INDEX_PATH
+        value: data/product_index.json
+      - key: GLOWSEARCH_PRODUCT_INDEX_SEED_VERIFIED_CATALOG
+        value: true
+      - key: GLOWSEARCH_PRODUCT_INDEX_FRESH_TTL_SECONDS
+        value: 3600
+      - key: GLOWSEARCH_PRODUCT_INDEX_STALE_TTL_SECONDS
+        value: 604800
+      - key: GLOWSEARCH_STALE_REVALIDATE_ENABLED
+        value: true
       - key: GLOWSEARCH_DETAIL_ENRICHMENT_MAX_RECORDS
         value: 4
+      - key: GLOWSEARCH_OPEN_BEAUTY_FACTS_ENABLED
+        value: true
       - key: GLOWSEARCH_MUSINSA_BRAND_LOOKUP_ENABLED
         value: true
       - key: GLOWSEARCH_MUSINSA_PRODUCT_COLLECTOR_ENABLED

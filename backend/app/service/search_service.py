@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 
 from app.cache.ttl import AsyncTTLCache
 from app.data_collector.base import ProductCollector, SearchCriteria, SourceUnavailableError
+from app.index.store import ProductIndexStore
 from app.models.product import ProductSearchResult, ProductSourceRecord, SearchResponse
 from app.normalizer.brand import BrandMatch
 from app.normalizer.product import ProductNormalizer
@@ -22,17 +23,28 @@ class _CollectedResult:
 
 class SearchService:
     _BATCH_CONCURRENCY = 4
-    _COLLECTOR_TIMEOUT_SECONDS = 3.0
 
     def __init__(
         self,
         collectors: list[ProductCollector],
         normalizer: ProductNormalizer,
         cache: AsyncTTLCache[_CollectedResult],
+        *,
+        index_store: ProductIndexStore | None = None,
+        source_time_budget_seconds: float = 3.0,
+        source_time_budgets: dict[str, float] | None = None,
+        source_priorities: dict[str, int] | None = None,
+        stale_revalidate_enabled: bool = False,
     ):
         self._collectors = collectors
         self._normalizer = normalizer
         self._cache = cache
+        self._index_store = index_store
+        self._source_time_budget_seconds = source_time_budget_seconds
+        self._source_time_budgets = source_time_budgets or {}
+        self._source_priorities = source_priorities or {}
+        self._stale_revalidate_enabled = stale_revalidate_enabled
+        self._refresh_tasks: dict[str, asyncio.Task[None]] = {}
 
     async def search(self, query: str, criteria: SearchCriteria) -> SearchResponse:
         cleaned_query = query.strip()
@@ -95,6 +107,20 @@ class SearchService:
         collect_limit = self._collect_limit(effective_criteria)
         collect_queries = self._collect_queries(cleaned_query, effective_criteria, brand_match)
         cache_key = f"{'|'.join(query.casefold() for query in collect_queries)}:{collect_limit}"
+
+        indexed_response = await self._search_index(
+            cleaned_query,
+            effective_criteria,
+            brand_match,
+            collect_queries,
+            collect_limit,
+            cache_key,
+            require_relevant=require_relevant,
+            allow_browser_fallback=allow_browser_fallback,
+        )
+        if indexed_response is not None:
+            return indexed_response
+
         collected = await self._cache.get(cache_key)
         if collected is None:
             if self._can_use_verified_shortcut(cleaned_query, require_relevant):
@@ -107,6 +133,7 @@ class SearchService:
                 )
                 if verified_top_score > 0:
                     await self._cache.set(cache_key, verified_collected)
+                    await self._index_records(verified_collected.records, collect_queries)
                     return SearchResponse(
                         query=cleaned_query,
                         count=len(verified_results),
@@ -120,6 +147,7 @@ class SearchService:
                 allow_browser_fallback=allow_browser_fallback,
             )
             await self._cache.set(cache_key, collected)
+            await self._index_records(collected.records, collect_queries)
 
         results, top_score = self._build_results(
             collected.records,
@@ -136,6 +164,7 @@ class SearchService:
                 brand_match,
             )
             if browser_top_score > 0:
+                await self._index_records(browser_collected.records, collect_queries)
                 return SearchResponse(
                     query=cleaned_query,
                     count=len(browser_results),
@@ -149,6 +178,104 @@ class SearchService:
             count=len(results),
             results=results,
             source_errors=collected.errors,
+        )
+
+    async def _search_index(
+        self,
+        cleaned_query: str,
+        criteria: SearchCriteria,
+        brand_match: BrandMatch | None,
+        collect_queries: list[str],
+        collect_limit: int,
+        cache_key: str,
+        *,
+        require_relevant: bool,
+        allow_browser_fallback: bool,
+    ) -> SearchResponse | None:
+        if self._index_store is None:
+            return None
+
+        indexed = await self._index_store.search(collect_queries, collect_limit)
+        if not indexed.records:
+            return None
+
+        results, top_score = self._build_results(
+            indexed.records,
+            cleaned_query,
+            criteria,
+            brand_match,
+        )
+        if not results or (require_relevant and top_score <= 0):
+            return None
+
+        if indexed.is_stale and self._stale_revalidate_enabled:
+            self._schedule_revalidate(
+                cache_key,
+                collect_queries,
+                collect_limit,
+                allow_browser_fallback=allow_browser_fallback,
+            )
+
+        return SearchResponse(
+            query=cleaned_query,
+            count=len(results),
+            results=results,
+            source_errors=[],
+        )
+
+    def _schedule_revalidate(
+        self,
+        cache_key: str,
+        collect_queries: list[str],
+        collect_limit: int,
+        *,
+        allow_browser_fallback: bool,
+    ) -> None:
+        existing = self._refresh_tasks.get(cache_key)
+        if existing is not None and not existing.done():
+            return
+
+        task = asyncio.create_task(
+            self._refresh_index(
+                cache_key,
+                collect_queries,
+                collect_limit,
+                allow_browser_fallback=allow_browser_fallback,
+            )
+        )
+        self._refresh_tasks[cache_key] = task
+        task.add_done_callback(lambda _task: self._refresh_tasks.pop(cache_key, None))
+
+    async def _refresh_index(
+        self,
+        cache_key: str,
+        collect_queries: list[str],
+        collect_limit: int,
+        *,
+        allow_browser_fallback: bool,
+    ) -> None:
+        try:
+            collected = await self._collect(
+                collect_queries,
+                collect_limit,
+                allow_browser_fallback=allow_browser_fallback,
+            )
+            await self._cache.set(cache_key, collected)
+            await self._index_records(collected.records, collect_queries)
+        except Exception:
+            return
+
+    async def _index_records(
+        self,
+        records: list[ProductSourceRecord],
+        collect_queries: list[str],
+    ) -> None:
+        if self._index_store is None or not records:
+            return
+        await self._index_store.upsert(
+            records,
+            queries=collect_queries,
+            source_priorities=self._source_priorities,
         )
 
     def _build_results(
@@ -222,7 +349,7 @@ class SearchService:
             return _CollectedResult(records=records[: max(limit, 1) * 2], errors=[])
         if has_successful_source:
             return _CollectedResult(records=[], errors=[])
-        return _CollectedResult(records=[], errors=errors)
+        return _CollectedResult(records=[], errors=self._dedupe_errors(errors))
 
     async def _collect_from_source(
         self,
@@ -233,13 +360,16 @@ class SearchService:
         try:
             source_records = await asyncio.wait_for(
                 collector.search(query, limit),
-                timeout=self._COLLECTOR_TIMEOUT_SECONDS,
+                timeout=self._collector_timeout(collector),
             )
         except TimeoutError:
             return [], f"{collector.name}: request timed out", False
         except SourceUnavailableError as exc:
             return [], f"{collector.name}: {exc}", False
         return source_records, None, True
+
+    def _collector_timeout(self, collector: ProductCollector) -> float:
+        return self._source_time_budgets.get(collector.name, self._source_time_budget_seconds)
 
     async def _collect_verified_cache(self, queries: list[str], limit: int) -> _CollectedResult:
         records: list[ProductSourceRecord] = []
@@ -264,11 +394,13 @@ class SearchService:
         ]
         for query in queries:
             for collector in browser_collectors:
-                try:
-                    source_records = await collector.search(query, limit)
-                except SourceUnavailableError as exc:
-                    errors.append(f"{collector.name}: {exc}")
-                    continue
+                source_records, error, _source_succeeded = await self._collect_from_source(
+                    collector,
+                    query,
+                    limit,
+                )
+                if error:
+                    errors.append(error)
                 if source_records:
                     records = self._dedupe_records([*records, *source_records])
             if len(records) >= limit:
@@ -542,6 +674,12 @@ class SearchService:
         return max(criteria.limit, 48)
 
     async def close(self) -> None:
+        refresh_tasks = list(self._refresh_tasks.values())
+        for task in refresh_tasks:
+            task.cancel()
+        if refresh_tasks:
+            await asyncio.gather(*refresh_tasks, return_exceptions=True)
+        self._refresh_tasks.clear()
         for collector in self._collectors:
             close = getattr(collector, "close", None)
             if close is None:
