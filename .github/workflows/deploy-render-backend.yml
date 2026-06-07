@@ -24,4 +24,8 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
         run: |
           test -n "$RENDER_DEPLOY_HOOK_URL"
-          curl -fsS -X POST "${RENDER_DEPLOY_HOOK_URL}?ref=${GITHUB_SHA}"
+          separator="?"
+          case "$RENDER_DEPLOY_HOOK_URL" in
+            *\?*) separator="&" ;;
+          esac
+          curl -fsS -X POST "${RENDER_DEPLOY_HOOK_URL}${separator}ref=${GITHUB_SHA}"
