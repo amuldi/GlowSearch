@@ -68,7 +68,10 @@ def get_search_service() -> SearchService:
         preserve_official_order=settings.oliveyoung_official_order_enabled,
         source_time_budget_seconds=settings.source_time_budget_seconds,
         source_time_budgets={
-            "oliveyoung:public-api": settings.oliveyoung_public_api_timeout_seconds,
+            "oliveyoung:public-api": min(
+                settings.oliveyoung_public_api_timeout_seconds,
+                settings.source_time_budget_seconds,
+            ),
             "oliveyoung:apify": settings.managed_scraping_time_budget_seconds,
             "oliveyoung:browser": settings.browser_timeout_seconds,
         },
