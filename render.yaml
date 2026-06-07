@@ -11,6 +11,8 @@ services:
         value: 180
       - key: GLOWSEARCH_SOURCE_TIME_BUDGET_SECONDS
         value: 2.5
+      - key: GLOWSEARCH_LIVE_COLLECT_DEADLINE_SECONDS
+        value: 3.2
       - key: GLOWSEARCH_MANAGED_SCRAPING_TIME_BUDGET_SECONDS
         value: 4.0
       - key: GLOWSEARCH_RESULT_SOURCE_PREFIXES

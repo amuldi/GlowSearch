@@ -56,6 +56,21 @@ class SlowCollector:
         ]
 
 
+class VerySlowCollector:
+    name = "very-slow"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        await asyncio.sleep(1)
+        return [
+            ProductSourceRecord(
+                source_brand_name="BRTC",
+                product_name_ko="매우 느린 제품",
+                regular_price=24000,
+                source="external",
+            )
+        ]
+
+
 class IncompleteCollector:
     name = "incomplete"
 
@@ -670,6 +685,30 @@ async def test_search_service_uses_source_priority_for_tied_matches(tmp_path) ->
     response = await service.search("제품", SearchCriteria(limit=24))
 
     assert [result.source for result in response.results] == ["oliveyoung", "official"]
+
+
+@pytest.mark.asyncio
+async def test_search_service_returns_fast_results_before_live_deadline(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    service = SearchService(
+        collectors=[SecondFakeCollector(), VerySlowCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        source_time_budget_seconds=2,
+        live_collect_deadline_seconds=0.02,
+    )
+
+    started_at = time.perf_counter()
+    response = await service.search("다른", SearchCriteria(limit=24))
+    elapsed = time.perf_counter() - started_at
+
+    assert elapsed < 0.5
+    assert response.count == 1
+    assert response.results[0].source == "external"
 
 
 @pytest.mark.asyncio

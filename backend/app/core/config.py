@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = 180
     max_results: int = 480
     source_time_budget_seconds: float = 2.5
+    live_collect_deadline_seconds: float = 3.2
     managed_scraping_time_budget_seconds: float = 4.0
     result_source_prefixes: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [

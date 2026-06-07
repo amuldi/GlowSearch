@@ -47,6 +47,7 @@ class SearchService:
         prefer_live_official_results: bool = False,
         preserve_official_order: bool = True,
         source_time_budget_seconds: float = 3.0,
+        live_collect_deadline_seconds: float = 3.2,
         source_time_budgets: dict[str, float] | None = None,
         allowed_result_source_prefixes: tuple[str, ...] | None = None,
         source_policy: SourcePolicy | None = None,
@@ -65,6 +66,7 @@ class SearchService:
         self._prefer_live_official_results = prefer_live_official_results
         self._preserve_official_order = preserve_official_order
         self._source_time_budget_seconds = source_time_budget_seconds
+        self._live_collect_deadline_seconds = live_collect_deadline_seconds
         self._source_time_budgets = source_time_budgets or {}
         self._source_policy = source_policy or SourcePolicy(
             allowed_prefixes=allowed_result_source_prefixes
@@ -389,12 +391,21 @@ class SearchService:
             for job_index, (collector, query) in enumerate(jobs)
         }
         pending = set(tasks)
+        deadline_at = perf_counter() + max(self._live_collect_deadline_seconds, 0.1)
         try:
             while pending:
+                remaining_seconds = deadline_at - perf_counter()
+                if remaining_seconds <= 0:
+                    self._record_pending_source_timeouts(pending, tasks)
+                    break
                 done, pending = await asyncio.wait(
                     pending,
+                    timeout=remaining_seconds,
                     return_when=asyncio.FIRST_COMPLETED,
                 )
+                if not done:
+                    self._record_pending_source_timeouts(pending, tasks)
+                    break
                 for task in sorted(
                     done,
                     key=lambda task: (
@@ -469,7 +480,13 @@ class SearchService:
             for task in pending:
                 task.cancel()
             if pending:
-                await asyncio.gather(*pending, return_exceptions=True)
+                try:
+                    await asyncio.wait_for(
+                        asyncio.gather(*pending, return_exceptions=True),
+                        timeout=0.5,
+                    )
+                except TimeoutError:
+                    pass
 
         if official_primary_records:
             records = self._dedupe_records(
@@ -531,6 +548,26 @@ class SearchService:
 
     def _collector_timeout(self, collector: ProductCollector) -> float:
         return self._source_time_budgets.get(collector.name, self._source_time_budget_seconds)
+
+    def _record_pending_source_timeouts(
+        self,
+        pending: set[asyncio.Task[tuple[list[ProductSourceRecord], str | None, bool]]],
+        tasks: dict[
+            asyncio.Task[tuple[list[ProductSourceRecord], str | None, bool]],
+            tuple[ProductCollector, str, int],
+        ],
+    ) -> None:
+        seen_collectors: set[str] = set()
+        for task in pending:
+            collector, _query, _index = tasks[task]
+            if collector.name in seen_collectors:
+                continue
+            seen_collectors.add(collector.name)
+            self._metrics.record_source_failure(
+                collector.name,
+                f"{collector.name}: live collection deadline exceeded",
+                timeout=True,
+            )
 
     @staticmethod
     def _is_oliveyoung_collector(collector: ProductCollector) -> bool:
