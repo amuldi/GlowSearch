@@ -405,8 +405,11 @@ class SearchService:
                 await asyncio.gather(*pending, return_exceptions=True)
 
         if official_primary_records:
+            records = self._dedupe_records(
+                [*official_primary_records, *official_fallback_records, *supplemental_records]
+            )
             return _CollectedResult(
-                records=official_primary_records[: max(limit, 1) * 2],
+                records=records[: max(limit, 1) * 2],
                 errors=[],
                 has_official_records=True,
             )
@@ -485,6 +488,8 @@ class SearchService:
             or not cls._is_single_related_query(query)
         ):
             return False
+        if any(task_query != primary_query for _collector, task_query, _index in tasks.values()):
+            return True
         return any(
             tasks[task][0].name == "oliveyoung" and tasks[task][1] == primary_query
             for task in pending
@@ -716,6 +721,7 @@ class SearchService:
         compact_product_query = cls._compact_product_query(product_query)
         if compact_product_query and compact_product_query != product_query:
             candidates.append(compact_product_query)
+        candidates.extend(cls._related_query_expansions(product_query or query))
         if brand_search_term:
             candidates.append(brand_search_term)
 
@@ -729,6 +735,35 @@ class SearchService:
             seen.add(key)
             queries.append(text)
         return queries or [query]
+
+    @classmethod
+    def _related_query_expansions(cls, value: str) -> tuple[str, ...]:
+        expansions = {
+            "젤": (
+                "클렌징젤",
+                "필링젤",
+                "수딩젤",
+                "젤크림",
+                "젤네일",
+                "마사지젤",
+                "헤어젤",
+                "알로에젤",
+                "젤쿠션",
+                "젤클렌저",
+            ),
+            "히알루론산": (
+                "히알루론산 세럼",
+                "히알루론산 크림",
+                "히알루론산 토너",
+                "히알루론산 마스크",
+                "히알루론산 선세럼",
+            ),
+            "시카": ("시카 크림", "시카 세럼", "시카 패드", "시카 마스크"),
+            "레티놀": ("레티놀 세럼", "레티놀 크림", "레티놀 아이크림"),
+            "콜라겐": ("콜라겐 크림", "콜라겐 마스크", "콜라겐 패드"),
+            "알로에": ("알로에젤", "알로에 수딩젤", "알로에 마스크"),
+        }
+        return expansions.get(cls._key(value), ())
 
     @staticmethod
     def _effective_criteria(

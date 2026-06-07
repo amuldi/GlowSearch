@@ -461,6 +461,37 @@ class SparseOliveYoungApiGelCollector:
         ][:limit]
 
 
+class ExpandedOliveYoungApiGelCollector:
+    name = "oliveyoung:public-api"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        records_by_keyword = {
+            "젤": ProductSourceRecord(
+                source_brand_name="식물나라",
+                product_name_ko="식물나라 가벼운 수분 선 젤",
+                regular_price=18000,
+                source="oliveyoung",
+                source_product_id="api-gel-1",
+            ),
+            "클렌징젤": ProductSourceRecord(
+                source_brand_name="코스알엑스",
+                product_name_ko="코스알엑스 약산성 굿모닝 젤 클렌저",
+                regular_price=16000,
+                source="oliveyoung",
+                source_product_id="api-gel-2",
+            ),
+            "필링젤": ProductSourceRecord(
+                source_brand_name="비플레인",
+                product_name_ko="비플레인 녹두 밀크 필링 젤",
+                regular_price=18000,
+                source="oliveyoung",
+                source_product_id="api-gel-3",
+            ),
+        }
+        record = records_by_keyword.get(keyword)
+        return [record] if record and limit > 0 else []
+
+
 @pytest.mark.asyncio
 async def test_search_service_applies_price_filter(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -683,6 +714,33 @@ async def test_search_service_waits_for_primary_html_on_sparse_broad_keyword(
     assert [result.product_name_ko for result in response.results] == [
         "아로마티카 수딩 알로에 베라 젤 500ml",
         "코스알엑스 약산성 굿모닝 젤 클렌저 150ml",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_search_service_expands_single_related_keyword_queries(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    service = SearchService(
+        collectors=[ExpandedOliveYoungApiGelCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        preserve_official_order=True,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("젤", SearchCriteria(limit=3))
+
+    assert response.count == 3
+    assert [result.product_name_ko for result in response.results] == [
+        "식물나라 가벼운 수분 선 젤",
+        "코스알엑스 약산성 굿모닝 젤 클렌저",
+        "비플레인 녹두 밀크 필링 젤",
     ]
 
 
