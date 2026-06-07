@@ -465,6 +465,9 @@ class ExpandedOliveYoungApiGelCollector:
     name = "oliveyoung:public-api"
 
     async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        if keyword == "젤클렌저":
+            await asyncio.sleep(1)
+            return []
         records_by_keyword = {
             "젤": ProductSourceRecord(
                 source_brand_name="식물나라",
@@ -734,8 +737,11 @@ async def test_search_service_expands_single_related_keyword_queries(
         allowed_result_source_prefixes=("oliveyoung",),
     )
 
+    started_at = time.perf_counter()
     response = await service.search("젤", SearchCriteria(limit=3))
+    elapsed = time.perf_counter() - started_at
 
+    assert elapsed < 0.4
     assert response.count == 3
     assert [result.product_name_ko for result in response.results] == [
         "식물나라 가벼운 수분 선 젤",

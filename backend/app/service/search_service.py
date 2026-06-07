@@ -394,6 +394,19 @@ class SearchService:
                             official_fallback_records = self._dedupe_records(
                                 [*official_fallback_records, *source_records]
                             )
+                            broad_records = self._dedupe_records(
+                                [*official_primary_records, *official_fallback_records]
+                            )
+                            if (
+                                self._is_single_related_query(primary_query)
+                                and len(broad_records)
+                                >= self._broad_related_return_threshold(limit)
+                            ):
+                                return _CollectedResult(
+                                    records=broad_records[: max(limit, 1) * 2],
+                                    errors=[],
+                                    has_official_records=True,
+                                )
                         else:
                             supplemental_records = self._dedupe_records(
                                 [*supplemental_records, *source_records]
@@ -498,6 +511,10 @@ class SearchService:
     @classmethod
     def _is_single_related_query(cls, query: str) -> bool:
         return len(cls._tokens(query)) == 1 and bool(cls._key(query))
+
+    @staticmethod
+    def _broad_related_return_threshold(limit: int) -> int:
+        return max(1, min(limit, 36))
 
     @classmethod
     def _collector_result_priority(
