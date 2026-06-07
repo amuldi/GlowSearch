@@ -257,7 +257,7 @@ async def test_search_service_trusts_cached_official_related_keyword_results(
     )
     cache = AsyncTTLCache[_CollectedResult](ttl_seconds=60)
     await cache.set(
-        "히알루론산|히알루론산 세럼|히알루론산 크림|히알루론산 토너|히알루론산 마스크|히알루론산 선세럼:8",
+        "히알루론산:8",
         _CollectedResult(
             records=[
                 ProductSourceRecord(
