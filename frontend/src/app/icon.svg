@@ -1,10 +1,20 @@
 <svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="96" height="96" rx="24" fill="#FFF0F3"/>
-  <circle cx="48" cy="42" r="28" fill="#FFFFFF"/>
-  <path fill-rule="evenodd" clip-rule="evenodd" d="M48 18C34.745 18 24 28.745 24 42C24 55.255 34.745 66 48 66C61.255 66 72 55.255 72 42C72 28.745 61.255 18 48 18ZM48 31C41.925 31 37 35.925 37 42C37 48.075 41.925 53 48 53C54.075 53 59 48.075 59 42C59 35.925 54.075 31 48 31Z" fill="#9F3F55"/>
-  <rect x="62" y="56" width="8" height="25" rx="4" transform="rotate(-45 62 56)" fill="#9F3F55"/>
-  <path d="M29 57L39 48L49 58L39 77L29 57Z" fill="#D76580"/>
-  <path d="M38 49L44 43L51 50L49 58L39 59L38 49Z" fill="#F7A5B5"/>
-  <path d="M28 17L31 27L41 31L31 35L28 45L25 35L15 31L25 27L28 17Z" fill="#D76580"/>
-  <path d="M72 16L74 23L81 26L74 29L72 36L70 29L63 26L70 23L72 16Z" fill="#F0A7B5"/>
+  <defs>
+    <linearGradient id="bg" x1="8" y1="4" x2="91" y2="92" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8FA"/>
+      <stop offset="0.55" stop-color="#FFF0F3"/>
+      <stop offset="1" stop-color="#F8D8E2"/>
+    </linearGradient>
+    <linearGradient id="star" x1="22" y1="13" x2="73" y2="78" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D76580"/>
+      <stop offset="0.52" stop-color="#9F3F55"/>
+      <stop offset="1" stop-color="#7F2F44"/>
+    </linearGradient>
+  </defs>
+  <rect width="96" height="96" rx="24" fill="url(#bg)"/>
+  <path d="M48 11L56 35L81 36L61 51L68 76L48 61L28 76L35 51L15 36L40 35L48 11Z" fill="url(#star)"/>
+  <path d="M48 24L53 39L69 40L56 50L61 65L48 56L35 65L40 50L27 40L43 39L48 24Z" fill="#F7A5B5"/>
+  <path d="M23 17L26 25L34 28L26 31L23 39L20 31L12 28L20 25L23 17Z" fill="#D76580"/>
+  <path d="M75 17L77 24L84 26L77 28L75 35L73 28L66 26L73 24L75 17Z" fill="#F0A7B5"/>
+  <path d="M73 62L75 68L81 70L75 72L73 78L71 72L65 70L71 68L73 62Z" fill="#D76580"/>
 </svg>
