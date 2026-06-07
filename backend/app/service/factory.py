@@ -8,7 +8,11 @@ from app.data_collector.browser_oliveyoung import BrowserOliveYoungCollector
 from app.data_collector.local_catalog import LocalVerifiedCatalogCollector
 from app.data_collector.oliveyoung import OliveYoungCollector
 from app.data_collector.oliveyoung_api import OliveYoungPublicApiCollector
-from app.indexing.agents import ProductIngestionAgent, SourceDiscoveryAgent
+from app.indexing.agents import (
+    OliveYoungDetailEnrichmentAgent,
+    ProductIngestionAgent,
+    SourceDiscoveryAgent,
+)
 from app.indexing.store import SQLiteProductIndexStore
 from app.normalizer.brand import BrandResolver
 from app.normalizer.product import ProductNormalizer
@@ -28,8 +32,21 @@ def get_search_service() -> SearchService:
         if settings.product_index_enabled
         else None
     )
-    ingestion_agent = ProductIngestionAgent(index_store) if index_store else None
-    discovery_agent = SourceDiscoveryAgent(settings.product_index_seed_queries)
+    detail_enricher = (
+        OliveYoungDetailEnrichmentAgent(settings)
+        if settings.product_index_detail_enrichment_enabled
+        else None
+    )
+    ingestion_agent = (
+        ProductIngestionAgent(index_store, detail_enricher=detail_enricher)
+        if index_store
+        else None
+    )
+    discovery_agent = SourceDiscoveryAgent(
+        settings.product_index_seed_queries,
+        category_queries=settings.product_index_category_queries,
+        brand_queries=settings.product_index_brand_queries,
+    )
     return SearchService(
         collectors=collectors,
         normalizer=normalizer,

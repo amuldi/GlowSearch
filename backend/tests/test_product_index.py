@@ -2,7 +2,7 @@ import pytest
 
 from app.cache.ttl import AsyncTTLCache
 from app.data_collector.base import SearchCriteria
-from app.indexing.agents import ProductIngestionAgent
+from app.indexing.agents import ProductIngestionAgent, SourceDiscoveryAgent
 from app.indexing.store import SQLiteProductIndexStore
 from app.models.product import ProductSourceRecord
 from app.normalizer.brand import BrandResolver
@@ -27,6 +27,35 @@ class NetworkCollector:
                 source_product_id="live-1",
             )
         ]
+
+
+class FakeDetailEnricher:
+    async def enrich(self, records: list[ProductSourceRecord]) -> list[ProductSourceRecord]:
+        return [
+            record.model_copy(
+                update={
+                    "source_brand_name": record.source_brand_name or "뮤드",
+                    "product_name_ko": record.product_name_ko or "뮤드 상세 상품명",
+                    "regular_price": 12600,
+                    "original_price": 17000,
+                    "sale_price": 12600,
+                    "discount_rate": 25,
+                }
+            )
+            for record in records
+        ]
+
+
+def test_source_discovery_agent_combines_brand_category_and_product_seeds() -> None:
+    agent = SourceDiscoveryAgent(
+        ["뮤드", "  "],
+        category_queries=["틴트", "뮤드"],
+        brand_queries=["라운드랩", "틴트"],
+    )
+
+    assert agent.seed_queries() == ["뮤드", "틴트", "라운드랩"]
+    assert agent.category_queries() == ["틴트", "뮤드"]
+    assert agent.brand_queries() == ["라운드랩", "틴트"]
 
 
 @pytest.mark.asyncio
@@ -127,3 +156,28 @@ async def test_search_service_ingests_live_results_into_index(tmp_path) -> None:
 
     assert response.count == 1
     assert [record.source_product_id for record in indexed] == ["live-1"]
+
+
+@pytest.mark.asyncio
+async def test_product_ingestion_enriches_details_before_indexing(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    agent = ProductIngestionAgent(store, detail_enricher=FakeDetailEnricher())
+
+    await agent.ingest_search_results(
+        ["뮤드"],
+        [
+            ProductSourceRecord(
+                source="oliveyoung",
+                source_product_id="detail-1",
+                source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do",
+            )
+        ],
+    )
+    indexed = await store.search("뮤드", 10)
+    await store.close()
+
+    assert len(indexed) == 1
+    assert indexed[0].source_brand_name == "뮤드"
+    assert indexed[0].product_name_ko == "뮤드 상세 상품명"
+    assert indexed[0].original_price == 17000
+    assert indexed[0].sale_price == 12600

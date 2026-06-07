@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     product_index_warmup_on_startup: bool = True
     product_index_warmup_limit: int = 48
     product_index_warmup_concurrency: int = 2
+    product_index_detail_enrichment_enabled: bool = True
+    product_index_detail_enrichment_max_records: int = 24
     product_index_seed_queries: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "선크림",
@@ -67,6 +69,44 @@ class Settings(BaseSettings):
             "뮤드",
             "메디힐",
             "라운드랩",
+        ]
+    )
+    product_index_category_queries: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: [
+            "선크림",
+            "톤업선크림",
+            "쿠션",
+            "파운데이션",
+            "컨실러",
+            "파우더",
+            "틴트",
+            "립밤",
+            "립스틱",
+            "아이섀도우",
+            "아이라이너",
+            "마스카라",
+            "클렌징오일",
+            "클렌징폼",
+            "토너",
+            "세럼",
+            "크림",
+            "토너패드",
+        ]
+    )
+    product_index_brand_queries: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: [
+            "뮤드",
+            "메디힐",
+            "라운드랩",
+            "컬러그램",
+            "롬앤",
+            "클리오",
+            "페리페라",
+            "에뛰드",
+            "웨이크메이크",
+            "어뮤즈",
+            "토리든",
+            "아누아",
         ]
     )
 
@@ -83,7 +123,12 @@ class Settings(BaseSettings):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
-    @field_validator("product_index_seed_queries", mode="before")
+    @field_validator(
+        "product_index_seed_queries",
+        "product_index_category_queries",
+        "product_index_brand_queries",
+        mode="before",
+    )
     @classmethod
     def parse_product_index_seed_queries(cls, value: str | list[str]) -> list[str]:
         if isinstance(value, str):

@@ -9,7 +9,7 @@ Olive Young 상품을 빠르게 검색하고 브랜드명, 영문명, 원가, �
 - 검색 결과는 Olive Young 상품만 반환합니다.
 - 원본에서 확인하지 못한 값은 만들지 않고 `null`로 둡니다.
 - 검색은 SQLite 제품 인덱스에서 먼저 빠르게 반환하고, 부족하면 Olive Young 공식 검색을 실시간 보강합니다.
-- 실시간 수집 결과는 백그라운드로 인덱스에 저장되어 다음 검색부터 빠르게 재사용됩니다.
+- 실시간 수집 결과는 백그라운드에서 상세 페이지로 보강한 뒤 인덱스에 저장되어 다음 검색부터 빠르게 재사용됩니다.
 - 빠른 소스는 병렬로 실행하고, 브라우저 수집은 모든 빠른 소스가 실패하거나 비었을 때만 사용합니다.
 - 같은 Olive Young `goodsNo`는 하나의 상품으로 합칩니다.
 - 브랜드 영문명은 `backend/data/brand_registry.json`의 공식 alias를 기준으로 정규화합니다.
@@ -31,7 +31,8 @@ Next.js 검색 화면
        - LocalVerifiedCatalogCollector: 검증된 로컬 보조 데이터
        - ApifyOliveYoungCollector: APIFY_TOKEN이 있을 때만 사용
   -> 결과가 없으면 BrowserOliveYoungCollector fallback
-  -> ProductIngestionAgent가 live 결과를 SQLite 인덱스에 저장
+  -> ProductIngestionAgent가 live 결과를 OliveYoungDetailEnrichmentAgent로 상세 보강
+  -> SQLite 인덱스에 상품과 쿼리별 공식 검색 순서 저장
   -> ProductNormalizer
   -> 중복 제거, 필터, 랭킹
   -> ProductSearchResult 반환
@@ -164,7 +165,11 @@ GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_ENABLED=true
 GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP=true
 GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT=48
 GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY=2
+GLOWSEARCH_PRODUCT_INDEX_DETAIL_ENRICHMENT_ENABLED=true
+GLOWSEARCH_PRODUCT_INDEX_DETAIL_ENRICHMENT_MAX_RECORDS=24
 GLOWSEARCH_PRODUCT_INDEX_SEED_QUERIES=선크림,틴트,쿠션,마스카라,토너패드,클렌징오일,뮤드,메디힐,라운드랩
+GLOWSEARCH_PRODUCT_INDEX_CATEGORY_QUERIES=선크림,톤업선크림,쿠션,파운데이션,컨실러,파우더,틴트,립밤,립스틱,아이섀도우,아이라이너,마스카라,클렌징오일,클렌징폼,토너,세럼,크림,토너패드
+GLOWSEARCH_PRODUCT_INDEX_BRAND_QUERIES=뮤드,메디힐,라운드랩,컬러그램,롬앤,클리오,페리페라,에뛰드,웨이크메이크,어뮤즈,토리든,아누아
 ```
 
 Frontend:
@@ -179,6 +184,8 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - 상품명, 가격, 이미지, 링크는 원본에 없으면 임의로 채우지 않습니다.
 - 영문 브랜드명이 없으면 `brand_registry.json`에 alias를 추가해 보강합니다.
 - SQLite 제품 인덱스는 검색 속도와 커버리지를 위한 저장소입니다. 가격/할인 정보는 live refresh 결과로 계속 갱신합니다.
+- 시작 시 `GLOWSEARCH_PRODUCT_INDEX_CATEGORY_QUERIES`와 `GLOWSEARCH_PRODUCT_INDEX_BRAND_QUERIES`를 Olive Young 공식 검색으로 백그라운드 수집합니다.
+- 인덱스 저장 전 `OliveYoungDetailEnrichmentAgent`가 상품 상세 페이지를 가져와 브랜드명, 상품명, 가격, 이미지 정보를 보강합니다.
 - 쿼리별 인덱스 순서는 Olive Young 공식 검색 수집 순서를 보존합니다. 인덱스가 아직 비어 있거나 결과가 부족하면 공식 검색을 실시간으로 보강합니다.
 - 운영에서 인덱스를 오래 유지하려면 Render persistent disk를 `GLOWSEARCH_PRODUCT_INDEX_PATH`에 연결하거나, 다음 단계에서 Postgres + full-text search로 이전합니다.
 
