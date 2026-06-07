@@ -419,6 +419,48 @@ class SlowOfficialOrderCollector:
         return []
 
 
+class SlowFullOfficialGelCollector:
+    name = "oliveyoung"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        await asyncio.sleep(0.02)
+        if keyword != "젤":
+            return []
+        return [
+            ProductSourceRecord(
+                source_brand_name="아로마티카",
+                product_name_ko="아로마티카 수딩 알로에 베라 젤 500ml",
+                regular_price=18000,
+                source="oliveyoung",
+                source_product_id="official-gel-1",
+            ),
+            ProductSourceRecord(
+                source_brand_name="코스알엑스",
+                product_name_ko="코스알엑스 약산성 굿모닝 젤 클렌저 150ml",
+                regular_price=16000,
+                source="oliveyoung",
+                source_product_id="official-gel-2",
+            ),
+        ][:limit]
+
+
+class SparseOliveYoungApiGelCollector:
+    name = "oliveyoung:public-api"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        if keyword != "젤":
+            return []
+        return [
+            ProductSourceRecord(
+                source_brand_name="식물나라",
+                product_name_ko="식물나라 가벼운 수분 선 젤",
+                regular_price=18000,
+                source="oliveyoung",
+                source_product_id="api-gel-1",
+            )
+        ][:limit]
+
+
 @pytest.mark.asyncio
 async def test_search_service_applies_price_filter(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -616,6 +658,32 @@ async def test_search_service_returns_public_api_before_slow_official_html(
     assert response.count == 1
     assert response.results[0].product_name_ko == "메디힐 비타 패드"
     assert slow_official.cancelled is True
+
+
+@pytest.mark.asyncio
+async def test_search_service_waits_for_primary_html_on_sparse_broad_keyword(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    service = SearchService(
+        collectors=[SlowFullOfficialGelCollector(), SparseOliveYoungApiGelCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        preserve_official_order=True,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("젤", SearchCriteria(limit=2))
+
+    assert response.count == 2
+    assert [result.product_name_ko for result in response.results] == [
+        "아로마티카 수딩 알로에 베라 젤 500ml",
+        "코스알엑스 약산성 굿모닝 젤 클렌저 150ml",
+    ]
 
 
 @pytest.mark.asyncio

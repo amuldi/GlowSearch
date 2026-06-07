@@ -367,9 +367,24 @@ class SearchService:
                             self._is_oliveyoung_collector(collector)
                             and query == primary_query
                         ):
-                            official_primary_records = self._dedupe_records(
-                                [*official_primary_records, *source_records]
+                            ordered_records = (
+                                [*source_records, *official_primary_records]
+                                if collector.name == "oliveyoung"
+                                else [*official_primary_records, *source_records]
                             )
+                            official_primary_records = self._dedupe_records(
+                                ordered_records
+                            )
+                            if self._should_wait_for_primary_html_result(
+                                collector,
+                                query,
+                                primary_query,
+                                len(official_primary_records),
+                                limit,
+                                pending,
+                                tasks,
+                            ):
+                                continue
                             return _CollectedResult(
                                 records=official_primary_records[: max(limit, 1) * 2],
                                 errors=[],
@@ -388,6 +403,13 @@ class SearchService:
                 task.cancel()
             if pending:
                 await asyncio.gather(*pending, return_exceptions=True)
+
+        if official_primary_records:
+            return _CollectedResult(
+                records=official_primary_records[: max(limit, 1) * 2],
+                errors=[],
+                has_official_records=True,
+            )
 
         records = self._dedupe_records([*official_fallback_records, *supplemental_records])
         has_browser_records = False
@@ -440,6 +462,37 @@ class SearchService:
             record.source == "oliveyoung" or record.source.startswith("oliveyoung:")
             for record in records
         )
+
+    @classmethod
+    def _should_wait_for_primary_html_result(
+        cls,
+        collector: ProductCollector,
+        query: str,
+        primary_query: str,
+        record_count: int,
+        limit: int,
+        pending: set[asyncio.Task[tuple[list[ProductSourceRecord], str | None, bool]]],
+        tasks: dict[
+            asyncio.Task[tuple[list[ProductSourceRecord], str | None, bool]],
+            tuple[ProductCollector, str, int],
+        ],
+    ) -> bool:
+        if (
+            collector.name == "oliveyoung"
+            or not cls._is_oliveyoung_collector(collector)
+            or query != primary_query
+            or record_count >= limit
+            or not cls._is_single_related_query(query)
+        ):
+            return False
+        return any(
+            tasks[task][0].name == "oliveyoung" and tasks[task][1] == primary_query
+            for task in pending
+        )
+
+    @classmethod
+    def _is_single_related_query(cls, query: str) -> bool:
+        return len(cls._tokens(query)) == 1 and bool(cls._key(query))
 
     @classmethod
     def _collector_result_priority(
