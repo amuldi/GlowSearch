@@ -495,6 +495,37 @@ class ExpandedOliveYoungApiGelCollector:
         return [record] if record and limit > 0 else []
 
 
+class JungSaemMoolSubBrandCollector:
+    name = "oliveyoung:public-api"
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        self.calls.append(keyword)
+        records_by_keyword = {
+            "정샘물": ProductSourceRecord(
+                source_brand_name="정샘물",
+                product_name_ko="정샘물 스킨 세팅 베이스",
+                regular_price=33000,
+                source="oliveyoung",
+                source_product_id="jsm-base",
+            ),
+            "비긴스 바이 정샘물": ProductSourceRecord(
+                source_brand_name="비긴스",
+                product_name_ko="[기획] 비긴스 바이 정샘물 흔적 세럼",
+                regular_price=42000,
+                sale_price=25990,
+                original_price=42000,
+                discount_rate=38,
+                source="oliveyoung",
+                source_product_id="begins-serum",
+            ),
+        }
+        record = records_by_keyword.get(keyword)
+        return [record] if record and limit > 0 else []
+
+
 @pytest.mark.asyncio
 async def test_search_service_applies_price_filter(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -748,6 +779,45 @@ async def test_search_service_expands_single_related_keyword_queries(
         "코스알엑스 약산성 굿모닝 젤 클렌저",
         "비플레인 녹두 밀크 필링 젤",
     ]
+
+
+@pytest.mark.asyncio
+async def test_search_service_expands_jungsaemmool_subbrand_queries(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        (
+            '{"entries":['
+            '{"official_en":"JUNGSAEMMOOL","aliases":["정샘물"],"sources":[]},'
+            '{"official_en":"BEGINS BY JUNGSAEMMOOL",'
+            '"aliases":["비긴스 바이 정샘물","비긴스"],"sources":[]}'
+            "]}"
+        ),
+        encoding="utf-8",
+    )
+    collector = JungSaemMoolSubBrandCollector()
+    service = SearchService(
+        collectors=[collector],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        preserve_official_order=True,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("정샘물", SearchCriteria(limit=4))
+
+    assert "비긴스 바이 정샘물" in collector.calls
+    assert response.count == 2
+    assert [result.brand_ko for result in response.results] == [
+        "정샘물",
+        "비긴스 바이 정샘물",
+    ]
+    assert response.results[1].brand_en == "BEGINS BY JUNGSAEMMOOL"
+    assert response.results[1].product_name_ko == "[기획] 비긴스 바이 정샘물 흔적 세럼"
 
 
 @pytest.mark.asyncio

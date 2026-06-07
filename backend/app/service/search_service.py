@@ -780,6 +780,17 @@ class SearchService:
                 "수딩젤",
                 "젤크림",
             ),
+            "정샘물": (
+                "비긴스 바이 정샘물",
+                "정샘물 쿠션",
+                "정샘물 립",
+                "정샘물 브러쉬",
+            ),
+            "비긴스": (
+                "비긴스 바이 정샘물",
+                "비긴스 바이 정샘물 세럼",
+                "비긴스 바이 정샘물 선크림",
+            ),
         }
         return expansions.get(cls._key(value), ())
 
@@ -1167,16 +1178,22 @@ class SearchService:
         normalized_needle: str | None,
     ) -> bool:
         brand = product.brand_en.casefold() if product.brand_en else ""
+        brand_ko = product.brand_ko.casefold() if product.brand_ko else ""
         name = product.product_name_ko.casefold() if product.product_name_ko else ""
         brand_key = cls._key(product.brand_en)
+        brand_ko_key = cls._key(product.brand_ko)
         name_key = cls._key(product.product_name_ko)
         raw_key = cls._key(raw_needle)
         normalized_key = cls._key(normalized_needle)
         return bool(
             (normalized_needle and normalized_needle in brand)
             or (normalized_key and normalized_key in brand_key)
+            or (normalized_needle and normalized_needle in brand_ko)
+            or (normalized_key and normalized_key in brand_ko_key)
             or raw_needle in brand
             or (raw_key and raw_key in brand_key)
+            or raw_needle in brand_ko
+            or (raw_key and raw_key in brand_ko_key)
             or raw_needle in name
             or (raw_key and raw_key in name_key)
         )

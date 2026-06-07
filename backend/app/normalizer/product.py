@@ -1,3 +1,5 @@
+import re
+
 from app.models.product import ProductSearchResult, ProductSourceRecord
 from app.normalizer.brand import BrandMatch, BrandResolver
 from app.normalizer.text import clean_text, has_hangul, normalize_image_url
@@ -42,9 +44,31 @@ class ProductNormalizer:
 
     def _brand_ko(self, record: ProductSourceRecord) -> str | None:
         source_brand = clean_text(record.source_brand_name)
+        product_brand_match = self._brand_resolver.match_text(record.product_name_ko)
         if source_brand and has_hangul(source_brand):
+            if (
+                product_brand_match
+                and has_hangul(product_brand_match.matched_alias)
+                and self._is_short_brand_alias(
+                    source_brand,
+                    product_brand_match.matched_alias,
+                )
+            ):
+                return product_brand_match.matched_alias
             return source_brand
-        match = self._brand_resolver.match_text(record.product_name_ko)
-        if match and has_hangul(match.matched_alias):
-            return match.matched_alias
+        if product_brand_match and has_hangul(product_brand_match.matched_alias):
+            return product_brand_match.matched_alias
         return None
+
+    @classmethod
+    def _is_short_brand_alias(cls, source_brand: str, matched_alias: str) -> bool:
+        source_key = cls._brand_key(source_brand)
+        alias_key = cls._brand_key(matched_alias)
+        return bool(source_key and alias_key and source_key != alias_key and source_key in alias_key)
+
+    @staticmethod
+    def _brand_key(value: str | None) -> str:
+        text = clean_text(value)
+        if text is None:
+            return ""
+        return re.sub(r"[\s\-_./]+", "", text).casefold()

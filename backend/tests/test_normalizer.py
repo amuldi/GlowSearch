@@ -64,6 +64,11 @@ def test_project_registry_maps_oliveyoung_korean_brand_names() -> None:
     assert resolver.resolve("투쿨포스쿨") == "TOO COOL FOR SCHOOL"
     assert resolver.resolve("믹순") == "mixsoon"
     assert resolver.resolve("뮤드") == "mude"
+    assert resolver.resolve("비긴스") == "BEGINS BY JUNGSAEMMOOL"
+    assert (
+        resolver.resolve(None, "[기획] 비긴스 바이 정샘물 흔적 세럼")
+        == "BEGINS BY JUNGSAEMMOOL"
+    )
     assert resolver.match_text("투쿨포스쿨 스킨틴트").official_en == "TOO COOL FOR SCHOOL"
     etude_match = resolver.match_text("에뛰ㄷ")
     assert etude_match.official_en == "ETUDE"
@@ -104,6 +109,38 @@ def test_product_normalizer_preserves_nulls(tmp_path) -> None:
         "source_url": None,
         "source": "oliveyoung",
     }
+
+
+def test_product_normalizer_expands_short_korean_subbrand_alias(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        (
+            '{"entries":['
+            '{"official_en":"JUNGSAEMMOOL","aliases":["정샘물"],"sources":[]},'
+            '{"official_en":"BEGINS BY JUNGSAEMMOOL",'
+            '"aliases":["비긴스 바이 정샘물","비긴스"],"sources":[]}'
+            "]}"
+        ),
+        encoding="utf-8",
+    )
+    normalizer = ProductNormalizer(
+        BrandResolver(registry_path),
+        base_url="https://www.oliveyoung.co.kr",
+    )
+
+    result = normalizer.normalize(
+        ProductSourceRecord(
+            source_brand_name="비긴스",
+            product_name_ko="[기획] 비긴스 바이 정샘물 흔적 세럼",
+            regular_price=42000,
+            sale_price=25990,
+            original_price=42000,
+            source="oliveyoung",
+        )
+    )
+
+    assert result.brand_ko == "비긴스 바이 정샘물"
+    assert result.brand_en == "BEGINS BY JUNGSAEMMOOL"
 
 
 def test_brand_resolver_exposes_korean_warmup_aliases(tmp_path) -> None:

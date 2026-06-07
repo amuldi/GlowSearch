@@ -25,9 +25,14 @@ class OliveYoungPublicApiCollector:
 
         records: list[ProductSourceRecord] = []
         page = 1
-        page_size = min(max(limit, 1), 10)
+        page_size = min(
+            max(limit, 1),
+            max(self._settings.oliveyoung_search_page_size, 1),
+            48,
+        )
+        max_pages = max(1, self._settings.oliveyoung_search_max_pages)
         async with self._client_context() as client:
-            while len(records) < limit:
+            while len(records) < limit and page <= max_pages:
                 payload = await self._fetch_page(client, keyword, page=page, size=page_size)
                 data = payload.get("data", {}) if isinstance(payload, dict) else {}
                 products = data.get("products", []) if isinstance(data, dict) else []

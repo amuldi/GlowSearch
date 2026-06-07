@@ -78,3 +78,46 @@ async def test_oliveyoung_public_api_collector_maps_prices_and_source_url() -> N
     assert records[1].original_price == 18000
     assert records[1].sale_price is None
     assert records[1].discount_rate is None
+
+
+@pytest.mark.asyncio
+async def test_oliveyoung_public_api_collector_uses_large_page_for_broad_search() -> None:
+    calls: list[tuple[int, int]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/oliveyoung/products"
+        page = int(request.url.params["page"])
+        size = int(request.url.params["size"])
+        calls.append((page, size))
+        products = [
+            {
+                "goodsNumber": f"A{i:012d}",
+                "goodsName": f"정샘물 테스트 상품 {i}",
+                "imageUrl": f"https://image.oliveyoung.co.kr/item-{i}.png?l=ko",
+                "priceToPay": 10000 + i,
+                "originalPrice": 12000 + i,
+                "discountRate": 10,
+            }
+            for i in range(size)
+        ]
+        return httpx.Response(
+            200,
+            json={
+                "success": True,
+                "data": {
+                    "products": products,
+                    "nextPage": True,
+                },
+            },
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://mcp.aka.page",
+    ) as client:
+        collector = OliveYoungPublicApiCollector(Settings(), client=client)
+        records = await collector.search("정샘물", limit=48)
+
+    assert calls == [(1, 48)]
+    assert len(records) == 48
+    assert records[0].source_brand_name == "정샘물"
