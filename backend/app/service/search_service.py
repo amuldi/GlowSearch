@@ -124,6 +124,7 @@ class SearchService:
         product_query = self._product_query(cleaned_query, brand_match)
         collect_limit = self._collect_limit(effective_criteria, product_query)
         collect_queries = self._collect_queries(cleaned_query, effective_criteria, brand_match)
+        has_related_expansions = bool(self._related_query_expansions(product_query or cleaned_query))
         cache_key = f"{'|'.join(query.casefold() for query in collect_queries)}:{collect_limit}"
 
         cached_collected = None if self._prefer_live_official_results else await self._cache.get(cache_key)
@@ -138,11 +139,16 @@ class SearchService:
                     or self._prefer_live_official_results
                 ),
             )
+            cached_has_enough_results = (
+                not has_related_expansions
+                or len(cached_results) >= self._broad_related_return_threshold(criteria.limit)
+                or not cached_collected.records
+            )
             if (
                 cached_top_score > 0
                 or cached_collected.has_official_records
                 or not cached_collected.records
-            ):
+            ) and cached_has_enough_results:
                 self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
                 return SearchResponse(
                     query=cleaned_query,
@@ -160,10 +166,15 @@ class SearchService:
             preserve_order=True,
         )
         index_threshold = min(criteria.limit, self._index_min_results)
+        index_has_enough_results = (
+            len(indexed_results) >= self._broad_related_return_threshold(criteria.limit)
+            if has_related_expansions
+            else len(indexed_results) >= index_threshold or len(indexed_results) > 0
+        )
         if (
             not self._prefer_live_official_results
             and (indexed_top_score > 0 or indexed_collected.has_official_records)
-            and (len(indexed_results) >= index_threshold or len(indexed_results) > 0)
+            and index_has_enough_results
             and not require_relevant
         ):
             await self._cache.set(cache_key, indexed_collected)
