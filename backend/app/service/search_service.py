@@ -48,6 +48,7 @@ class SearchService:
         preserve_official_order: bool = True,
         source_time_budget_seconds: float = 3.0,
         live_collect_deadline_seconds: float = 3.2,
+        background_collect_deadline_seconds: float = 18.0,
         source_time_budgets: dict[str, float] | None = None,
         allowed_result_source_prefixes: tuple[str, ...] | None = None,
         source_policy: SourcePolicy | None = None,
@@ -67,6 +68,7 @@ class SearchService:
         self._preserve_official_order = preserve_official_order
         self._source_time_budget_seconds = source_time_budget_seconds
         self._live_collect_deadline_seconds = live_collect_deadline_seconds
+        self._background_collect_deadline_seconds = background_collect_deadline_seconds
         self._source_time_budgets = source_time_budgets or {}
         self._source_policy = source_policy or SourcePolicy(
             allowed_prefixes=allowed_result_source_prefixes
@@ -257,6 +259,8 @@ class SearchService:
 
         if collected_from_live:
             self._schedule_ingest([cleaned_query, *collect_queries], collected.records)
+            if len(collected.records) < collect_limit:
+                self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
 
         result_records = collected.records
         if indexed_collected.records and not collected.has_official_records:
@@ -363,6 +367,7 @@ class SearchService:
         limit: int,
         *,
         allow_browser_fallback: bool = True,
+        deadline_seconds: float | None = None,
     ) -> _CollectedResult:
         errors: list[str] = []
         official_primary_records: list[ProductSourceRecord] = []
@@ -391,7 +396,12 @@ class SearchService:
             for job_index, (collector, query) in enumerate(jobs)
         }
         pending = set(tasks)
-        deadline_at = perf_counter() + max(self._live_collect_deadline_seconds, 0.1)
+        collection_deadline_seconds = (
+            self._live_collect_deadline_seconds
+            if deadline_seconds is None
+            else deadline_seconds
+        )
+        deadline_at = perf_counter() + max(collection_deadline_seconds, 0.1)
         try:
             while pending:
                 remaining_seconds = deadline_at - perf_counter()
@@ -738,7 +748,12 @@ class SearchService:
             return
         try:
             queries = [query for query in collect_queries if clean_text(query)]
-            collected = await self._collect(queries, limit, allow_browser_fallback=False)
+            collected = await self._collect(
+                queries,
+                limit,
+                allow_browser_fallback=False,
+                deadline_seconds=self._background_collect_deadline_seconds,
+            )
             await self._ingestion_agent.ingest_search_results(
                 [original_query, *queries],
                 collected.records,
@@ -826,6 +841,7 @@ class SearchService:
                     [query],
                     warm_limit,
                     allow_browser_fallback=False,
+                    deadline_seconds=self._background_collect_deadline_seconds,
                 )
                 await self._ingestion_agent.ingest_search_results([query], collected.records)
 
