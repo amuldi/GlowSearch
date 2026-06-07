@@ -40,7 +40,7 @@ services:
       - key: GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN
         sync: false
       - key: GLOWSEARCH_PRODUCT_INDEX_MIN_RESULTS
-        value: 8
+        value: 1
       - key: GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_ENABLED
         value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP

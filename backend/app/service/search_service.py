@@ -138,7 +138,7 @@ class SearchService:
         if (
             not self._prefer_live_official_results
             and indexed_top_score > 0
-            and len(indexed_results) >= index_threshold
+            and (len(indexed_results) >= index_threshold or len(indexed_results) > 0)
             and not require_relevant
         ):
             self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)

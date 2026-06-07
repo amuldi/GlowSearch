@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     product_index_enabled: bool = True
     product_index_path: Path = BACKEND_DIR / "data" / "product_index.sqlite3"
     product_index_admin_token: str | None = None
-    product_index_min_results: int = 8
+    product_index_min_results: int = 1
     product_index_background_refresh_enabled: bool = True
     product_index_warmup_on_startup: bool = True
     product_index_warmup_limit: int = 48
