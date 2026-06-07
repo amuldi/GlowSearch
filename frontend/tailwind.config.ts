@@ -11,6 +11,7 @@ const config: Config = {
         "blush-soft": "#fff0f3",
         mint: "#2f8f73",
         "mint-soft": "#e8f6f0",
+        rose: "#d76580",
         rosewood: "#9f3f55",
       },
       boxShadow: {

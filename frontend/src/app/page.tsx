@@ -170,16 +170,16 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#fff7f6_0%,#fbfffb_46%,#ffffff_100%)] px-4 py-7 text-ink sm:px-6 lg:px-8">
       <section className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 pt-4 sm:pt-8">
-        <div className="flex items-center gap-2 rounded-full border border-blush/60 bg-white/80 px-3 py-1.5 text-xs font-semibold text-rosewood shadow-[0_8px_24px_rgba(166,68,90,0.08)]">
-          <Sparkles className="h-3.5 w-3.5 text-blush" aria-hidden="true" />
+        <div className="flex items-center gap-2 rounded-full bg-white/70 px-4 py-2 text-base font-bold text-rosewood shadow-[0_10px_30px_rgba(159,63,85,0.10)]">
+          <Sparkles className="h-5 w-5 text-rose" aria-hidden="true" />
           GlowSearch
         </div>
 
         <div
-          className="flex w-full items-start gap-2 rounded-[22px] border border-blush/50 bg-white/92 px-4 py-3 shadow-glow ring-1 ring-white/80 transition focus-within:border-mint/60 focus-within:shadow-[0_18px_60px_rgba(47,143,115,0.14)] sm:px-5"
+          className="flex w-full items-start gap-2 rounded-[22px] border border-blush/55 bg-white/92 px-4 py-3 shadow-glow ring-1 ring-white/80 transition focus-within:border-rose/70 focus-within:shadow-[0_18px_60px_rgba(159,63,85,0.16)] sm:px-5"
           aria-busy={isLoading}
         >
-          <Search className="mt-2.5 h-5 w-5 shrink-0 text-mint" aria-hidden="true" />
+          <Search className="mt-2.5 h-5 w-5 shrink-0 text-rosewood" aria-hidden="true" />
           <textarea
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -205,7 +205,12 @@ export default function Home() {
             onClick={submitSearch}
             disabled={!trimmedQuery || isLoading}
             className={[
-              "inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-mint px-4 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(47,143,115,0.28)] transition duration-150 hover:bg-[#26765f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint disabled:cursor-not-allowed disabled:bg-neutral-300 disabled:shadow-none sm:px-5",
+              "inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-semibold text-white transition duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose sm:px-5",
+              !trimmedQuery && !isLoading
+                ? "cursor-not-allowed bg-neutral-300 shadow-none"
+                : isLoading
+                  ? "cursor-progress bg-rosewood shadow-[0_10px_22px_rgba(159,63,85,0.28)]"
+                  : "bg-rosewood shadow-[0_10px_22px_rgba(159,63,85,0.28)] hover:bg-[#873247]",
               isSearchButtonPressed ? "translate-y-px scale-[0.97]" : "translate-y-0 scale-100",
             ].join(" ")}
             aria-label="검색"
@@ -219,11 +224,18 @@ export default function Home() {
             {isLoading ? "검색중" : "검색"}
           </button>
         </div>
+
+        {isLoading ? (
+          <div className="inline-flex items-center gap-2 rounded-full bg-white/85 px-4 py-2 text-sm font-semibold text-rosewood shadow-[0_10px_26px_rgba(159,63,85,0.10)]">
+            <Loader2 className="h-4 w-4 animate-spin text-rose" aria-hidden="true" />
+            올리브영 상품 정보를 불러오는 중
+          </div>
+        ) : null}
       </section>
 
       <section className="mx-auto mt-8 w-full max-w-5xl">
         <div className="mb-4 flex min-h-6 items-center gap-2 text-sm font-medium text-neutral-600">
-          {isLoading ? <Loader2 className="h-4 w-4 animate-spin text-mint" aria-hidden="true" /> : null}
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin text-rosewood" aria-hidden="true" /> : null}
           <span>{statusText}</span>
         </div>
 
@@ -252,7 +264,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setResultLimit((current) => Math.min(current + RESULT_PAGE_SIZE, MAX_RESULT_LIMIT))}
-              className="h-10 rounded-full border border-line bg-white px-5 text-sm font-semibold text-neutral-800 shadow-sm transition hover:border-mint hover:text-mint"
+              className="h-10 rounded-full border border-line bg-white px-5 text-sm font-semibold text-neutral-800 shadow-sm transition hover:border-rose hover:text-rosewood"
             >
               더 보기
             </button>
@@ -328,7 +340,7 @@ function ProductCard({ product }: { product: Product }) {
   );
 
   return (
-    <article className="grid grid-cols-[96px_1fr] gap-4 rounded-lg border border-blush/45 bg-white p-3 shadow-soft transition duration-150 hover:-translate-y-0.5 hover:border-mint/45 hover:shadow-[0_14px_36px_rgba(74,54,63,0.10)]">
+    <article className="grid grid-cols-[96px_1fr] gap-4 rounded-lg border border-blush/45 bg-white p-3 shadow-soft transition duration-150 hover:-translate-y-0.5 hover:border-rose/45 hover:shadow-[0_14px_36px_rgba(74,54,63,0.10)]">
       {product.source_url ? (
         <a
           href={product.source_url}
@@ -348,7 +360,7 @@ function ProductCard({ product }: { product: Product }) {
           <dl className="min-w-0 flex-1 space-y-1">
             <div>
               <dt className="text-[11px] font-medium text-neutral-500">브랜드명</dt>
-              <dd className="truncate text-sm font-bold text-mint">{product.brand_ko ?? "브랜드 미확인"}</dd>
+              <dd className="truncate text-sm font-bold text-rosewood">{product.brand_ko ?? "브랜드 미확인"}</dd>
             </div>
             <div>
               <dt className="text-[11px] font-medium text-neutral-500">영문명</dt>
@@ -362,7 +374,7 @@ function ProductCard({ product }: { product: Product }) {
                     href={product.source_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="block underline-offset-2 hover:text-mint hover:underline"
+                    className="block underline-offset-2 hover:text-rosewood hover:underline"
                     aria-label={`${product.product_name_ko ?? "상품"} 원본 페이지 열기`}
                   >
                     {name}
@@ -402,7 +414,7 @@ function ProductCard({ product }: { product: Product }) {
           <button
             type="button"
             onClick={copyProductInfo}
-            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-line bg-white px-2.5 text-xs font-semibold text-neutral-700 transition hover:border-mint hover:bg-mint-soft hover:text-mint"
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-line bg-white px-2.5 text-xs font-semibold text-neutral-700 transition hover:border-rose hover:bg-blush-soft hover:text-rosewood"
             aria-label="상품 정보 복사"
             title="상품 정보 복사"
           >
@@ -420,7 +432,7 @@ function ProductSkeleton() {
     <article className="grid grid-cols-[96px_1fr] gap-4 rounded-lg border border-blush/45 bg-white p-3 shadow-soft">
       <div className="h-24 w-24 animate-pulse rounded-lg bg-blush-soft" />
       <div className="min-w-0 space-y-3 py-1">
-        <div className="h-3 w-20 animate-pulse rounded-full bg-mint-soft" />
+        <div className="h-3 w-20 animate-pulse rounded-full bg-blush-soft" />
         <div className="h-4 w-28 animate-pulse rounded-full bg-neutral-100" />
         <div className="h-4 w-full animate-pulse rounded-full bg-neutral-100" />
         <div className="h-4 w-2/3 animate-pulse rounded-full bg-neutral-100" />
