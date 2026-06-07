@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 import pytest
 
@@ -380,6 +381,29 @@ class OliveYoungSupplementCollector:
         ][:limit]
 
 
+class SlowOliveYoungSupplementCollector:
+    name = "oliveyoung:public-api"
+
+    def __init__(self) -> None:
+        self.cancelled = False
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+        return [
+            ProductSourceRecord(
+                source_brand_name="메디힐",
+                product_name_ko="느린 보조 상품",
+                regular_price=19000,
+                source="oliveyoung",
+                source_product_id="slow-supplement-1",
+            )
+        ][:limit]
+
+
 @pytest.mark.asyncio
 async def test_search_service_applies_price_filter(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -512,6 +536,40 @@ async def test_search_service_preserves_official_oliveyoung_order(tmp_path) -> N
         "메디힐 비타 브라이트닝 패드",
         "메디힐 비타 패드",
     ]
+
+
+@pytest.mark.asyncio
+async def test_search_service_returns_primary_oliveyoung_before_slow_supplements(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"MEDIHEAL","aliases":["메디힐"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    slow_supplement = SlowOliveYoungSupplementCollector()
+    service = SearchService(
+        collectors=[OfficialOrderCollector(), slow_supplement],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        prefer_live_official_results=True,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    started_at = time.perf_counter()
+    response = await service.search("비타 패드", SearchCriteria(limit=2))
+    elapsed = time.perf_counter() - started_at
+
+    assert elapsed < 0.4
+    assert response.count == 2
+    assert [result.product_name_ko for result in response.results] == [
+        "메디힐 비타 브라이트닝 패드",
+        "메디힐 비타 패드",
+    ]
+    assert slow_supplement.cancelled is True
 
 
 @pytest.mark.asyncio

@@ -314,52 +314,51 @@ class SearchService:
             collector for collector in self._collectors if collector.name != "oliveyoung:browser"
         ]
 
-        jobs = [
-            (collector, query)
+        primary_query = queries[0] if queries else ""
+        tasks: dict[asyncio.Task[tuple[list[ProductSourceRecord], str | None, bool]], tuple[ProductCollector, str]] = {
+            asyncio.create_task(self._collect_from_source(collector, query, limit)): (
+                collector,
+                query,
+            )
             for query in queries
             for collector in fast_collectors
-        ]
-        collected = await asyncio.gather(
-            *(
-                self._collect_from_source(collector, query, limit)
-                for collector, query in jobs
-            )
-        )
-        primary_query = queries[0] if queries else ""
-        for (collector, query), (source_records, error, source_succeeded) in zip(
-            jobs,
-            collected,
-            strict=True,
-        ):
-            has_successful_source = has_successful_source or source_succeeded
-            if error:
-                errors.append(error)
-            if source_records:
-                if collector.name == "oliveyoung" and query == primary_query:
-                    official_primary_records = self._dedupe_records(
-                        [*official_primary_records, *source_records]
-                    )
-                elif collector.name == "oliveyoung":
-                    official_fallback_records = self._dedupe_records(
-                        [*official_fallback_records, *source_records]
-                    )
-                else:
-                    supplemental_records = self._dedupe_records(
-                        [*supplemental_records, *source_records]
-                    )
-
-        if official_primary_records:
-            if len(official_primary_records) < limit:
-                records = self._dedupe_records(
-                    [*official_primary_records, *official_fallback_records, *supplemental_records]
+        }
+        pending = set(tasks)
+        try:
+            while pending:
+                done, pending = await asyncio.wait(
+                    pending,
+                    return_when=asyncio.FIRST_COMPLETED,
                 )
-            else:
-                records = self._dedupe_records([*official_primary_records, *supplemental_records])
-            return _CollectedResult(
-                records=records[: max(limit, 1) * 2],
-                errors=[],
-                has_official_records=True,
-            )
+                for task in done:
+                    collector, query = tasks[task]
+                    source_records, error, source_succeeded = task.result()
+                    has_successful_source = has_successful_source or source_succeeded
+                    if error:
+                        errors.append(error)
+                    if source_records:
+                        if collector.name == "oliveyoung" and query == primary_query:
+                            official_primary_records = self._dedupe_records(
+                                [*official_primary_records, *source_records]
+                            )
+                            return _CollectedResult(
+                                records=official_primary_records[: max(limit, 1) * 2],
+                                errors=[],
+                                has_official_records=True,
+                            )
+                        if collector.name == "oliveyoung":
+                            official_fallback_records = self._dedupe_records(
+                                [*official_fallback_records, *source_records]
+                            )
+                        else:
+                            supplemental_records = self._dedupe_records(
+                                [*supplemental_records, *source_records]
+                            )
+        finally:
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
 
         records = self._dedupe_records([*official_fallback_records, *supplemental_records])
         has_browser_records = False
