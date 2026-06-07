@@ -138,7 +138,11 @@ class SearchService:
                     or self._prefer_live_official_results
                 ),
             )
-            if cached_top_score > 0 or not cached_collected.records:
+            if (
+                cached_top_score > 0
+                or cached_collected.has_official_records
+                or not cached_collected.records
+            ):
                 self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
                 return SearchResponse(
                     query=cleaned_query,
@@ -158,7 +162,7 @@ class SearchService:
         index_threshold = min(criteria.limit, self._index_min_results)
         if (
             not self._prefer_live_official_results
-            and indexed_top_score > 0
+            and (indexed_top_score > 0 or indexed_collected.has_official_records)
             and (len(indexed_results) >= index_threshold or len(indexed_results) > 0)
             and not require_relevant
         ):
@@ -260,7 +264,11 @@ class SearchService:
                 records = self._dedupe_records([*records, *index_records])
             if len(records) >= limit:
                 break
-        return _CollectedResult(records=records[:limit], errors=[])
+        return _CollectedResult(
+            records=records[:limit],
+            errors=[],
+            has_official_records=self._has_oliveyoung_records(records),
+        )
 
     def _build_results(
         self,
@@ -425,6 +433,13 @@ class SearchService:
     @staticmethod
     def _is_oliveyoung_collector(collector: ProductCollector) -> bool:
         return collector.name == "oliveyoung" or collector.name.startswith("oliveyoung:")
+
+    @staticmethod
+    def _has_oliveyoung_records(records: list[ProductSourceRecord]) -> bool:
+        return any(
+            record.source == "oliveyoung" or record.source.startswith("oliveyoung:")
+            for record in records
+        )
 
     @classmethod
     def _collector_result_priority(
@@ -879,10 +894,23 @@ class SearchService:
             "틴트",
             "라이너",
             "밤",
+            "젤",
+            "오일",
             "크림",
+            "로션",
             "스프레이",
             "토너",
             "세럼",
+            "앰플",
+            "에센스",
+            "클렌저",
+            "클렌징",
+            "샴푸",
+            "트리트먼트",
+            "마스크",
+            "팩",
+            "쿠션",
+            "네일",
         )
         key = cls._key(value)
         return [cls._key(word) for word in category_words if cls._key(word) in key]

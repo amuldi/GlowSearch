@@ -25,7 +25,7 @@ const jpyFormatter = new Intl.NumberFormat("ja-JP", {
   maximumFractionDigits: 0,
 });
 
-const RESULT_PAGE_SIZE = 12;
+const RESULT_PAGE_SIZE = 48;
 const DEFAULT_RESULT_LIMIT = RESULT_PAGE_SIZE;
 const MAX_RESULT_LIMIT = 480;
 const MIN_LOADING_MS = 180;

@@ -247,6 +247,96 @@ async def test_search_service_returns_cached_records_before_index_or_network(tmp
 
 
 @pytest.mark.asyncio
+async def test_search_service_trusts_cached_official_related_keyword_results(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"ROUND LAB","aliases":["라운드랩"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    cache = AsyncTTLCache[_CollectedResult](ttl_seconds=60)
+    await cache.set(
+        "히알루론산:8",
+        _CollectedResult(
+            records=[
+                ProductSourceRecord(
+                    source_brand_name="라운드랩",
+                    product_name_ko="라운드랩 수분 장벽 크림",
+                    regular_price=24000,
+                    source="oliveyoung",
+                    source_product_id="related-cached-1",
+                )
+            ],
+            errors=[],
+            has_official_records=True,
+        ),
+    )
+    network = NetworkCollector()
+    service = SearchService(
+        collectors=[network],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=cache,
+        index_background_refresh_enabled=False,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("히알루론산", SearchCriteria(limit=8))
+    await service.close()
+
+    assert response.count == 1
+    assert response.results[0].product_name_ko == "라운드랩 수분 장벽 크림"
+    assert network.calls == []
+
+
+@pytest.mark.asyncio
+async def test_search_service_trusts_indexed_official_related_keyword_results(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"ROUND LAB","aliases":["라운드랩"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "히알루론산",
+        [
+            ProductSourceRecord(
+                source_brand_name="라운드랩",
+                product_name_ko="라운드랩 수분 장벽 크림",
+                regular_price=24000,
+                source="oliveyoung",
+                source_product_id="related-indexed-1",
+            )
+        ],
+    )
+    network = NetworkCollector()
+    service = SearchService(
+        collectors=[network],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        index_min_results=1,
+        index_background_refresh_enabled=False,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("히알루론산", SearchCriteria(limit=8))
+    await service.close()
+
+    assert response.count == 1
+    assert response.results[0].product_name_ko == "라운드랩 수분 장벽 크림"
+    assert network.calls == []
+
+
+@pytest.mark.asyncio
 async def test_search_service_prefers_live_official_results_over_warm_index(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text(

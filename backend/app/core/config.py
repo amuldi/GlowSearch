@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     product_index_warmup_on_startup: bool = True
     product_index_warmup_limit: int = 48
     product_index_warmup_concurrency: int = 2
-    product_index_max_seed_queries: int = 120
+    product_index_max_seed_queries: int = 180
     product_index_brand_registry_warmup_enabled: bool = True
     product_index_brand_registry_warmup_limit: int = 80
     product_index_detail_enrichment_enabled: bool = True
@@ -76,6 +76,7 @@ class Settings(BaseSettings):
             "립밤",
             "앰플",
             "선세럼",
+            "젤",
             "뮤드",
             "메디힐",
             "라운드랩",
@@ -115,7 +116,9 @@ class Settings(BaseSettings):
             "클렌징워터",
             "클렌징밤",
             "클렌징폼",
+            "클렌징젤",
             "필링",
+            "필링젤",
             "스크럽",
             "토너",
             "스킨",
@@ -123,7 +126,11 @@ class Settings(BaseSettings):
             "앰플",
             "세럼",
             "로션",
+            "젤",
+            "수딩젤",
+            "알로에젤",
             "크림",
+            "젤크림",
             "수분크림",
             "재생크림",
             "아이크림",
@@ -141,8 +148,27 @@ class Settings(BaseSettings):
             "향수",
             "디퓨저",
             "네일",
+            "젤네일",
+            "마사지젤",
+            "헤어젤",
             "브러시",
             "퍼프",
+            "히알루론산",
+            "시카",
+            "병풀",
+            "레티놀",
+            "비타민C",
+            "비타민씨",
+            "나이아신아마이드",
+            "세라마이드",
+            "판테놀",
+            "콜라겐",
+            "펩타이드",
+            "PDRN",
+            "어성초",
+            "티트리",
+            "알로에",
+            "글루타치온",
         ]
     )
     product_index_brand_queries: Annotated[list[str], NoDecode] = Field(
