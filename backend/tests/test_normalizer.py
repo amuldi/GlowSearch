@@ -143,6 +143,37 @@ def test_product_normalizer_expands_short_korean_subbrand_alias(tmp_path) -> Non
     assert result.brand_en == "BEGINS BY JUNGSAEMMOOL"
 
 
+def test_product_normalizer_prefers_spaced_korean_brand_alias(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        (
+            '{"entries":['
+            '{"official_en":"BEGINS BY JUNGSAEMMOOL",'
+            '"aliases":["비긴스 바이 정샘물"],"sources":[]}'
+            "]}"
+        ),
+        encoding="utf-8",
+    )
+    normalizer = ProductNormalizer(
+        BrandResolver(registry_path),
+        base_url="https://www.oliveyoung.co.kr",
+    )
+
+    result = normalizer.normalize(
+        ProductSourceRecord(
+            source_brand_name="비긴스바이정샘물",
+            product_name_ko="[기획] 비긴스바이정샘물 블루 수국 히알 수분세럼",
+            regular_price=24000,
+            sale_price=16800,
+            original_price=24000,
+            source="oliveyoung",
+        )
+    )
+
+    assert result.brand_ko == "비긴스 바이 정샘물"
+    assert result.brand_en == "BEGINS BY JUNGSAEMMOOL"
+
+
 def test_brand_resolver_exposes_korean_warmup_aliases(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text(

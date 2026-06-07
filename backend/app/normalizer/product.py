@@ -49,7 +49,7 @@ class ProductNormalizer:
             if (
                 product_brand_match
                 and has_hangul(product_brand_match.matched_alias)
-                and self._is_short_brand_alias(
+                and self._should_use_matched_brand_alias(
                     source_brand,
                     product_brand_match.matched_alias,
                 )
@@ -61,10 +61,14 @@ class ProductNormalizer:
         return None
 
     @classmethod
-    def _is_short_brand_alias(cls, source_brand: str, matched_alias: str) -> bool:
+    def _should_use_matched_brand_alias(cls, source_brand: str, matched_alias: str) -> bool:
         source_key = cls._brand_key(source_brand)
         alias_key = cls._brand_key(matched_alias)
-        return bool(source_key and alias_key and source_key != alias_key and source_key in alias_key)
+        if not source_key or not alias_key:
+            return False
+        if source_key == alias_key:
+            return clean_text(source_brand) != clean_text(matched_alias)
+        return source_key in alias_key
 
     @staticmethod
     def _brand_key(value: str | None) -> str:
