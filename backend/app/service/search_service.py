@@ -259,8 +259,6 @@ class SearchService:
 
         if collected_from_live:
             self._schedule_ingest([cleaned_query, *collect_queries], collected.records)
-            if len(collected.records) < collect_limit:
-                self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
 
         result_records = collected.records
         if indexed_collected.records and not collected.has_official_records:

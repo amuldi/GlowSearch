@@ -26,6 +26,7 @@ class Sample:
     status_code: int
     result_count: int
     source_error_count: int
+    error: str | None = None
 
 
 async def main() -> None:
@@ -60,15 +61,26 @@ async def main() -> None:
             f"query={sample.query!r} status={sample.status_code} "
             f"elapsed_ms={sample.elapsed_ms:.2f} count={sample.result_count} "
             f"source_errors={sample.source_error_count}"
+            + (f" error={sample.error!r}" if sample.error else "")
         )
 
 
 async def _measure(client: httpx.AsyncClient, base_url: str, query: str, limit: int) -> Sample:
     started_at = perf_counter()
-    response = await client.get(
-        f"{base_url.rstrip('/')}/search",
-        params={"q": query, "limit": limit},
-    )
+    try:
+        response = await client.get(
+            f"{base_url.rstrip('/')}/search",
+            params={"q": query, "limit": limit},
+        )
+    except httpx.HTTPError as exc:
+        return Sample(
+            query=query,
+            elapsed_ms=(perf_counter() - started_at) * 1000,
+            status_code=0,
+            result_count=0,
+            source_error_count=0,
+            error=f"{type(exc).__name__}: {exc}",
+        )
     elapsed_ms = (perf_counter() - started_at) * 1000
     result_count = 0
     source_error_count = 0
