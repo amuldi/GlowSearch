@@ -1,3 +1,6 @@
+import asyncio
+import time
+
 import pytest
 
 from app.cache.ttl import AsyncTTLCache
@@ -27,6 +30,25 @@ class NetworkCollector:
                 source_product_id="live-1",
             )
         ]
+
+
+class SlowProductIndexStore:
+    async def search(self, query: str, limit: int) -> list[ProductSourceRecord]:
+        await asyncio.sleep(1)
+        return []
+
+    async def upsert_search_results(
+        self,
+        query: str,
+        records: list[ProductSourceRecord],
+    ) -> None:
+        return None
+
+    async def stats(self) -> dict[str, int | str | None]:
+        return {"product_count": 0, "query_count": 0, "last_refreshed_at": None}
+
+    async def close(self) -> None:
+        return None
 
 
 class OfficialCollector:
@@ -200,6 +222,33 @@ async def test_search_service_returns_partial_warm_index_before_network(tmp_path
     assert response.count == 1
     assert response.results[0].product_name_ko == "뮤드 부분 인덱스 상품"
     assert network.calls == []
+
+
+@pytest.mark.asyncio
+async def test_search_service_skips_slow_index_read_before_network(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    network = NetworkCollector()
+    service = SearchService(
+        collectors=[network],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=SlowProductIndexStore(),
+        index_background_refresh_enabled=False,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    started_at = time.perf_counter()
+    response = await service.search("실시간 제품", SearchCriteria(limit=8))
+    elapsed = time.perf_counter() - started_at
+    await service.close()
+
+    assert elapsed < 0.8
+    assert response.count == 1
+    assert network.calls == ["실시간 제품"]
 
 
 @pytest.mark.asyncio

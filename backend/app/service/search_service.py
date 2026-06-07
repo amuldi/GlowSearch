@@ -25,6 +25,7 @@ class _CollectedResult:
 
 class SearchService:
     _BATCH_CONCURRENCY = 4
+    _INDEX_READ_TIMEOUT_SECONDS = 0.35
 
     def __init__(
         self,
@@ -157,7 +158,13 @@ class SearchService:
                     source_errors=cached_collected.errors,
                 )
 
-        indexed_collected = await self._collect_index([cleaned_query, *collect_queries], collect_limit)
+        try:
+            indexed_collected = await asyncio.wait_for(
+                self._collect_index([cleaned_query, *collect_queries], collect_limit),
+                timeout=self._INDEX_READ_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            indexed_collected = _CollectedResult(records=[], errors=[])
         indexed_results, indexed_top_score = self._build_results(
             indexed_collected.records,
             cleaned_query,
