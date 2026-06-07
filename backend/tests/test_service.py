@@ -404,6 +404,21 @@ class SlowOliveYoungSupplementCollector:
         ][:limit]
 
 
+class SlowOfficialOrderCollector:
+    name = "oliveyoung"
+
+    def __init__(self) -> None:
+        self.cancelled = False
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+        return []
+
+
 @pytest.mark.asyncio
 async def test_search_service_applies_price_filter(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -570,6 +585,37 @@ async def test_search_service_returns_primary_oliveyoung_before_slow_supplements
         "메디힐 비타 패드",
     ]
     assert slow_supplement.cancelled is True
+
+
+@pytest.mark.asyncio
+async def test_search_service_returns_public_api_before_slow_official_html(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"MEDIHEAL","aliases":["메디힐"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    slow_official = SlowOfficialOrderCollector()
+    service = SearchService(
+        collectors=[slow_official, OliveYoungSupplementCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        prefer_live_official_results=True,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    started_at = time.perf_counter()
+    response = await service.search("비타 패드", SearchCriteria(limit=1))
+    elapsed = time.perf_counter() - started_at
+
+    assert elapsed < 0.4
+    assert response.count == 1
+    assert response.results[0].product_name_ko == "메디힐 비타 패드"
+    assert slow_official.cancelled is True
 
 
 @pytest.mark.asyncio

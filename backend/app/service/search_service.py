@@ -315,13 +315,21 @@ class SearchService:
         ]
 
         primary_query = queries[0] if queries else ""
-        tasks: dict[asyncio.Task[tuple[list[ProductSourceRecord], str | None, bool]], tuple[ProductCollector, str]] = {
+        jobs = [
+            (collector, query)
+            for query in queries
+            for collector in fast_collectors
+        ]
+        tasks: dict[
+            asyncio.Task[tuple[list[ProductSourceRecord], str | None, bool]],
+            tuple[ProductCollector, str, int],
+        ] = {
             asyncio.create_task(self._collect_from_source(collector, query, limit)): (
                 collector,
                 query,
+                job_index,
             )
-            for query in queries
-            for collector in fast_collectors
+            for job_index, (collector, query) in enumerate(jobs)
         }
         pending = set(tasks)
         try:
@@ -330,14 +338,27 @@ class SearchService:
                     pending,
                     return_when=asyncio.FIRST_COMPLETED,
                 )
-                for task in done:
-                    collector, query = tasks[task]
+                for task in sorted(
+                    done,
+                    key=lambda task: (
+                        self._collector_result_priority(
+                            tasks[task][0],
+                            tasks[task][1],
+                            primary_query,
+                        ),
+                        tasks[task][2],
+                    ),
+                ):
+                    collector, query, _job_index = tasks[task]
                     source_records, error, source_succeeded = task.result()
                     has_successful_source = has_successful_source or source_succeeded
                     if error:
                         errors.append(error)
                     if source_records:
-                        if collector.name == "oliveyoung" and query == primary_query:
+                        if (
+                            self._is_oliveyoung_collector(collector)
+                            and query == primary_query
+                        ):
                             official_primary_records = self._dedupe_records(
                                 [*official_primary_records, *source_records]
                             )
@@ -346,7 +367,7 @@ class SearchService:
                                 errors=[],
                                 has_official_records=True,
                             )
-                        if collector.name == "oliveyoung":
+                        if self._is_oliveyoung_collector(collector):
                             official_fallback_records = self._dedupe_records(
                                 [*official_fallback_records, *source_records]
                             )
@@ -400,6 +421,28 @@ class SearchService:
 
     def _collector_timeout(self, collector: ProductCollector) -> float:
         return self._source_time_budgets.get(collector.name, self._source_time_budget_seconds)
+
+    @staticmethod
+    def _is_oliveyoung_collector(collector: ProductCollector) -> bool:
+        return collector.name == "oliveyoung" or collector.name.startswith("oliveyoung:")
+
+    @classmethod
+    def _collector_result_priority(
+        cls,
+        collector: ProductCollector,
+        query: str,
+        primary_query: str,
+    ) -> int:
+        is_primary_query = query == primary_query
+        if is_primary_query and collector.name == "oliveyoung":
+            return 0
+        if is_primary_query and cls._is_oliveyoung_collector(collector):
+            return 1
+        if collector.name == "oliveyoung":
+            return 2
+        if cls._is_oliveyoung_collector(collector):
+            return 3
+        return 4
 
     async def _collect_verified_cache(self, queries: list[str], limit: int) -> _CollectedResult:
         records: list[ProductSourceRecord] = []
