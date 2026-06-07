@@ -20,6 +20,7 @@ from app.normalizer.text import clean_text
 class _CollectedResult:
     records: list[ProductSourceRecord]
     errors: list[str]
+    has_official_records: bool = False
 
 
 class SearchService:
@@ -38,6 +39,7 @@ class SearchService:
         index_background_refresh_enabled: bool = True,
         index_warmup_limit: int = 48,
         index_warmup_concurrency: int = 2,
+        prefer_live_official_results: bool = False,
         source_time_budget_seconds: float = 3.0,
         source_time_budgets: dict[str, float] | None = None,
         allowed_result_source_prefixes: tuple[str, ...] | None = None,
@@ -52,6 +54,7 @@ class SearchService:
         self._index_background_refresh_enabled = index_background_refresh_enabled
         self._index_warmup_limit = max(index_warmup_limit, 1)
         self._index_warmup_concurrency = max(index_warmup_concurrency, 1)
+        self._prefer_live_official_results = prefer_live_official_results
         self._source_time_budget_seconds = source_time_budget_seconds
         self._source_time_budgets = source_time_budgets or {}
         self._allowed_result_source_prefixes = allowed_result_source_prefixes
@@ -126,10 +129,12 @@ class SearchService:
             cleaned_query,
             effective_criteria,
             brand_match,
+            preserve_order=True,
         )
         index_threshold = min(criteria.limit, self._index_min_results)
         if (
-            indexed_top_score > 0
+            not self._prefer_live_official_results
+            and indexed_top_score > 0
             and len(indexed_results) >= index_threshold
             and not require_relevant
         ):
@@ -141,7 +146,7 @@ class SearchService:
                 source_errors=[],
             )
 
-        collected = await self._cache.get(cache_key)
+        collected = None if self._prefer_live_official_results else await self._cache.get(cache_key)
         collected_from_live = False
         if collected is None:
             if self._can_use_verified_shortcut(cleaned_query, require_relevant):
@@ -151,9 +156,11 @@ class SearchService:
                     cleaned_query,
                     effective_criteria,
                     brand_match,
+                    preserve_order=True,
                 )
                 if verified_top_score > 0:
-                    await self._cache.set(cache_key, verified_collected)
+                    if not self._prefer_live_official_results:
+                        await self._cache.set(cache_key, verified_collected)
                     return SearchResponse(
                         query=cleaned_query,
                         count=len(verified_results),
@@ -167,13 +174,14 @@ class SearchService:
                 allow_browser_fallback=allow_browser_fallback,
             )
             collected_from_live = True
-            await self._cache.set(cache_key, collected)
+            if not self._prefer_live_official_results:
+                await self._cache.set(cache_key, collected)
 
         if collected_from_live:
             self._schedule_ingest([cleaned_query, *collect_queries], collected.records)
 
         result_records = collected.records
-        if indexed_collected.records:
+        if indexed_collected.records and not collected.has_official_records:
             result_records = self._dedupe_records([*result_records, *indexed_collected.records])
 
         results, top_score = self._build_results(
@@ -181,6 +189,7 @@ class SearchService:
             cleaned_query,
             effective_criteria,
             brand_match,
+            preserve_order=collected.has_official_records or self._prefer_live_official_results,
         )
         if require_relevant and allow_browser_retry and top_score <= 0 and collected.records:
             browser_collected = await self._collect_browser(collect_queries, collect_limit)
@@ -189,6 +198,7 @@ class SearchService:
                 cleaned_query,
                 effective_criteria,
                 brand_match,
+                preserve_order=browser_collected.has_official_records,
             )
             if browser_top_score > 0:
                 return SearchResponse(
@@ -230,15 +240,18 @@ class SearchService:
         cleaned_query: str,
         criteria: SearchCriteria,
         brand_match: BrandMatch | None,
+        *,
+        preserve_order: bool = False,
     ) -> tuple[list[ProductSearchResult], int]:
         normalized = self._dedupe_results([self._normalizer.normalize(record) for record in records])
         normalized = self._filter_allowed_sources(normalized)
         complete_results = self._only_core_complete(normalized)
         filtered = self._apply_filters(complete_results, criteria)
-        relevant, top_score = self._rank_query_matches(
-            filtered,
-            self._product_query(cleaned_query, brand_match),
-        )
+        product_query = self._product_query(cleaned_query, brand_match)
+        if preserve_order:
+            relevant, top_score = self._query_matches_in_source_order(filtered, product_query)
+        else:
+            relevant, top_score = self._rank_query_matches(filtered, product_query)
         return relevant[: criteria.limit], top_score
 
     @staticmethod
@@ -265,35 +278,78 @@ class SearchService:
         allow_browser_fallback: bool = True,
     ) -> _CollectedResult:
         errors: list[str] = []
-        records: list[ProductSourceRecord] = []
+        official_primary_records: list[ProductSourceRecord] = []
+        official_fallback_records: list[ProductSourceRecord] = []
+        supplemental_records: list[ProductSourceRecord] = []
         has_successful_source = False
         fast_collectors = [
             collector for collector in self._collectors if collector.name != "oliveyoung:browser"
         ]
 
+        jobs = [
+            (collector, query)
+            for query in queries
+            for collector in fast_collectors
+        ]
         collected = await asyncio.gather(
             *(
                 self._collect_from_source(collector, query, limit)
-                for query in queries
-                for collector in fast_collectors
+                for collector, query in jobs
             )
         )
-        for source_records, error, source_succeeded in collected:
+        primary_query = queries[0] if queries else ""
+        for (collector, query), (source_records, error, source_succeeded) in zip(
+            jobs,
+            collected,
+            strict=True,
+        ):
             has_successful_source = has_successful_source or source_succeeded
             if error:
                 errors.append(error)
             if source_records:
-                records = self._dedupe_records([*records, *source_records])
+                if collector.name == "oliveyoung" and query == primary_query:
+                    official_primary_records = self._dedupe_records(
+                        [*official_primary_records, *source_records]
+                    )
+                elif collector.name == "oliveyoung":
+                    official_fallback_records = self._dedupe_records(
+                        [*official_fallback_records, *source_records]
+                    )
+                else:
+                    supplemental_records = self._dedupe_records(
+                        [*supplemental_records, *source_records]
+                    )
+
+        if official_primary_records:
+            if len(official_primary_records) < limit:
+                records = self._dedupe_records(
+                    [*official_primary_records, *official_fallback_records, *supplemental_records]
+                )
+            else:
+                records = self._dedupe_records([*official_primary_records, *supplemental_records])
+            return _CollectedResult(
+                records=records[: max(limit, 1) * 2],
+                errors=[],
+                has_official_records=True,
+            )
+
+        records = self._dedupe_records([*official_fallback_records, *supplemental_records])
+        has_browser_records = False
 
         if allow_browser_fallback and self._needs_browser_supplement(records, limit):
             browser_collected = await self._collect_browser(queries, limit)
             errors.extend(browser_collected.errors)
             if browser_collected.records:
                 has_successful_source = True
+                has_browser_records = True
                 records = self._dedupe_records([*browser_collected.records, *records])
 
         if records:
-            return _CollectedResult(records=records[: max(limit, 1) * 2], errors=[])
+            return _CollectedResult(
+                records=records[: max(limit, 1) * 2],
+                errors=[],
+                has_official_records=bool(official_fallback_records or has_browser_records),
+            )
         if has_successful_source:
             return _CollectedResult(records=[], errors=[])
         return _CollectedResult(records=[], errors=self._dedupe_errors(errors))
@@ -352,7 +408,11 @@ class SearchService:
                     records = self._dedupe_records([*records, *source_records])
             if len(records) >= limit:
                 break
-        return _CollectedResult(records=records, errors=errors)
+        return _CollectedResult(
+            records=records,
+            errors=errors,
+            has_official_records=bool(records),
+        )
 
     def _schedule_ingest(self, queries: Iterable[str], records: list[ProductSourceRecord]) -> None:
         if self._ingestion_agent is None or not records:
@@ -623,6 +683,24 @@ class SearchService:
         if not ranked or ranked[0][0][0] <= 0:
             return results, 0
         return [product for score, product in ranked if score[0] > 0], ranked[0][0][0]
+
+    @classmethod
+    def _query_matches_in_source_order(
+        cls,
+        results: list[ProductSearchResult],
+        product_query: str,
+    ) -> tuple[list[ProductSearchResult], int]:
+        query_key = cls._key(product_query)
+        if not query_key:
+            return results, 1
+        scored = [
+            (cls._match_score(product, product_query, index)[0], product)
+            for index, product in enumerate(results)
+        ]
+        top_score = max((score for score, _product in scored), default=0)
+        if top_score <= 0:
+            return results, 0
+        return [product for score, product in scored if score > 0], top_score
 
     @classmethod
     def _match_score(

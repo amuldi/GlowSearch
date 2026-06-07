@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     cors_origin_regex: str | None = r"https://.*\.vercel\.app"
 
     oliveyoung_base_url: str = "https://www.oliveyoung.co.kr"
+    oliveyoung_official_order_enabled: bool = True
     oliveyoung_public_api_enabled: bool = True
     oliveyoung_public_api_base_url: str = "https://mcp.aka.page"
     oliveyoung_public_api_timeout_seconds: float = 6.0

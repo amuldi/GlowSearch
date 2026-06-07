@@ -29,6 +29,25 @@ class NetworkCollector:
         ]
 
 
+class OfficialCollector:
+    name = "oliveyoung"
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        self.calls.append(keyword)
+        return [
+            ProductSourceRecord(
+                source_brand_name="뮤드",
+                product_name_ko="뮤드 공식 최신 상품",
+                regular_price=14000,
+                source="oliveyoung",
+                source_product_id="official-live-1",
+            )
+        ][:limit]
+
+
 class FakeDetailEnricher:
     async def enrich(self, records: list[ProductSourceRecord]) -> list[ProductSourceRecord]:
         return [
@@ -128,6 +147,49 @@ async def test_search_service_returns_warm_index_before_network(tmp_path) -> Non
     assert response.count == 1
     assert response.results[0].product_name_ko == "뮤드 인덱스 상품"
     assert network.calls == []
+
+
+@pytest.mark.asyncio
+async def test_search_service_prefers_live_official_results_over_warm_index(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"mude","aliases":["뮤드"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "뮤드",
+        [
+            ProductSourceRecord(
+                source_brand_name="뮤드",
+                product_name_ko="뮤드 인덱스 이전 상품",
+                regular_price=17000,
+                source="oliveyoung",
+                source_product_id="indexed-old-1",
+            )
+        ],
+    )
+    official = OfficialCollector()
+    service = SearchService(
+        collectors=[official],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        index_min_results=1,
+        index_background_refresh_enabled=False,
+        prefer_live_official_results=True,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("뮤드", SearchCriteria(limit=1))
+    await service.close()
+
+    assert response.count == 1
+    assert response.results[0].product_name_ko == "뮤드 공식 최신 상품"
+    assert official.calls == ["뮤드"]
 
 
 @pytest.mark.asyncio

@@ -58,6 +58,7 @@ def get_search_service() -> SearchService:
         index_background_refresh_enabled=settings.product_index_background_refresh_enabled,
         index_warmup_limit=settings.product_index_warmup_limit,
         index_warmup_concurrency=settings.product_index_warmup_concurrency,
+        prefer_live_official_results=settings.oliveyoung_official_order_enabled,
         source_time_budget_seconds=settings.source_time_budget_seconds,
         source_time_budgets={
             "oliveyoung:public-api": settings.oliveyoung_public_api_timeout_seconds,

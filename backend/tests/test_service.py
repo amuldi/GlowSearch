@@ -323,6 +323,47 @@ class BrandCollisionCollector:
         ]
 
 
+class OfficialOrderCollector:
+    name = "oliveyoung"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        if keyword != "비타 패드":
+            return []
+        return [
+            ProductSourceRecord(
+                source_brand_name="메디힐",
+                product_name_ko="메디힐 비타 브라이트닝 패드",
+                regular_price=24000,
+                source="oliveyoung",
+                source_product_id="official-1",
+            ),
+            ProductSourceRecord(
+                source_brand_name="메디힐",
+                product_name_ko="메디힐 비타 패드",
+                regular_price=22000,
+                source="oliveyoung",
+                source_product_id="official-2",
+            ),
+        ][:limit]
+
+
+class OliveYoungSupplementCollector:
+    name = "oliveyoung:public-api"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        if keyword != "비타 패드":
+            return []
+        return [
+            ProductSourceRecord(
+                source_brand_name="메디힐",
+                product_name_ko="메디힐 비타 패드",
+                regular_price=19000,
+                source="oliveyoung",
+                source_product_id="supplement-1",
+            )
+        ][:limit]
+
+
 @pytest.mark.asyncio
 async def test_search_service_applies_price_filter(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -428,6 +469,33 @@ async def test_search_service_treats_known_brand_query_as_brand_filter(tmp_path)
     assert response.results[0].brand_ko == "뮤드"
     assert response.results[0].brand_en == "mude"
     assert response.results[0].product_name_ko == "뮤드 엔젤 허그 글레이즈 10종"
+
+
+@pytest.mark.asyncio
+async def test_search_service_preserves_official_oliveyoung_order(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"MEDIHEAL","aliases":["메디힐"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    service = SearchService(
+        collectors=[OfficialOrderCollector(), OliveYoungSupplementCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        prefer_live_official_results=True,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("비타 패드", SearchCriteria(limit=2))
+
+    assert response.count == 2
+    assert [result.product_name_ko for result in response.results] == [
+        "메디힐 비타 브라이트닝 패드",
+        "메디힐 비타 패드",
+    ]
 
 
 @pytest.mark.asyncio
