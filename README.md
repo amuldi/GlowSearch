@@ -174,6 +174,21 @@ NEXT_PUBLIC_API_BASE_URL=https://glowsearch-backend.onrender.com
 
 Render backend에는 Backend 환경 변수를 등록합니다. `render.yaml`은 현재 Olive Young 전용 파이프라인 기준입니다.
 
+### Render 자동 배포 보강
+
+Render 서비스가 GitHub push를 바로 반영하지 않으면 deploy hook으로 강제 트리거합니다.
+
+1. Render Dashboard에서 backend service를 엽니다.
+2. Settings의 Deploy Hook URL을 복사합니다.
+3. GitHub repository Settings > Secrets and variables > Actions에 `RENDER_DEPLOY_HOOK_URL` secret을 추가합니다.
+4. 이후 `main`에 backend 변경이 push되면 `.github/workflows/deploy-render-backend.yml`이 해당 커밋 SHA로 Render deploy hook을 호출합니다.
+
+배포된 백엔드 커밋은 health 응답에서 확인합니다.
+
+```bash
+curl https://glowsearch-backend.onrender.com/health
+```
+
 ## 검증
 
 ```bash

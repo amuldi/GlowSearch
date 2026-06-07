@@ -1,3 +1,4 @@
+import os
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,7 +15,19 @@ router = APIRouter()
 
 @router.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "release_sha": _release_sha(),
+    }
+
+
+def _release_sha() -> str:
+    return (
+        os.getenv("GLOWSEARCH_RELEASE_SHA")
+        or os.getenv("RENDER_GIT_COMMIT")
+        or os.getenv("GITHUB_SHA")
+        or "unknown"
+    )
 
 
 @router.get("/search", response_model=SearchResponse)

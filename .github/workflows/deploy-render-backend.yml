@@ -1,0 +1,27 @@
+name: Deploy Render Backend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "render.yaml"
+      - ".github/workflows/deploy-render-backend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: render-backend-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy hook
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          test -n "$RENDER_DEPLOY_HOOK_URL"
+          curl -fsS -X POST "${RENDER_DEPLOY_HOOK_URL}?ref=${GITHUB_SHA}"
