@@ -1026,7 +1026,7 @@ class SearchService:
         product: ProductSearchResult,
         product_query: str,
         index: int,
-    ) -> tuple[int, int]:
+    ) -> tuple[int, int, int]:
         query_key = cls._key(product_query)
         haystack_key = cls._key(" ".join(
             value
@@ -1034,21 +1034,22 @@ class SearchService:
             if value
         ))
         if not query_key or not haystack_key:
-            return (0, -index)
+            return (0, 0, -index)
 
         category_tokens = cls._category_tokens(product_query)
         if category_tokens and not all(token in haystack_key for token in category_tokens):
-            return (0, -index)
+            return (0, 0, -index)
         distinctive_tokens = cls._distinctive_tokens(product_query)
         if distinctive_tokens and not any(token in haystack_key for token in distinctive_tokens):
-            return (0, -index)
+            return (0, 0, -index)
 
         score = 100 if query_key in haystack_key else 0
         for token in cls._tokens(product_query):
             token_key = cls._key(token)
             if len(token_key) >= 2 and token_key in haystack_key:
                 score += 10
-        return (score, -index)
+        source_priority = product.source_priority if product.source_priority is not None else 1000
+        return (score, -source_priority, -index)
 
     @staticmethod
     def _tokens(value: str) -> list[str]:

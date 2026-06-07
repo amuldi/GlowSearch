@@ -636,6 +636,43 @@ async def test_search_service_merges_results_from_multiple_sources(tmp_path) -> 
 
 
 @pytest.mark.asyncio
+async def test_search_service_uses_source_priority_for_tied_matches(tmp_path) -> None:
+    class ReversedPriorityCollector:
+        name = "reversed-priority"
+
+        async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+            return [
+                ProductSourceRecord(
+                    source_brand_name="BRTC",
+                    product_name_ko="제품 공식몰",
+                    regular_price=24000,
+                    source="official",
+                ),
+                ProductSourceRecord(
+                    source_brand_name="BRTC",
+                    product_name_ko="제품 올리브영",
+                    regular_price=24000,
+                    source="oliveyoung",
+                ),
+            ]
+
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    service = SearchService(
+        collectors=[ReversedPriorityCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search("제품", SearchCriteria(limit=24))
+
+    assert [result.source for result in response.results] == ["oliveyoung", "official"]
+
+
+@pytest.mark.asyncio
 async def test_search_service_can_filter_to_oliveyoung_sources_only(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text('{"entries":[]}', encoding="utf-8")
