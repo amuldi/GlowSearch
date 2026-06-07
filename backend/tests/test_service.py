@@ -819,6 +819,7 @@ async def test_search_service_returns_primary_oliveyoung_before_slow_supplements
         "메디힐 비타 브라이트닝 패드",
         "메디힐 비타 패드",
     ]
+    await asyncio.sleep(0)
     assert slow_supplement.cancelled is True
 
 
@@ -850,6 +851,7 @@ async def test_search_service_returns_public_api_before_slow_official_html(
     assert elapsed < 0.4
     assert response.count == 1
     assert response.results[0].product_name_ko == "메디힐 비타 패드"
+    await asyncio.sleep(0)
     assert slow_official.cancelled is True
 
 

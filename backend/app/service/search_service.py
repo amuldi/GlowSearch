@@ -479,14 +479,7 @@ class SearchService:
         finally:
             for task in pending:
                 task.cancel()
-            if pending:
-                try:
-                    await asyncio.wait_for(
-                        asyncio.gather(*pending, return_exceptions=True),
-                        timeout=0.5,
-                    )
-                except TimeoutError:
-                    pass
+                task.add_done_callback(self._consume_cancelled_task)
 
         if official_primary_records:
             records = self._dedupe_records(
@@ -568,6 +561,13 @@ class SearchService:
                 f"{collector.name}: live collection deadline exceeded",
                 timeout=True,
             )
+
+    @staticmethod
+    def _consume_cancelled_task(task: asyncio.Task[object]) -> None:
+        try:
+            task.exception()
+        except (asyncio.CancelledError, Exception):
+            return
 
     @staticmethod
     def _is_oliveyoung_collector(collector: ProductCollector) -> bool:
