@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     max_results: int = 480
     source_time_budget_seconds: float = 2.5
     live_collect_deadline_seconds: float = 3.2
+    live_first_result_grace_seconds: float = 0.8
     background_collect_deadline_seconds: float = 18.0
     managed_scraping_time_budget_seconds: float = 4.0
     result_source_prefixes: Annotated[list[str], NoDecode] = Field(

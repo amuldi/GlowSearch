@@ -48,6 +48,7 @@ class SearchService:
         preserve_official_order: bool = True,
         source_time_budget_seconds: float = 3.0,
         live_collect_deadline_seconds: float = 3.2,
+        live_first_result_grace_seconds: float = 0.8,
         background_collect_deadline_seconds: float = 18.0,
         source_time_budgets: dict[str, float] | None = None,
         allowed_result_source_prefixes: tuple[str, ...] | None = None,
@@ -68,6 +69,7 @@ class SearchService:
         self._preserve_official_order = preserve_official_order
         self._source_time_budget_seconds = source_time_budget_seconds
         self._live_collect_deadline_seconds = live_collect_deadline_seconds
+        self._live_first_result_grace_seconds = live_first_result_grace_seconds
         self._background_collect_deadline_seconds = background_collect_deadline_seconds
         self._source_time_budgets = source_time_budgets or {}
         self._source_policy = source_policy or SourcePolicy(
@@ -400,9 +402,19 @@ class SearchService:
             else deadline_seconds
         )
         deadline_at = perf_counter() + max(collection_deadline_seconds, 0.1)
+        first_result_at: float | None = None
         try:
             while pending:
-                remaining_seconds = deadline_at - perf_counter()
+                now = perf_counter()
+                remaining_seconds = deadline_at - now
+                if first_result_at is not None:
+                    grace_remaining_seconds = (
+                        first_result_at + max(self._live_first_result_grace_seconds, 0) - now
+                    )
+                    if grace_remaining_seconds <= 0:
+                        self._record_pending_source_timeouts(pending, tasks)
+                        break
+                    remaining_seconds = min(remaining_seconds, grace_remaining_seconds)
                 if remaining_seconds <= 0:
                     self._record_pending_source_timeouts(pending, tasks)
                     break
@@ -431,6 +443,7 @@ class SearchService:
                     if error:
                         errors.append(error)
                     if source_records:
+                        first_result_at = first_result_at or perf_counter()
                         if (
                             self._is_oliveyoung_collector(collector)
                             and query == primary_query

@@ -88,6 +88,7 @@ async def diagnostics(
         "warmup_on_startup": settings.product_index_warmup_on_startup,
         "source_time_budget_seconds": settings.source_time_budget_seconds,
         "live_collect_deadline_seconds": settings.live_collect_deadline_seconds,
+        "live_first_result_grace_seconds": settings.live_first_result_grace_seconds,
         "background_collect_deadline_seconds": settings.background_collect_deadline_seconds,
         "browser_collector_enabled": settings.browser_collector_enabled,
         "live_search_required": settings.oliveyoung_live_search_required,
