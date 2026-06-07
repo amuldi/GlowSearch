@@ -34,15 +34,22 @@ async def main() -> None:
     parser.add_argument("--base-url", default="http://localhost:8000")
     parser.add_argument("--limit", type=int, default=24)
     parser.add_argument("--repeat", type=int, default=3)
+    parser.add_argument("--concurrency", type=int, default=1)
     parser.add_argument("--query", action="append", dest="queries")
     args = parser.parse_args()
 
     queries = tuple(args.queries or DEFAULT_QUERIES)
     samples: list[Sample] = []
+    semaphore = asyncio.Semaphore(max(args.concurrency, 1))
+
+    async def limited_measure(client: httpx.AsyncClient, query: str) -> Sample:
+        async with semaphore:
+            return await _measure(client, args.base_url, query, args.limit)
+
     async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
         for _ in range(max(args.repeat, 1)):
             batch = await asyncio.gather(
-                *(_measure(client, args.base_url, query, args.limit) for query in queries)
+                *(limited_measure(client, query) for query in queries)
             )
             samples.extend(batch)
 
