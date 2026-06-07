@@ -85,9 +85,9 @@ def get_search_service() -> SearchService:
 
 
 def _build_collectors(settings: Settings) -> list[ProductCollector]:
-    collectors: list[ProductCollector] = [
-        OliveYoungCollector(settings),
-    ]
+    collectors: list[ProductCollector] = []
+    if settings.oliveyoung_html_collector_enabled:
+        collectors.append(OliveYoungCollector(settings))
     if settings.oliveyoung_public_api_enabled:
         collectors.append(OliveYoungPublicApiCollector(settings))
     collectors.append(LocalVerifiedCatalogCollector(settings.verified_catalog_path))

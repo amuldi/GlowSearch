@@ -42,8 +42,13 @@ class ApifyOliveYoungCollector:
 
         brand = _first_value(item, "brand", "brandName", "brand_name")
         name = _first_value(item, "productName", "product_name", "name", "title")
+        category = _first_value(item, "category", "categoryName", "category_name")
         image = _first_value(item, "imageUrl", "image_url", "image", "thumbnail")
         price = parse_krw_price(_first_value(item, "price", "officialPrice", "regularPrice"))
+        original_price = parse_krw_price(_first_value(item, "originalPrice", "original_price"))
+        sale_price = parse_krw_price(
+            _first_value(item, "discountPrice", "salePrice", "sale_price")
+        )
         shade = _first_value(item, "shade", "color", "option", "optionName")
         source_url = _first_value(item, "url", "sourceUrl", "source_url", "productUrl")
         product_id = _first_value(item, "goodsNo", "productId", "id")
@@ -54,12 +59,22 @@ class ApifyOliveYoungCollector:
         return ProductSourceRecord(
             source_brand_name=clean_text(brand),
             product_name_ko=clean_text(name),
-            regular_price=price,
+            category=clean_text(category),
+            regular_price=price or sale_price or original_price,
+            original_price=original_price,
+            sale_price=sale_price,
+            discount_rate=_parse_int(_first_value(item, "discountRate", "discount_rate")),
+            rating=_parse_float(_first_value(item, "rating", "avgRating", "reviewScore")),
+            review_count=_parse_int(_first_value(item, "reviewCount", "review_count")),
             shade=clean_text(shade),
+            description=clean_text(_first_value(item, "description", "summary")),
+            options=_parse_options(_first_value(item, "options", "optionNames", "variants")),
+            sold_out=_parse_sold_out(item),
             image_url=clean_text(image),
             source=self.name,
             source_url=clean_text(source_url),
             source_product_id=clean_text(product_id),
+            updated_at=clean_text(_first_value(item, "updatedAt", "updated_at")),
         )
 
 
@@ -68,4 +83,63 @@ def _first_value(item: dict, *keys: str) -> object | None:
         value = item.get(key)
         if value not in ("", None):
             return value
+    return None
+
+
+def _parse_int(value: object | None) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        digits = "".join(char for char in value if char.isdigit())
+        return int(digits) if digits else None
+    return None
+
+
+def _parse_float(value: object | None) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip().replace(",", "."))
+        except ValueError:
+            return None
+    return None
+
+
+def _parse_options(value: object | None) -> list[str] | None:
+    if isinstance(value, str):
+        option = clean_text(value)
+        return [option] if option else None
+    if not isinstance(value, list):
+        return None
+    options: list[str] = []
+    for item in value:
+        option = clean_text(item) if isinstance(item, str) else None
+        if isinstance(item, dict):
+            option = clean_text(_first_value(item, "name", "optionName", "title", "color"))
+        if option and option not in options:
+            options.append(option)
+    return options or None
+
+
+def _parse_sold_out(item: dict) -> bool | None:
+    sold_out = _first_value(item, "soldOut", "sold_out", "outOfStock")
+    if isinstance(sold_out, bool):
+        return sold_out
+    in_stock = _first_value(item, "inStock", "in_stock", "available")
+    if isinstance(in_stock, bool):
+        return not in_stock
+    status = clean_text(_first_value(item, "stockStatus", "availability", "status"))
+    if status:
+        status_key = status.casefold()
+        if any(token in status_key for token in ("sold_out", "out_of_stock", "품절")):
+            return True
+        if any(token in status_key for token in ("in_stock", "available", "판매중")):
+            return False
     return None

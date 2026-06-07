@@ -76,6 +76,27 @@ def test_parse_original_and_sale_prices_from_oliveyoung_listing_markup() -> None
     assert records[0].sale_price == 23900
 
 
+def test_parse_listing_without_discount_does_not_set_sale_price() -> None:
+    html = """
+    <ul class="cate_prd_list">
+      <li>
+        <span class="tx_brand">컬러그램</span>
+        <p class="tx_name">컬러그램 무할인 상품</p>
+        <p class="prd_price">
+          <span class="tx_org"><span class="tx_num">17,000</span>원</span>
+          <span class="tx_cur"><span class="tx_num">17,000</span>원</span>
+        </p>
+      </li>
+    </ul>
+    """
+
+    records = parse_search_results(html, base_url=BASE_URL, limit=10)
+
+    assert records[0].regular_price == 17000
+    assert records[0].original_price == 17000
+    assert records[0].sale_price is None
+
+
 def test_parse_modern_oliveyoung_brand_name_markup() -> None:
     html = """
     <ul>
@@ -140,6 +161,40 @@ def test_parse_oliveyoung_embedded_product_literal() -> None:
     assert records[0].product_name_ko == "믹순 히알레배 포어 블러링 크림 50ml"
     assert records[0].regular_price == 14900
     assert records[0].source_product_id == "A000000238408"
+
+
+def test_parse_structured_product_fields() -> None:
+    html = """
+    <script type="application/ld+json">
+      {
+        "@type": "Product",
+        "goodsNo": "A000000238409",
+        "brandName": "롬앤",
+        "goodsName": "롬앤 글래스팅 컬러 글로스",
+        "categoryName": "메이크업 > 립",
+        "originalPrice": "13000",
+        "priceToPay": "9900",
+        "discountRate": "23",
+        "ratingValue": "4.7",
+        "reviewCount": "321",
+        "description": "원본 설명",
+        "options": ["01 피오니 발레"],
+        "stockStatus": "in_stock",
+        "imageUrl": "//image.oliveyoung.co.kr/item.jpg"
+      }
+    </script>
+    """
+
+    records = parse_search_results(html, base_url=BASE_URL, limit=10)
+
+    assert records[0].category == "메이크업 > 립"
+    assert records[0].sale_price == 9900
+    assert records[0].discount_rate == 23
+    assert records[0].rating == 4.7
+    assert records[0].review_count == 321
+    assert records[0].description == "원본 설명"
+    assert records[0].options == ["01 피오니 발레"]
+    assert records[0].sold_out is False
 
 
 def test_parse_next_detail_page_price_and_name() -> None:

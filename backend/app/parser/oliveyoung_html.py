@@ -71,6 +71,22 @@ OPTION_SELECTORS = (
     "[class*='option'] li",
     "[class*='option'] button",
 )
+CATEGORY_SELECTORS = (
+    ".loc_history",
+    ".breadcrumb",
+    "[class*='breadcrumb']",
+    "[class*='category']",
+)
+RATING_SELECTORS = (
+    "[class*='rating']",
+    "[class*='score']",
+    ".prd_point_area",
+)
+REVIEW_COUNT_SELECTORS = (
+    "[class*='review']",
+    ".review_point",
+    ".goods_reputation",
+)
 
 
 def parse_search_results(html: str, *, base_url: str, limit: int) -> list[ProductSourceRecord]:
@@ -101,22 +117,31 @@ def parse_detail_page(html: str, *, base_url: str, source_url: str | None = None
     original_price, sale_price = _detail_prices(soup)
     original_price = base.original_price or original_price or base.regular_price
     sale_price = base.sale_price or sale_price
+    sale_price = _sale_price_only_if_discounted(original_price, sale_price)
     price = sale_price if sale_price is not None else original_price
     shade = base.shade or _extract_shade(soup)
+    options = base.options or _extract_options(soup)
     goods_no = base.source_product_id or _extract_goods_no(source_url or "") or _extract_goods_no(str(soup))
 
     return ProductSourceRecord(
         source_brand_name=brand,
         product_name_ko=title,
+        category=base.category or _extract_category(soup),
         regular_price=price,
         original_price=original_price,
         sale_price=sale_price,
         discount_rate=base.discount_rate,
+        rating=base.rating or _extract_rating(soup),
+        review_count=base.review_count or _extract_review_count(soup),
         shade=shade,
+        description=base.description or _meta_content(soup, "og:description"),
+        options=options,
+        sold_out=base.sold_out if base.sold_out is not None else _is_sold_out(soup),
         image_url=image,
         source="oliveyoung",
         source_url=source_url or base.source_url,
         source_product_id=goods_no,
+        updated_at=base.updated_at,
     )
 
 
@@ -162,6 +187,7 @@ def _parse_product_node(node: Tag, *, base_url: str) -> ProductSourceRecord | No
     )
     original_price = original_price or attr_original_price
     sale_price = sale_price or attr_sale_price
+    sale_price = _sale_price_only_if_discounted(original_price, sale_price)
     price = sale_price if sale_price is not None else original_price
     image = _first_image(node, base_url) or normalize_image_url(
         _first_attr(
@@ -197,10 +223,14 @@ def _parse_product_node(node: Tag, *, base_url: str) -> ProductSourceRecord | No
     return ProductSourceRecord(
         source_brand_name=brand,
         product_name_ko=name,
+        category=clean_text(
+            _first_attr(node, "data-category", "data-category-name", "data-disp-cat-nm")
+        ),
         regular_price=price,
         original_price=original_price,
         sale_price=sale_price,
         shade=None,
+        sold_out=_is_sold_out(node),
         image_url=image,
         source="oliveyoung",
         source_url=source_url,
@@ -341,6 +371,7 @@ def _record_from_mapping(item: dict, *, base_url: str) -> ProductSourceRecord | 
     )
     if original_price is None:
         original_price = parse_krw_price(_pick(offers, "highPrice"))
+    sale_price = _sale_price_only_if_discounted(original_price, sale_price)
     price = sale_price if sale_price is not None else original_price
     source_url = _pick(item, "url", "link", "goodsUrl", "goodsDetailUrl", "productUrl")
     source_url = urljoin(base_url, source_url) if isinstance(source_url, str) else None
@@ -365,15 +396,33 @@ def _record_from_mapping(item: dict, *, base_url: str) -> ProductSourceRecord | 
     return ProductSourceRecord(
         source_brand_name=clean_text(brand),
         product_name_ko=clean_text(name),
+        category=clean_text(
+            _pick(
+                item,
+                "category",
+                "categoryName",
+                "categoryFullName",
+                "dispCatNm",
+                "displayCategory",
+            )
+        ),
         regular_price=price,
         original_price=original_price,
         sale_price=sale_price,
         discount_rate=_parse_int(_pick(item, "discountRate", "dcRate", "discount_rate")),
+        rating=_parse_float(_pick(item, "ratingValue", "rating", "avgRating", "reviewScore")),
+        review_count=_parse_int(
+            _pick(item, "reviewCount", "reviewsCount", "reviewCnt", "ratingCount")
+        ),
         shade=clean_text(_pick(item, "shade", "color", "optionName")),
+        description=clean_text(_pick(item, "description", "summary", "goodsDesc")),
+        options=_parse_options(_pick(item, "options", "optionNames", "variants")),
+        sold_out=_parse_sold_out(item),
         image_url=normalize_image_url(clean_text(image_raw), base_url),
         source="oliveyoung",
         source_url=source_url,
         source_product_id=clean_text(goods_no),
+        updated_at=clean_text(_pick(item, "updatedAt", "updated_at", "lastUpdatedAt")),
     )
 
 
@@ -487,7 +536,7 @@ def _detail_prices(soup: BeautifulSoup) -> tuple[int | None, int | None]:
     if price_meta:
         meta_price = parse_krw_display_price(price_meta)
         sale_price = sale_price or meta_price
-    return original_price, sale_price
+    return original_price, _sale_price_only_if_discounted(original_price, sale_price)
 
 
 def _node_price(node: Tag | BeautifulSoup) -> int | None:
@@ -513,7 +562,18 @@ def _node_prices(node: Tag | BeautifulSoup) -> tuple[int | None, int | None]:
             if price is not None:
                 sale_price = price
                 break
-    return original_price, sale_price
+    return original_price, _sale_price_only_if_discounted(original_price, sale_price)
+
+
+def _sale_price_only_if_discounted(
+    original_price: int | None,
+    sale_price: int | None,
+) -> int | None:
+    if sale_price is None:
+        return None
+    if original_price is None:
+        return sale_price
+    return sale_price if sale_price < original_price else None
 
 
 def _parse_int(value: object | None) -> int | None:
@@ -526,6 +586,49 @@ def _parse_int(value: object | None) -> int | None:
     if isinstance(value, str):
         digits = re.sub(r"[^0-9]", "", value)
         return int(digits) if digits else None
+    return None
+
+
+def _parse_float(value: object | None) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip().replace(",", "."))
+        except ValueError:
+            return None
+    return None
+
+
+def _parse_options(value: object | None) -> list[str] | None:
+    if isinstance(value, str):
+        option = clean_text(value)
+        return [option] if option else None
+    if not isinstance(value, list):
+        return None
+    options: list[str] = []
+    for item in value:
+        option = clean_text(item) if isinstance(item, str) else None
+        if isinstance(item, dict):
+            option = clean_text(_pick(item, "name", "optionName", "title", "color"))
+        if option and option not in options:
+            options.append(option)
+    return options or None
+
+
+def _parse_sold_out(item: dict) -> bool | None:
+    sold_out = _pick(item, "soldOut", "sold_out", "outOfStock")
+    if isinstance(sold_out, bool):
+        return sold_out
+    availability = clean_text(_pick(item, "availability", "stockStatus", "status"))
+    if availability:
+        key = availability.casefold()
+        if any(token in key for token in ("sold_out", "out_of_stock", "품절")):
+            return True
+        if any(token in key for token in ("in_stock", "available", "판매중")):
+            return False
     return None
 
 
@@ -596,6 +699,80 @@ def _extract_shade(soup: BeautifulSoup) -> str | None:
     if not unique:
         return None
     return ", ".join(unique[:12])
+
+
+def _extract_options(soup: BeautifulSoup) -> list[str] | None:
+    options: list[str] = []
+    seen: set[str] = set()
+    for selector in OPTION_SELECTORS:
+        for node in soup.select(selector):
+            text = clean_text(node.get_text(" ", strip=True))
+            if not text or _is_option_noise(text):
+                continue
+            key = text.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            options.append(text)
+    return options[:30] or None
+
+
+def _extract_category(soup: BeautifulSoup) -> str | None:
+    for selector in CATEGORY_SELECTORS:
+        node = soup.select_one(selector)
+        if not node:
+            continue
+        text = clean_text(node.get_text(" > ", strip=True))
+        if text and not _is_option_noise(text):
+            return text
+    return None
+
+
+def _extract_rating(soup: BeautifulSoup) -> float | None:
+    for selector in RATING_SELECTORS:
+        node = soup.select_one(selector)
+        if not node:
+            continue
+        rating = _parse_rating_text(node.get_text(" ", strip=True))
+        if rating is not None:
+            return rating
+    return None
+
+
+def _extract_review_count(soup: BeautifulSoup) -> int | None:
+    for selector in REVIEW_COUNT_SELECTORS:
+        node = soup.select_one(selector)
+        if not node:
+            continue
+        review_count = _parse_review_count_text(node.get_text(" ", strip=True))
+        if review_count is not None:
+            return review_count
+    return None
+
+
+def _parse_rating_text(value: str) -> float | None:
+    match = re.search(r"([0-5](?:[.,]\d)?)\s*(?:점|/)", value)
+    if not match:
+        return None
+    return _parse_float(match.group(1))
+
+
+def _parse_review_count_text(value: str) -> int | None:
+    if "리뷰" not in value and "review" not in value.casefold():
+        return None
+    match = re.search(r"([\d,]+)\s*(?:건|개)?", value)
+    if not match:
+        return None
+    return _parse_int(match.group(1))
+
+
+def _is_sold_out(node: Tag | BeautifulSoup) -> bool | None:
+    text = clean_text(node.get_text(" ", strip=True))
+    if not text:
+        return None
+    if any(token in text for token in ("품절", "일시품절", "구매불가")):
+        return True
+    return None
 
 
 def _is_option_noise(text: str) -> bool:

@@ -30,6 +30,9 @@ class LocalVerifiedCatalogCollector:
                         item.get("brand_ko"),
                         item.get("brand_en"),
                         item.get("product_name_ko"),
+                        item.get("category"),
+                        item.get("description"),
+                        " ".join(item.get("options", [])),
                         " ".join(item.get("keywords", [])),
                     ]
                     if value
@@ -42,13 +45,23 @@ class LocalVerifiedCatalogCollector:
                 ProductSourceRecord(
                     source_brand_name=clean_text(item.get("brand_ko") or item.get("brand_en")),
                     product_name_ko=clean_text(item.get("product_name_ko")),
+                    category=clean_text(item.get("category")),
                     regular_price=item.get("price"),
+                    original_price=item.get("original_price"),
+                    sale_price=item.get("sale_price"),
+                    discount_rate=item.get("discount_rate"),
+                    rating=item.get("rating"),
+                    review_count=item.get("review_count"),
                     currency=clean_text(item.get("currency")) or "KRW",
                     shade=clean_text(item.get("shade")),
+                    description=clean_text(item.get("description")),
+                    options=_clean_options(item.get("options")),
+                    sold_out=item.get("sold_out"),
                     image_url=clean_text(item.get("image_url")),
                     source=clean_text(item.get("source")) or "oliveyoung",
                     source_url=clean_text(item.get("source_url")),
                     source_product_id=clean_text(item.get("goods_no")),
+                    updated_at=clean_text(item.get("updated_at")),
                 )
             )
             if len(records) >= limit:
@@ -75,3 +88,10 @@ class LocalVerifiedCatalogCollector:
         if text is None:
             return []
         return [cls._key(token) for token in re.findall(r"[0-9A-Za-z가-힣]+", text) if cls._key(token)]
+
+
+def _clean_options(value: object) -> list[str] | None:
+    if not isinstance(value, list):
+        return None
+    options = [text for item in value if (text := clean_text(item))]
+    return options or None

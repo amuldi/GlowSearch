@@ -69,6 +69,8 @@ async def index_status(
             "warmup_on_startup": settings.product_index_warmup_on_startup,
             "max_seed_queries": settings.product_index_max_seed_queries,
             "browser_collector_enabled": settings.browser_collector_enabled,
+            "oliveyoung_html_collector_enabled": settings.oliveyoung_html_collector_enabled,
+            "oliveyoung_public_api_enabled": settings.oliveyoung_public_api_enabled,
             "live_search_required": settings.oliveyoung_live_search_required,
             "admin_token_configured": bool(settings.product_index_admin_token),
         }
@@ -91,6 +93,8 @@ async def diagnostics(
         "live_first_result_grace_seconds": settings.live_first_result_grace_seconds,
         "background_collect_deadline_seconds": settings.background_collect_deadline_seconds,
         "browser_collector_enabled": settings.browser_collector_enabled,
+        "oliveyoung_html_collector_enabled": settings.oliveyoung_html_collector_enabled,
+        "oliveyoung_public_api_enabled": settings.oliveyoung_public_api_enabled,
         "live_search_required": settings.oliveyoung_live_search_required,
         "result_source_prefixes": settings.result_source_prefixes,
         "managed_search_api_enabled": settings.managed_search_api_enabled,

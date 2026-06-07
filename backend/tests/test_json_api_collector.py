@@ -16,7 +16,13 @@ async def test_json_api_product_collector_maps_normalized_product_payload() -> N
                     {
                         "brand": "rom&nd",
                         "productName": "Juicy Lasting Tint",
+                        "category": ["Makeup", "Lip"],
                         "price": 13000,
+                        "rating": "4.6",
+                        "reviewCount": "100",
+                        "options": [{"optionName": "Figfig"}],
+                        "inStock": False,
+                        "description": "source description",
                         "imageUrl": "https://example.test/tint.jpg",
                         "productUrl": "https://example.test/products/1",
                         "id": "sku-1",
@@ -41,6 +47,12 @@ async def test_json_api_product_collector_maps_normalized_product_payload() -> N
     assert records[0].source == "discovery:json-api"
     assert records[0].source_brand_name == "rom&nd"
     assert records[0].product_name_ko == "Juicy Lasting Tint"
+    assert records[0].category == "Makeup > Lip"
+    assert records[0].rating == 4.6
+    assert records[0].review_count == 100
+    assert records[0].options == ["Figfig"]
+    assert records[0].sold_out is True
+    assert records[0].description == "source description"
     assert records[0].source_product_id == "sku-1"
 
 

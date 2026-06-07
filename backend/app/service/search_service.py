@@ -956,6 +956,7 @@ class SearchService:
     ) -> ProductSourceRecord:
         return existing.model_copy(
             update={
+                "category": incoming.category or existing.category,
                 "source_brand_name": incoming.source_brand_name or existing.source_brand_name,
                 "product_name_ko": existing.product_name_ko or incoming.product_name_ko,
                 "regular_price": (
@@ -986,8 +987,20 @@ class SearchService:
                 "currency": incoming.currency or existing.currency,
                 "shade": existing.shade or incoming.shade,
                 "image_url": incoming.image_url or existing.image_url,
+                "rating": incoming.rating if incoming.rating is not None else existing.rating,
+                "review_count": (
+                    incoming.review_count
+                    if incoming.review_count is not None
+                    else existing.review_count
+                ),
+                "description": incoming.description or existing.description,
+                "options": incoming.options or existing.options,
+                "sold_out": (
+                    incoming.sold_out if incoming.sold_out is not None else existing.sold_out
+                ),
                 "source_url": existing.source_url or incoming.source_url,
                 "source_product_id": existing.source_product_id or incoming.source_product_id,
+                "updated_at": incoming.updated_at or existing.updated_at,
             }
         )
 
@@ -1092,11 +1105,21 @@ class SearchService:
         index: int,
     ) -> tuple[int, int, int]:
         query_key = cls._key(product_query)
-        haystack_key = cls._key(" ".join(
-            value
-            for value in [product.brand_ko, product.brand_en, product.product_name_ko, product.shade]
-            if value
-        ))
+        haystack_key = cls._key(
+            " ".join(
+                value
+                for value in [
+                    product.brand_ko,
+                    product.brand_en,
+                    product.product_name_ko,
+                    product.category,
+                    product.shade,
+                    product.description,
+                    " ".join(product.options or []),
+                ]
+                if value
+            )
+        )
         if not query_key or not haystack_key:
             return (0, 0, -index)
 

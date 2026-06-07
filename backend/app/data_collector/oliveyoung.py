@@ -8,6 +8,7 @@ import httpx
 
 from app.core.config import Settings
 from app.data_collector.base import SourceUnavailableError
+from app.ingestion.safety import is_bot_detection_response
 from app.models.product import ProductSourceRecord
 from app.parser.oliveyoung_html import parse_detail_page, parse_search_results
 
@@ -90,7 +91,11 @@ class OliveYoungCollector:
         except httpx.HTTPError as exc:
             raise SourceUnavailableError(f"Olive Young request failed: {exc}") from exc
 
-        if response.status_code in {403, 429}:
+        if is_bot_detection_response(
+            status_code=response.status_code,
+            text=response.text[:4096],
+            headers=dict(response.headers),
+        ):
             raise SourceUnavailableError(
                 f"Olive Young blocked the request with HTTP {response.status_code}"
             )
@@ -123,7 +128,11 @@ class OliveYoungCollector:
                     response = await client.get(record.source_url)
                 except httpx.HTTPError:
                     return record
-                if response.status_code != 200:
+                if response.status_code != 200 or is_bot_detection_response(
+                    status_code=response.status_code,
+                    text=response.text[:4096],
+                    headers=dict(response.headers),
+                ):
                     return record
                 detail = parse_detail_page(
                     response.text,

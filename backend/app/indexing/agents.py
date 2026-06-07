@@ -7,6 +7,7 @@ from typing import Protocol
 import httpx
 
 from app.core.config import Settings
+from app.ingestion.safety import is_bot_detection_response
 from app.indexing.store import ProductIndexStore
 from app.models.product import ProductSourceRecord
 from app.normalizer.text import clean_text
@@ -120,7 +121,11 @@ class OliveYoungDetailEnrichmentAgent:
             response = await client.get(record.source_url)
         except httpx.HTTPError:
             return None
-        if response.status_code != 200:
+        if response.status_code != 200 or is_bot_detection_response(
+            status_code=response.status_code,
+            text=response.text[:4096],
+            headers=dict(response.headers),
+        ):
             return None
         return parse_detail_page(
             response.text,
@@ -158,8 +163,19 @@ class OliveYoungDetailEnrichmentAgent:
                 "currency": detail.currency or record.currency,
                 "shade": detail.shade or record.shade,
                 "image_url": detail.image_url or record.image_url,
+                "category": detail.category or record.category,
+                "rating": detail.rating if detail.rating is not None else record.rating,
+                "review_count": (
+                    detail.review_count
+                    if detail.review_count is not None
+                    else record.review_count
+                ),
+                "description": detail.description or record.description,
+                "options": detail.options or record.options,
+                "sold_out": detail.sold_out if detail.sold_out is not None else record.sold_out,
                 "source_url": detail.source_url or record.source_url,
                 "source_product_id": detail.source_product_id or record.source_product_id,
+                "updated_at": detail.updated_at or record.updated_at,
             }
         )
 

@@ -8,12 +8,24 @@ Olive Young을 우선 소스로 사용하면서 Musinsa, 공식 브랜드 사이
 
 - 검색 결과는 Olive Young을 최우선으로 보지만, source policy가 허용한 Musinsa, 공식 브랜드, managed API, barcode/GTIN, discovery API 결과도 같은 `/search` 응답으로 반환할 수 있습니다.
 - 원본에서 확인하지 못한 값은 만들지 않고 `null`로 둡니다.
+- 공식 공개 Olive Young 상품 API는 확인하지 못했습니다. 현재 기본 빠른 source는 기존 프로젝트가 쓰던 공개 JSON adapter이며, 공식 사이트 HTML collector는 준수/차단 리스크 때문에 기본 비활성화합니다.
 - 검색은 캐시와 SQLite 제품 인덱스에서 먼저 빠르게 반환하고, 부족하면 빠른 live source를 병렬 보강합니다.
 - 실시간 수집 결과는 백그라운드에서 상세 페이지로 보강한 뒤 인덱스에 저장되어 다음 검색부터 빠르게 재사용됩니다.
 - 기본 검색은 인덱스/캐시 우선입니다. `GLOWSEARCH_OLIVEYOUNG_LIVE_SEARCH_REQUIRED=true`일 때만 매 요청에서 실시간 공식 검색을 강제합니다.
-- 빠른 소스는 병렬로 실행하고, 브라우저 수집은 기본 비활성화합니다. 꼭 필요할 때만 `GLOWSEARCH_BROWSER_COLLECTOR_ENABLED=true`로 켭니다.
+- 빠른 소스는 병렬로 실행하고, 공식 HTML/브라우저 수집은 기본 비활성화합니다. 꼭 필요하고 허용 범위를 검토했을 때만 `GLOWSEARCH_OLIVEYOUNG_HTML_COLLECTOR_ENABLED=true` 또는 `GLOWSEARCH_BROWSER_COLLECTOR_ENABLED=true`로 켭니다.
 - 같은 Olive Young `goodsNo`는 하나의 상품으로 합칩니다. 다른 source는 source attribution과 priority를 유지합니다.
 - 브랜드 영문명은 `backend/data/brand_registry.json`의 공식 alias를 기준으로 정규화합니다.
+
+## Olive Young 조사 요약
+
+- 공식 공개 상품 검색 API나 공식 개발자 문서는 확인하지 못했습니다.
+- `https://www.oliveyoung.co.kr/store/search/getSearchMain.do?query=...`와 상품 상세 URL은 웹 화면에서 쓰는 HTML 경로입니다. 공개 API 계약이 아니므로 구조가 바뀔 수 있고, 대량 호출 대상이 아닙니다.
+- `https://www.oliveyoung.co.kr/robots.txt`는 named bot별 crawl-delay와 허용 경로를 두지만 `User-agent: *`는 전체 disallow입니다. GlowSearch는 기본 설정에서 공식 HTML collector를 끄고, 직접 HTML 수집은 opt-in으로만 둡니다.
+- 한국 Olive Young 공식 사이트에서 403/429/503, Cloudflare challenge, captcha, “잠시만 기다려 주세요” 같은 신호가 오면 우회하지 않고 중단 또는 backoff합니다.
+- GraphQL endpoint는 안전하게 접근 가능한 공개 경로로 확인하지 못했습니다.
+- `https://us.oliveyoung.com/robots.txt`는 `/search`를 disallow하므로 US 검색 페이지 수집은 피합니다.
+- 현재 기본 JSON adapter는 `https://mcp.aka.page/api/oliveyoung/products` 형식의 비공식/public adapter입니다. 운영에서는 장애와 데이터 지연 가능성을 감안하고, managed scraping API나 정식 제휴 데이터로 대체할 수 있게 adapter boundary를 유지합니다.
+- 참고 가능한 공개 repo로 `nightmegaziifnb/kr-oliveyoung-scraper`가 있습니다. GitHub topic 기준 2025-12-13 업데이트, JavaScript + Playwright/Crawlee 계열, release 없음, star/fork가 적어 유지보수 신뢰도는 낮습니다. 코드를 직접 vendoring하지 않고 구조 참고 수준으로만 봅니다.
 
 ## 검색 파이프라인
 
@@ -27,8 +39,8 @@ Next.js 검색 화면
   -> 인덱스에 충분한 결과가 있으면 즉시 반환하고 백그라운드 refresh 예약
   -> 인덱스가 부족하거나 live 강제 모드면 빠른 수집기 병렬 실행
   -> 빠른 수집기 병렬 실행
-       - OliveYoungCollector: 올리브영 HTML 검색
-       - OliveYoungPublicApiCollector: public API 가격/이미지
+       - OliveYoungPublicApiCollector: 공개 JSON adapter 가격/이미지/재고/리뷰 일부
+       - OliveYoungCollector: 올리브영 HTML 검색, opt-in fallback
        - LocalVerifiedCatalogCollector: 검증된 로컬 보조 데이터
        - ApifyOliveYoungCollector: APIFY_TOKEN이 있을 때만 사용
        - JsonApiProductCollector: configured managed/search/barcode API normalized JSON adapter
@@ -53,6 +65,7 @@ GlowSearch/
       core/             환경 설정
       data_collector/   Olive Young 수집기와 fallback
       indexing/         제품 인덱스 저장소와 수집 에이전트
+      ingestion/        안전 수집 유틸, pipeline, CSV export
       models/           API 응답/수집 스키마
       normalizer/       브랜드/상품 정규화
       observability/    검색/소스/인덱스 메트릭
@@ -125,17 +138,24 @@ curl 'http://localhost:8000/search?q=선크림&limit=24'
       "brand_ko": "라운드랩",
       "brand_en": "ROUND LAB",
       "product_name_ko": "라운드랩 자작나무 수분 선크림",
+      "category": "스킨케어 > 선케어",
       "price": 17800,
       "original_price": 25000,
       "sale_price": 17800,
       "discount_rate": 28,
+      "rating": 4.8,
+      "review_count": 1200,
       "currency": "KRW",
       "shade": null,
       "image_url": "https://...",
+      "description": null,
+      "options": null,
+      "sold_out": false,
       "source_url": "https://www.oliveyoung.co.kr/...",
       "source": "oliveyoung",
       "source_label": "Olive Young",
-      "source_priority": 10
+      "source_priority": 10,
+      "updated_at": "2026-06-08T00:00:00+00:00"
     }
   ],
   "source_errors": []
@@ -160,6 +180,11 @@ GLOWSEARCH_RESULT_SOURCE_PREFIXES=oliveyoung,official,musinsa,managed,barcode,di
 GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_ENABLED=true
 GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_BASE_URL=https://mcp.aka.page
 GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_TIMEOUT_SECONDS=6.0
+GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RETRY_ATTEMPTS=2
+GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RETRY_BASE_DELAY_SECONDS=0.5
+GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RETRY_MAX_DELAY_SECONDS=4.0
+GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RATE_LIMIT_PER_SECOND=1.0
+GLOWSEARCH_OLIVEYOUNG_HTML_COLLECTOR_ENABLED=false
 GLOWSEARCH_OLIVEYOUNG_OFFICIAL_ORDER_ENABLED=true
 GLOWSEARCH_OLIVEYOUNG_LIVE_SEARCH_REQUIRED=false
 
@@ -213,12 +238,13 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## 데이터 원칙
 
-- 상품 데이터는 원본 source가 제공한 값만 사용합니다. 현재 기본 source는 Olive Young HTML/public API, 검증 카탈로그, 선택형 Apify이고, 추가 source는 normalized JSON adapter 뒤에 둡니다.
+- 상품 데이터는 원본 source가 제공한 값만 사용합니다. 현재 기본 source는 공개 JSON adapter, 검증 카탈로그, 선택형 Apify이고, 추가 source는 normalized JSON adapter 뒤에 둡니다.
 - 상품명, 가격, 이미지, 링크는 원본에 없으면 임의로 채우지 않습니다.
 - 영문 브랜드명이 없으면 `brand_registry.json`에 alias를 추가해 보강합니다.
-- SQLite 제품 인덱스는 검색 속도와 커버리지를 위한 저장소입니다. 가격/할인 정보는 live refresh 결과로 계속 갱신합니다.
+- SQLite 제품 인덱스는 검색 속도와 커버리지를 위한 저장소입니다. 저장 필드는 `product_id`, `product_name`, `brand_name`, `category`, `price`, `discount_price`, `rating`, `review_count`, `image_url`, `product_url`, `description`, `options`, `sold_out`, `source`, `updated_at`에 맞춰 확장했습니다.
+- 가격/할인 정보는 live refresh 결과로 갱신합니다. 원가와 현재가가 같으면 할인가를 노출하지 않습니다.
 - 시작 시 warmup은 기본 비활성화합니다. 운영에서는 `/index/warm`을 Render Cron 또는 수동 admin job으로 호출해 live 검색과 경쟁하지 않게 합니다.
-- 인덱스 저장 전 `OliveYoungDetailEnrichmentAgent`가 상품 상세 페이지를 가져와 브랜드명, 상품명, 가격, 이미지 정보를 보강합니다.
+- 인덱스 저장 전 `OliveYoungDetailEnrichmentAgent`는 opt-in으로 상품 상세 페이지를 가져와 브랜드명, 상품명, 가격, 이미지, 옵션 정보를 보강합니다. 차단 신호가 있으면 우회하지 않고 기존 record를 유지합니다.
 - `GLOWSEARCH_OLIVEYOUNG_OFFICIAL_ORDER_ENABLED=true`이면 live 결과와 쿼리별 인덱스 결과가 Olive Young 공식 검색 순서를 보존합니다.
 - `GLOWSEARCH_OLIVEYOUNG_LIVE_SEARCH_REQUIRED=true`이면 속도보다 공식 live 일치를 우선해 캐시/인덱스 즉시 반환을 건너뜁니다. 기본값은 `false`입니다.
 - 쿼리별 인덱스 순서는 Olive Young 공식 검색 수집 순서를 보존합니다. 공식 검색이 실패하거나 결과가 부족하면 인덱스와 보조 소스로 보강합니다.
@@ -249,6 +275,27 @@ curl -X POST "https://glowsearch-backend.onrender.com/index/warm?token=$GLOWSEAR
 ```
 
 목표는 “검색 요청에서 모든 상품을 실시간으로 긁기”가 아니라, 카테고리/브랜드/상품 검색어를 백그라운드로 계속 수집해 DB에 쌓고 검색은 DB에서 즉시 반환하는 구조입니다. 전체 커버리지를 안정적으로 올리려면 SQLite에 Render persistent disk를 붙이거나 Postgres로 이전해야 합니다.
+
+## 안전 수집 CLI
+
+로컬 개발이나 운영 job에서 공개 JSON adapter 기반으로 seed query를 수집하고 SQLite/CSV로 확인할 수 있습니다.
+
+```bash
+cd backend
+.venv/bin/python scripts/ingest_oliveyoung.py --query 젤 --limit 48 --db-path data/product_index.sqlite3 --csv data/oliveyoung_export.csv
+.venv/bin/python scripts/ingest_oliveyoung.py --use-default-seeds --max-queries 50 --limit 48 --db-path data/product_index.sqlite3
+```
+
+기본 수집은 query별 48개, 초당 1 요청입니다. 50개 seed면 네트워크 지연을 빼고도 최소 50초 이상 걸립니다. 180개 seed를 한 페이지씩 수집하면 raw 후보는 최대 8,640개이고, dedupe 후 실제 상품 수는 더 작습니다. `limit=480`으로 올리면 query별 최대 10페이지까지 수집하므로 coverage는 늘지만 수집 시간과 source 부하도 같이 늘어납니다.
+
+CSV export는 개발 확인용입니다. 운영 검색은 SQLite index를 읽고, 장기 운영은 Render persistent disk 또는 Postgres로 이전합니다.
+
+## 운영/법무 주의
+
+- robots.txt, 약관, rate limit, 제휴/사용 권한을 확인하지 않은 대량 수집은 실행하지 않습니다.
+- 403, 429, 503, Cloudflare, captcha, login wall이 보이면 우회하지 않습니다.
+- Playwright/Selenium은 endpoint discovery 또는 보수적 fallback에만 사용하고, fingerprint 우회나 anti-bot 회피 목적 설정은 넣지 않습니다.
+- production-grade 전체 Olive Young coverage는 공식/제휴 데이터, managed scraping API, 또는 명시적으로 허용된 데이터 공급자를 우선 검토합니다.
 
 ## 아키텍처 노트와 롤아웃
 

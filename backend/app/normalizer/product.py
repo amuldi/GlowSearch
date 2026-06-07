@@ -22,15 +22,22 @@ class ProductNormalizer:
                 record.product_name_ko,
             ),
             product_name_ko=clean_text(record.product_name_ko),
+            category=clean_text(record.category),
             price=display_price,
             original_price=original_price,
             sale_price=sale_price,
             discount_rate=record.discount_rate,
+            rating=record.rating,
+            review_count=record.review_count,
             currency=clean_text(record.currency) or "KRW",
             shade=clean_text(record.shade),
             image_url=normalize_image_url(record.image_url, self._base_url),
+            description=clean_text(record.description),
+            options=_clean_options(record.options),
+            sold_out=record.sold_out,
             source_url=normalize_image_url(record.source_url, self._base_url),
             source=record.source,
+            updated_at=record.updated_at,
         )
 
     def normalize_brand_filter(self, brand: str) -> str | None:
@@ -76,3 +83,8 @@ class ProductNormalizer:
         if text is None:
             return ""
         return re.sub(r"[\s\-_./]+", "", text).casefold()
+
+
+def _clean_options(options: list[str] | None) -> list[str] | None:
+    cleaned = [text for option in options or [] if (text := clean_text(option))]
+    return cleaned or None

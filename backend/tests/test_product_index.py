@@ -5,6 +5,8 @@ import pytest
 
 from app.cache.ttl import AsyncTTLCache
 from app.data_collector.base import SearchCriteria
+from app.ingestion.export import write_products_csv
+from app.ingestion.oliveyoung_pipeline import OliveYoungIngestionPipeline
 from app.indexing.agents import ProductIngestionAgent, SourceDiscoveryAgent
 from app.indexing.store import SQLiteProductIndexStore
 from app.models.product import ProductSourceRecord
@@ -47,6 +49,9 @@ class SlowProductIndexStore:
     async def stats(self) -> dict[str, int | str | None]:
         return {"product_count": 0, "query_count": 0, "last_refreshed_at": None}
 
+    async def all_products(self, limit: int | None = None) -> list[ProductSourceRecord]:
+        return []
+
     async def close(self) -> None:
         return None
 
@@ -66,6 +71,34 @@ class OfficialCollector:
                 regular_price=14000,
                 source="oliveyoung",
                 source_product_id="official-live-1",
+            )
+        ][:limit]
+
+
+class FakeIngestionCollector:
+    name = "oliveyoung:public-api"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        return [
+            ProductSourceRecord(
+                source_brand_name="뮤드",
+                product_name_ko=f"뮤드 {keyword} 상품",
+                category="메이크업 > 립",
+                regular_price=17000,
+                original_price=21000,
+                sale_price=17000,
+                discount_rate=19,
+                rating=4.7,
+                review_count=123,
+                shade="02 로즈",
+                description="원본 제공 설명",
+                options=["01 피치", "02 로즈"],
+                sold_out=False,
+                image_url="https://image.oliveyoung.co.kr/item.png",
+                source="oliveyoung",
+                source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A1",
+                source_product_id="A1",
+                updated_at="2026-06-08T00:00:00+00:00",
             )
         ][:limit]
 
@@ -138,6 +171,73 @@ async def test_product_index_keeps_official_query_rank_and_fallback_text(tmp_pat
 
     assert [record.source_product_id for record in ranked] == ["A", "B"]
     assert [record.source_product_id for record in fallback] == ["B"]
+
+
+@pytest.mark.asyncio
+async def test_product_index_persists_extended_product_fields(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "로즈 틴트",
+        [
+            ProductSourceRecord(
+                source_brand_name="뮤드",
+                product_name_ko="뮤드 로즈 틴트",
+                category="메이크업 > 립",
+                regular_price=17000,
+                original_price=21000,
+                sale_price=17000,
+                discount_rate=19,
+                rating=4.7,
+                review_count=123,
+                shade="02 로즈",
+                description="원본 제공 설명",
+                options=["01 피치", "02 로즈"],
+                sold_out=False,
+                source="oliveyoung",
+                source_product_id="A1",
+                updated_at="2026-06-08T00:00:00+00:00",
+            )
+        ],
+    )
+
+    records = await store.search("로즈", 10)
+    all_records = await store.all_products()
+    await store.close()
+
+    assert len(records) == 1
+    assert records[0].category == "메이크업 > 립"
+    assert records[0].rating == 4.7
+    assert records[0].review_count == 123
+    assert records[0].description == "원본 제공 설명"
+    assert records[0].options == ["01 피치", "02 로즈"]
+    assert records[0].sold_out is False
+    assert records[0].updated_at == "2026-06-08T00:00:00+00:00"
+    assert all_records[0].source_product_id == "A1"
+
+
+@pytest.mark.asyncio
+async def test_ingestion_pipeline_stores_records_and_csv_export(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    pipeline = OliveYoungIngestionPipeline(
+        collector=FakeIngestionCollector(),
+        store=store,
+    )
+
+    summary = await pipeline.ingest_queries(["틴트", "틴트", "  "], limit_per_query=10)
+    records = await store.search("로즈", 10)
+    csv_path = tmp_path / "products.csv"
+    exported_count = write_products_csv(await store.all_products(), csv_path)
+    await store.close()
+
+    assert summary.query_count == 1
+    assert summary.product_count == 1
+    assert summary.stored_count == 1
+    assert summary.failures == []
+    assert records[0].product_name_ko == "뮤드 틴트 상품"
+    assert exported_count == 1
+    csv_text = csv_path.read_text(encoding="utf-8-sig")
+    assert "product_id,product_name,brand_name" in csv_text
+    assert "A1,뮤드 틴트 상품,뮤드" in csv_text
 
 
 @pytest.mark.asyncio

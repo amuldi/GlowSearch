@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
 
 from app.core.config import Settings
 from app.data_collector.base import SourceUnavailableError
+from app.ingestion.safety import (
+    AsyncRateLimiter,
+    RetryConfig,
+    SleepFunc,
+    backoff_delay_seconds,
+    is_bot_detection_response,
+)
 from app.models.product import ProductSourceRecord
 from app.normalizer.text import clean_text, parse_krw_price
 
@@ -13,10 +21,27 @@ from app.normalizer.text import clean_text, parse_krw_price
 class OliveYoungPublicApiCollector:
     name = "oliveyoung:public-api"
 
-    def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None):
+    def __init__(
+        self,
+        settings: Settings,
+        client: httpx.AsyncClient | None = None,
+        *,
+        sleep: SleepFunc = asyncio.sleep,
+        rate_limiter: AsyncRateLimiter | None = None,
+    ):
         self._settings = settings
         self._base_url = settings.oliveyoung_public_api_base_url.rstrip("/")
         self._client = client
+        self._sleep = sleep
+        self._retry_config = RetryConfig(
+            attempts=max(settings.oliveyoung_public_api_retry_attempts, 1),
+            base_delay_seconds=settings.oliveyoung_public_api_retry_base_delay_seconds,
+            max_delay_seconds=settings.oliveyoung_public_api_retry_max_delay_seconds,
+        )
+        self._rate_limiter = rate_limiter or AsyncRateLimiter(
+            requests_per_second=settings.oliveyoung_public_api_rate_limit_per_second,
+            sleep=sleep,
+        )
 
     async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
         keyword = keyword.strip()
@@ -65,24 +90,53 @@ class OliveYoungPublicApiCollector:
         size: int,
     ) -> dict[str, Any]:
         params = {"keyword": keyword, "size": size, "page": page}
-        try:
-            response = await client.get(
-                f"{self._base_url}/api/oliveyoung/products",
-                params=params,
-            )
-        except httpx.HTTPError as exc:
-            raise SourceUnavailableError(f"Olive Young public API request failed: {exc}") from exc
+        last_error: SourceUnavailableError | None = None
+        for attempt_index in range(self._retry_config.attempts):
+            await self._rate_limiter.wait()
+            try:
+                response = await client.get(
+                    f"{self._base_url}/api/oliveyoung/products",
+                    params=params,
+                )
+            except httpx.HTTPError as exc:
+                last_error = SourceUnavailableError(
+                    f"Olive Young public API request failed: {exc}"
+                )
+                if attempt_index + 1 >= self._retry_config.attempts:
+                    raise last_error from exc
+                await self._sleep(backoff_delay_seconds(attempt_index, self._retry_config))
+                continue
 
-        if response.status_code in {403, 429, 503}:
-            raise SourceUnavailableError(
-                f"Olive Young public API returned HTTP {response.status_code}"
-            )
-        response.raise_for_status()
-        try:
-            payload = response.json()
-        except ValueError as exc:
-            raise SourceUnavailableError("Olive Young public API returned invalid JSON") from exc
-        return payload if isinstance(payload, dict) else {}
+            if is_bot_detection_response(
+                status_code=response.status_code,
+                text=response.text[:4096],
+                headers=dict(response.headers),
+            ):
+                last_error = SourceUnavailableError(
+                    f"Olive Young public API returned HTTP {response.status_code}"
+                )
+                if attempt_index + 1 >= self._retry_config.attempts:
+                    raise last_error
+                await self._sleep(backoff_delay_seconds(attempt_index, self._retry_config))
+                continue
+            try:
+                response.raise_for_status()
+            except httpx.HTTPError as exc:
+                last_error = SourceUnavailableError(
+                    f"Olive Young public API returned HTTP {response.status_code}"
+                )
+                if attempt_index + 1 >= self._retry_config.attempts:
+                    raise last_error from exc
+                await self._sleep(backoff_delay_seconds(attempt_index, self._retry_config))
+                continue
+            try:
+                payload = response.json()
+            except ValueError as exc:
+                raise SourceUnavailableError(
+                    "Olive Young public API returned invalid JSON"
+                ) from exc
+            return payload if isinstance(payload, dict) else {}
+        raise last_error or SourceUnavailableError("Olive Young public API request failed")
 
     def _record_from_item(self, item: object) -> ProductSourceRecord | None:
         if not isinstance(item, dict):
@@ -91,6 +145,16 @@ class OliveYoungPublicApiCollector:
         goods_no = clean_text(item.get("goodsNumber") or item.get("goodsNo"))
         name = clean_text(item.get("goodsName") or item.get("productName"))
         image_url = clean_text(item.get("imageUrl"))
+        category = clean_text(
+            _first_value(
+                item,
+                "category",
+                "categoryName",
+                "categoryFullName",
+                "displayCategory",
+                "dispCatNm",
+            )
+        )
         original_price = parse_krw_price(item.get("originalPrice"))
         discount_rate = _parse_int(item.get("discountRate"))
         price_to_pay = parse_krw_price(item.get("priceToPay"))
@@ -114,15 +178,28 @@ class OliveYoungPublicApiCollector:
         return ProductSourceRecord(
             source_brand_name=_infer_brand_from_name(name),
             product_name_ko=name,
+            category=category,
             regular_price=sale_price if sale_price is not None else price_to_pay or original_price,
             original_price=original_price,
             sale_price=sale_price,
             discount_rate=discount_rate if has_discount else None,
+            rating=_parse_float(_first_value(item, "rating", "avgRating", "reviewScore")),
+            review_count=_parse_int(
+                _first_value(item, "reviewCount", "reviewsCount", "reviewCnt")
+            ),
             currency="KRW",
+            description=clean_text(
+                _first_value(item, "description", "summary", "goodsDescription", "goodsDesc")
+            ),
+            options=_parse_options(
+                _first_value(item, "options", "optionNames", "variants", "items")
+            ),
+            sold_out=_parse_sold_out(item),
             image_url=image_url,
             source="oliveyoung",
             source_url=source_url,
             source_product_id=goods_no,
+            updated_at=clean_text(_first_value(item, "updatedAt", "updated_at", "lastUpdatedAt")),
         )
 
 
@@ -136,6 +213,63 @@ def _parse_int(value: Any) -> int | None:
     if isinstance(value, str):
         digits = "".join(char for char in value if char.isdigit())
         return int(digits) if digits else None
+    return None
+
+
+def _parse_float(value: Any) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        normalized = value.replace(",", ".").strip()
+        try:
+            return float(normalized)
+        except ValueError:
+            return None
+    return None
+
+
+def _parse_options(value: Any) -> list[str] | None:
+    if isinstance(value, str):
+        option = clean_text(value)
+        return [option] if option else None
+    if not isinstance(value, list):
+        return None
+    options: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            option = clean_text(item)
+        elif isinstance(item, dict):
+            option = clean_text(
+                _first_value(item, "name", "optionName", "option_name", "title", "color")
+            )
+        else:
+            option = None
+        if option and option not in options:
+            options.append(option)
+    return options or None
+
+
+def _parse_sold_out(item: dict[str, Any]) -> bool | None:
+    in_stock = item.get("inStock")
+    if isinstance(in_stock, bool):
+        return not in_stock
+    status = clean_text(item.get("stockStatus") or item.get("availability"))
+    if status:
+        status_key = status.casefold()
+        if any(token in status_key for token in ("sold_out", "out_of_stock", "품절")):
+            return True
+        if any(token in status_key for token in ("in_stock", "available", "판매중")):
+            return False
+    return None
+
+
+def _first_value(item: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        value = item.get(key)
+        if value not in ("", None):
+            return value
     return None
 
 
