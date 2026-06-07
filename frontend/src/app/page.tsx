@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, Loader2, Search, Sparkles, X } from "lucide-react";
+import { Check, Copy, Loader2, Search, X } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -28,6 +28,7 @@ const jpyFormatter = new Intl.NumberFormat("ja-JP", {
 const RESULT_PAGE_SIZE = 24;
 const DEFAULT_RESULT_LIMIT = RESULT_PAGE_SIZE;
 const MAX_RESULT_LIMIT = 480;
+const MIN_LOADING_MS = 700;
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -39,6 +40,7 @@ export default function Home() {
   const [isSearchButtonPressed, setIsSearchButtonPressed] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const searchButtonTimerRef = useRef<number | null>(null);
+  const searchRequestIdRef = useRef(0);
 
   const trimmedQuery = query.trim();
   const trimmedSubmittedQuery = submittedQuery.trim();
@@ -72,13 +74,17 @@ export default function Home() {
 
   useEffect(() => {
     if (!trimmedSubmittedQuery) {
+      searchRequestIdRef.current += 1;
       setIsLoading(false);
       setErrorMessage(null);
       return;
     }
 
     const controller = new AbortController();
+    const requestId = searchRequestIdRef.current + 1;
+    searchRequestIdRef.current = requestId;
     const runSearch = async () => {
+      const startedAt = Date.now();
       setIsLoading(true);
       setErrorMessage(null);
       try {
@@ -95,7 +101,13 @@ export default function Home() {
         setErrorMessage("검색 중 문제가 발생했습니다.");
         setResponse(null);
       } finally {
-        setIsLoading(false);
+        const remainingLoadingTime = MIN_LOADING_MS - (Date.now() - startedAt);
+        if (remainingLoadingTime > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, remainingLoadingTime));
+        }
+        if (searchRequestIdRef.current === requestId) {
+          setIsLoading(false);
+        }
       }
     };
     void runSearch();
@@ -154,6 +166,9 @@ export default function Home() {
       return;
     }
     triggerSearchButtonMotion();
+    setIsLoading(true);
+    setErrorMessage(null);
+    setResponse(null);
     setSubmittedQuery(trimmedQuery);
     setResultLimit(DEFAULT_RESULT_LIMIT);
     setSearchRun((current) => current + 1);
@@ -170,8 +185,8 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#fff7f6_0%,#fbfffb_46%,#ffffff_100%)] px-4 py-7 text-ink sm:px-6 lg:px-8">
       <section className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 pt-4 sm:pt-8">
-        <div className="flex items-center gap-2 rounded-full bg-white/70 px-4 py-2 text-base font-bold text-rosewood shadow-[0_10px_30px_rgba(159,63,85,0.10)]">
-          <Sparkles className="h-5 w-5 text-rose" aria-hidden="true" />
+        <div className="flex items-center gap-2.5 rounded-full bg-white/70 px-4 py-2 text-lg font-bold text-rosewood shadow-[0_10px_30px_rgba(159,63,85,0.10)] sm:text-xl">
+          <BrandIcon className="h-7 w-7" />
           GlowSearch
         </div>
 
@@ -228,6 +243,10 @@ export default function Home() {
         {isLoading ? (
           <div className="inline-flex items-center gap-2 rounded-full bg-white/85 px-4 py-2 text-sm font-semibold text-rosewood shadow-[0_10px_26px_rgba(159,63,85,0.10)]">
             <Loader2 className="h-4 w-4 animate-spin text-rose" aria-hidden="true" />
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose opacity-70" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose" />
+            </span>
             올리브영 상품 정보를 불러오는 중
           </div>
         ) : null}
@@ -272,6 +291,32 @@ export default function Home() {
         ) : null}
       </section>
     </main>
+  );
+}
+
+function BrandIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 96 96"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <rect width="96" height="96" rx="24" fill="#FFF0F3" />
+      <circle cx="48" cy="42" r="28" fill="#FFFFFF" />
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M48 18C34.745 18 24 28.745 24 42C24 55.255 34.745 66 48 66C61.255 66 72 55.255 72 42C72 28.745 61.255 18 48 18ZM48 31C41.925 31 37 35.925 37 42C37 48.075 41.925 53 48 53C54.075 53 59 48.075 59 42C59 35.925 54.075 31 48 31Z"
+        fill="#9F3F55"
+      />
+      <rect x="62" y="56" width="8" height="25" rx="4" transform="rotate(-45 62 56)" fill="#9F3F55" />
+      <path d="M29 57L39 48L49 58L39 77L29 57Z" fill="#D76580" />
+      <path d="M38 49L44 43L51 50L49 58L39 59L38 49Z" fill="#F7A5B5" />
+      <path d="M28 17L31 27L41 31L31 35L28 45L25 35L15 31L25 27L28 17Z" fill="#D76580" />
+      <path d="M72 16L74 23L81 26L74 29L72 36L70 29L63 26L70 23L72 16Z" fill="#F0A7B5" />
+    </svg>
   );
 }
 
