@@ -419,6 +419,11 @@ class SearchService:
                                 self._is_single_related_query(primary_query)
                                 and len(broad_records)
                                 >= self._broad_related_return_threshold(limit)
+                                and not self._has_pending_primary_oliveyoung_task(
+                                    pending,
+                                    tasks,
+                                    primary_query,
+                                )
                             ):
                                 return _CollectedResult(
                                     records=broad_records[: max(limit, 1) * 2],
@@ -524,6 +529,23 @@ class SearchService:
         return any(
             tasks[task][0].name == "oliveyoung" and tasks[task][1] == primary_query
             for task in pending
+        )
+
+    @classmethod
+    def _has_pending_primary_oliveyoung_task(
+        cls,
+        pending: set[asyncio.Task[tuple[list[ProductSourceRecord], str | None, bool]]],
+        tasks: dict[
+            asyncio.Task[tuple[list[ProductSourceRecord], str | None, bool]],
+            tuple[ProductCollector, str, int],
+        ],
+        primary_query: str,
+    ) -> bool:
+        return any(
+            task in pending
+            and task_query == primary_query
+            and cls._is_oliveyoung_collector(collector)
+            for task, (collector, task_query, _index) in tasks.items()
         )
 
     @classmethod

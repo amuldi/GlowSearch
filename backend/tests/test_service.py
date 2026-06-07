@@ -526,6 +526,36 @@ class JungSaemMoolSubBrandCollector:
         return [record] if record and limit > 0 else []
 
 
+class SlowPrimaryJungSaemMoolCollector:
+    name = "oliveyoung:public-api"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        if keyword == "정샘물":
+            await asyncio.sleep(0.02)
+            return [
+                ProductSourceRecord(
+                    source_brand_name="정샘물",
+                    product_name_ko=f"정샘물 공식 검색 상품 {index}",
+                    regular_price=30000 + index,
+                    source="oliveyoung",
+                    source_product_id=f"jsm-primary-{index}",
+                )
+                for index in range(4)
+            ][:limit]
+        if keyword == "비긴스 바이 정샘물":
+            return [
+                ProductSourceRecord(
+                    source_brand_name="비긴스",
+                    product_name_ko=f"비긴스 바이 정샘물 보강 상품 {index}",
+                    regular_price=20000 + index,
+                    source="oliveyoung",
+                    source_product_id=f"jsm-fallback-{index}",
+                )
+                for index in range(4)
+            ][:limit]
+        return []
+
+
 @pytest.mark.asyncio
 async def test_search_service_applies_price_filter(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -818,6 +848,43 @@ async def test_search_service_expands_jungsaemmool_subbrand_queries(
     ]
     assert response.results[1].brand_en == "BEGINS BY JUNGSAEMMOOL"
     assert response.results[1].product_name_ko == "[기획] 비긴스 바이 정샘물 흔적 세럼"
+
+
+@pytest.mark.asyncio
+async def test_search_service_waits_for_primary_jungsaemmool_results(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        (
+            '{"entries":['
+            '{"official_en":"JUNGSAEMMOOL","aliases":["정샘물"],"sources":[]},'
+            '{"official_en":"BEGINS BY JUNGSAEMMOOL",'
+            '"aliases":["비긴스 바이 정샘물","비긴스"],"sources":[]}'
+            "]}"
+        ),
+        encoding="utf-8",
+    )
+    service = SearchService(
+        collectors=[SlowPrimaryJungSaemMoolCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        preserve_official_order=True,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("정샘물", SearchCriteria(limit=4))
+
+    assert response.count == 4
+    assert [result.product_name_ko for result in response.results] == [
+        "정샘물 공식 검색 상품 0",
+        "정샘물 공식 검색 상품 1",
+        "정샘물 공식 검색 상품 2",
+        "정샘물 공식 검색 상품 3",
+    ]
 
 
 @pytest.mark.asyncio
