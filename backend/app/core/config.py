@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     oliveyoung_live_search_required: bool = False
     oliveyoung_public_api_enabled: bool = True
     oliveyoung_public_api_base_url: str = "https://mcp.aka.page"
-    oliveyoung_public_api_timeout_seconds: float = 2.5
+    oliveyoung_public_api_timeout_seconds: float = 6.0
     request_timeout_seconds: float = 12.0
     request_user_agent: str = (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
