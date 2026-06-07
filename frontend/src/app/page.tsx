@@ -186,7 +186,7 @@ export default function Home() {
     <main className="min-h-screen bg-[linear-gradient(180deg,#fff7f6_0%,#fbfffb_46%,#ffffff_100%)] px-4 py-7 text-ink sm:px-6 lg:px-8">
       <section className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 pt-4 sm:pt-8">
         <div className="flex items-center gap-3 text-3xl font-extrabold text-rosewood sm:text-4xl">
-          <BrandIcon className="h-10 w-10 sm:h-11 sm:w-11" />
+          <BrandIcon className="h-12 w-12 sm:h-14 sm:w-14" />
           GlowSearch
         </div>
 
@@ -303,12 +303,42 @@ function BrandIcon({ className }: { className?: string }) {
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
     >
-      <rect width="96" height="96" rx="24" fill="#FFF0F3" />
-      <path d="M48 11L56 35L81 36L61 51L68 76L48 61L28 76L35 51L15 36L40 35L48 11Z" fill="#9F3F55" />
-      <path d="M48 24L53 39L69 40L56 50L61 65L48 56L35 65L40 50L27 40L43 39L48 24Z" fill="#F7A5B5" />
-      <path d="M23 17L26 25L34 28L26 31L23 39L20 31L12 28L20 25L23 17Z" fill="#D76580" />
-      <path d="M75 17L77 24L84 26L77 28L75 35L73 28L66 26L73 24L75 17Z" fill="#F0A7B5" />
-      <path d="M73 62L75 68L81 70L75 72L73 78L71 72L65 70L71 68L73 62Z" fill="#D76580" />
+      <defs>
+        <linearGradient id="brand-star-fill" x1="22" y1="9" x2="75" y2="83" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#FFE3EC" />
+          <stop offset="0.26" stopColor="#FF9DB5" />
+          <stop offset="0.66" stopColor="#D85D80" />
+          <stop offset="1" stopColor="#9B3858" />
+        </linearGradient>
+        <linearGradient id="brand-star-shine" x1="30" y1="19" x2="58" y2="59" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#FFFFFF" stopOpacity="0.95" />
+          <stop offset="0.5" stopColor="#FFF1F6" stopOpacity="0.7" />
+          <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M48 7L58.2 33.2L86.4 35L64.6 52.8L72 80.3L48 65.2L24 80.3L31.4 52.8L9.6 35L37.8 33.2L48 7Z"
+        fill="#F3A6B8"
+        opacity="0.26"
+        transform="translate(0 5)"
+      />
+      <path
+        d="M48 7L58.2 33.2L86.4 35L64.6 52.8L72 80.3L48 65.2L24 80.3L31.4 52.8L9.6 35L37.8 33.2L48 7Z"
+        fill="url(#brand-star-fill)"
+        stroke="#9F3F55"
+        strokeWidth="2.6"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M38.5 35.2L47.6 16.5L55.9 36.8M31.6 53.8L47.8 61.5"
+        stroke="url(#brand-star-shine)"
+        strokeWidth="5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M18 15L20.4 21.6L27 24L20.4 26.4L18 33L15.6 26.4L9 24L15.6 21.6L18 15Z" fill="#FF9DB5" />
+      <path d="M78 13L79.8 18.2L85 20L79.8 21.8L78 27L76.2 21.8L71 20L76.2 18.2L78 13Z" fill="#FFD6E2" />
+      <circle cx="70" cy="63" r="2.2" fill="#FFF3F7" />
     </svg>
   );
 }
