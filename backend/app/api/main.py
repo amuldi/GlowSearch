@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -19,8 +21,19 @@ def create_app() -> FastAPI:
     )
     app.include_router(router, prefix=settings.api_prefix)
 
+    @app.on_event("startup")
+    async def warm_product_index() -> None:
+        if not settings.product_index_enabled or not settings.product_index_warmup_on_startup:
+            return
+        task = asyncio.create_task(get_search_service().warm_index())
+        app.state.product_index_warmup_task = task
+
     @app.on_event("shutdown")
     async def shutdown_search_service() -> None:
+        task = getattr(app.state, "product_index_warmup_task", None)
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
         await get_search_service().close()
 
     return app

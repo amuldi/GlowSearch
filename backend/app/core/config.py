@@ -49,6 +49,27 @@ class Settings(BaseSettings):
     brand_registry_path: Path = BACKEND_DIR / "data" / "brand_registry.json"
     verified_catalog_path: Path = BACKEND_DIR / "data" / "verified_products.json"
 
+    product_index_enabled: bool = True
+    product_index_path: Path = BACKEND_DIR / "data" / "product_index.sqlite3"
+    product_index_min_results: int = 8
+    product_index_background_refresh_enabled: bool = True
+    product_index_warmup_on_startup: bool = True
+    product_index_warmup_limit: int = 48
+    product_index_warmup_concurrency: int = 2
+    product_index_seed_queries: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: [
+            "선크림",
+            "틴트",
+            "쿠션",
+            "마스카라",
+            "토너패드",
+            "클렌징오일",
+            "뮤드",
+            "메디힐",
+            "라운드랩",
+        ]
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="GLOWSEARCH_",
@@ -58,6 +79,13 @@ class Settings(BaseSettings):
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value: str | list[str]) -> list[str]:
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("product_index_seed_queries", mode="before")
+    @classmethod
+    def parse_product_index_seed_queries(cls, value: str | list[str]) -> list[str]:
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value

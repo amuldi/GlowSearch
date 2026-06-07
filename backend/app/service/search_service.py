@@ -8,6 +8,8 @@ from dataclasses import dataclass, replace
 
 from app.cache.ttl import AsyncTTLCache
 from app.data_collector.base import ProductCollector, SearchCriteria, SourceUnavailableError
+from app.indexing.agents import ProductIngestionAgent, SourceDiscoveryAgent
+from app.indexing.store import ProductIndexStore
 from app.models.product import ProductSearchResult, ProductSourceRecord, SearchResponse
 from app.normalizer.brand import BrandMatch
 from app.normalizer.product import ProductNormalizer
@@ -29,6 +31,13 @@ class SearchService:
         normalizer: ProductNormalizer,
         cache: AsyncTTLCache[_CollectedResult],
         *,
+        product_index: ProductIndexStore | None = None,
+        ingestion_agent: ProductIngestionAgent | None = None,
+        source_discovery_agent: SourceDiscoveryAgent | None = None,
+        index_min_results: int = 8,
+        index_background_refresh_enabled: bool = True,
+        index_warmup_limit: int = 48,
+        index_warmup_concurrency: int = 2,
         source_time_budget_seconds: float = 3.0,
         source_time_budgets: dict[str, float] | None = None,
         allowed_result_source_prefixes: tuple[str, ...] | None = None,
@@ -36,9 +45,17 @@ class SearchService:
         self._collectors = collectors
         self._normalizer = normalizer
         self._cache = cache
+        self._product_index = product_index
+        self._ingestion_agent = ingestion_agent
+        self._source_discovery_agent = source_discovery_agent
+        self._index_min_results = max(index_min_results, 1)
+        self._index_background_refresh_enabled = index_background_refresh_enabled
+        self._index_warmup_limit = max(index_warmup_limit, 1)
+        self._index_warmup_concurrency = max(index_warmup_concurrency, 1)
         self._source_time_budget_seconds = source_time_budget_seconds
         self._source_time_budgets = source_time_budgets or {}
         self._allowed_result_source_prefixes = allowed_result_source_prefixes
+        self._background_tasks: set[asyncio.Task[None]] = set()
 
     async def search(self, query: str, criteria: SearchCriteria) -> SearchResponse:
         cleaned_query = query.strip()
@@ -103,7 +120,29 @@ class SearchService:
         collect_queries = self._collect_queries(cleaned_query, effective_criteria, brand_match)
         cache_key = f"{'|'.join(query.casefold() for query in collect_queries)}:{collect_limit}"
 
+        indexed_collected = await self._collect_index([cleaned_query, *collect_queries], collect_limit)
+        indexed_results, indexed_top_score = self._build_results(
+            indexed_collected.records,
+            cleaned_query,
+            effective_criteria,
+            brand_match,
+        )
+        index_threshold = min(criteria.limit, self._index_min_results)
+        if (
+            indexed_top_score > 0
+            and len(indexed_results) >= index_threshold
+            and not require_relevant
+        ):
+            self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
+            return SearchResponse(
+                query=cleaned_query,
+                count=len(indexed_results),
+                results=indexed_results,
+                source_errors=[],
+            )
+
         collected = await self._cache.get(cache_key)
+        collected_from_live = False
         if collected is None:
             if self._can_use_verified_shortcut(cleaned_query, require_relevant):
                 verified_collected = await self._collect_verified_cache(collect_queries, collect_limit)
@@ -127,10 +166,18 @@ class SearchService:
                 collect_limit,
                 allow_browser_fallback=allow_browser_fallback,
             )
+            collected_from_live = True
             await self._cache.set(cache_key, collected)
 
+        if collected_from_live:
+            self._schedule_ingest([cleaned_query, *collect_queries], collected.records)
+
+        result_records = collected.records
+        if indexed_collected.records:
+            result_records = self._dedupe_records([*result_records, *indexed_collected.records])
+
         results, top_score = self._build_results(
-            collected.records,
+            result_records,
             cleaned_query,
             effective_criteria,
             brand_match,
@@ -158,6 +205,24 @@ class SearchService:
             results=results,
             source_errors=collected.errors,
         )
+
+    async def _collect_index(self, queries: list[str], limit: int) -> _CollectedResult:
+        if self._product_index is None:
+            return _CollectedResult(records=[], errors=[])
+        records: list[ProductSourceRecord] = []
+        seen_queries: set[str] = set()
+        for query in queries:
+            text = clean_text(query)
+            key = self._key(text)
+            if not text or not key or key in seen_queries:
+                continue
+            seen_queries.add(key)
+            index_records = await self._product_index.search(text, limit)
+            if index_records:
+                records = self._dedupe_records([*records, *index_records])
+            if len(records) >= limit:
+                break
+        return _CollectedResult(records=records[:limit], errors=[])
 
     def _build_results(
         self,
@@ -288,6 +353,81 @@ class SearchService:
             if len(records) >= limit:
                 break
         return _CollectedResult(records=records, errors=errors)
+
+    def _schedule_ingest(self, queries: Iterable[str], records: list[ProductSourceRecord]) -> None:
+        if self._ingestion_agent is None or not records:
+            return
+        task = asyncio.create_task(self._ingest_safely(tuple(queries), records))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    def _schedule_index_refresh(
+        self,
+        original_query: str,
+        collect_queries: list[str],
+        limit: int,
+    ) -> None:
+        if not self._index_background_refresh_enabled or self._ingestion_agent is None:
+            return
+        task = asyncio.create_task(
+            self._refresh_index_safely(original_query, tuple(collect_queries), limit)
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    async def _ingest_safely(
+        self,
+        queries: Iterable[str],
+        records: list[ProductSourceRecord],
+    ) -> None:
+        if self._ingestion_agent is None:
+            return
+        try:
+            await self._ingestion_agent.ingest_search_results(queries, records)
+        except Exception:
+            return
+
+    async def _refresh_index_safely(
+        self,
+        original_query: str,
+        collect_queries: Iterable[str],
+        limit: int,
+    ) -> None:
+        if self._ingestion_agent is None:
+            return
+        try:
+            queries = [query for query in collect_queries if clean_text(query)]
+            collected = await self._collect(queries, limit, allow_browser_fallback=False)
+            await self._ingestion_agent.ingest_search_results(
+                [original_query, *queries],
+                collected.records,
+            )
+        except Exception:
+            return
+
+    async def warm_index(self) -> None:
+        if self._source_discovery_agent is None or self._ingestion_agent is None:
+            return
+        seeds = self._source_discovery_agent.seed_queries()
+        if not seeds:
+            return
+        semaphore = asyncio.Semaphore(self._index_warmup_concurrency)
+
+        async def warm_query(query: str) -> None:
+            async with semaphore:
+                collected = await self._collect(
+                    [query],
+                    self._index_warmup_limit,
+                    allow_browser_fallback=False,
+                )
+                await self._ingestion_agent.ingest_search_results([query], collected.records)
+
+        await asyncio.gather(*(warm_query(query) for query in seeds))
+
+    async def drain_background_tasks(self) -> None:
+        if not self._background_tasks:
+            return
+        await asyncio.gather(*list(self._background_tasks), return_exceptions=True)
 
     @staticmethod
     def _needs_browser_supplement(records: list[ProductSourceRecord], _limit: int) -> bool:
@@ -619,6 +759,13 @@ class SearchService:
         return max(criteria.limit, 48)
 
     async def close(self) -> None:
+        for task in list(self._background_tasks):
+            task.cancel()
+        if self._background_tasks:
+            await asyncio.gather(*list(self._background_tasks), return_exceptions=True)
+            self._background_tasks.clear()
+        if self._product_index is not None:
+            await self._product_index.close()
         for collector in self._collectors:
             close = getattr(collector, "close", None)
             if close is None:

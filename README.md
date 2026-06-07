@@ -8,6 +8,8 @@ Olive Young 상품을 빠르게 검색하고 브랜드명, 영문명, 원가, �
 
 - 검색 결과는 Olive Young 상품만 반환합니다.
 - 원본에서 확인하지 못한 값은 만들지 않고 `null`로 둡니다.
+- 검색은 SQLite 제품 인덱스에서 먼저 빠르게 반환하고, 부족하면 Olive Young 공식 검색을 실시간 보강합니다.
+- 실시간 수집 결과는 백그라운드로 인덱스에 저장되어 다음 검색부터 빠르게 재사용됩니다.
 - 빠른 소스는 병렬로 실행하고, 브라우저 수집은 모든 빠른 소스가 실패하거나 비었을 때만 사용합니다.
 - 같은 Olive Young `goodsNo`는 하나의 상품으로 합칩니다.
 - 브랜드 영문명은 `backend/data/brand_registry.json`의 공식 alias를 기준으로 정규화합니다.
@@ -18,12 +20,18 @@ Olive Young 상품을 빠르게 검색하고 브랜드명, 영문명, 원가, �
 Next.js 검색 화면
   -> FastAPI /search
   -> SearchService
-  -> 빠른 수집기 병렬 실행
+  -> SQLiteProductIndexStore에서 쿼리별 저장 결과 먼저 조회
+       - 이전 Olive Young 공식 검색 순서(query rank)를 유지
+       - 검색어 fallback은 상품명/브랜드/호수 텍스트 인덱스를 사용
+  -> 인덱스 결과가 충분하면 즉시 반환
+  -> 백그라운드 refresh로 Olive Young 공식 검색 결과 재수집
+  -> 인덱스 결과가 부족하면 빠른 수집기 병렬 실행
        - OliveYoungCollector: 올리브영 HTML 검색
        - OliveYoungPublicApiCollector: public API 가격/이미지
        - LocalVerifiedCatalogCollector: 검증된 로컬 보조 데이터
        - ApifyOliveYoungCollector: APIFY_TOKEN이 있을 때만 사용
   -> 결과가 없으면 BrowserOliveYoungCollector fallback
+  -> ProductIngestionAgent가 live 결과를 SQLite 인덱스에 저장
   -> ProductNormalizer
   -> 중복 제거, 필터, 랭킹
   -> ProductSearchResult 반환
@@ -39,6 +47,7 @@ GlowSearch/
       cache/            TTL 응답 캐시
       core/             환경 설정
       data_collector/   Olive Young 수집기와 fallback
+      indexing/         제품 인덱스 저장소와 수집 에이전트
       models/           API 응답/수집 스키마
       normalizer/       브랜드/상품 정규화
       parser/           HTML 파서
@@ -146,6 +155,16 @@ GLOWSEARCH_BROWSER_TIMEOUT_SECONDS=25
 # Optional managed Olive Young fallback
 GLOWSEARCH_APIFY_TOKEN=
 GLOWSEARCH_APIFY_ACTOR_ID=kitschy_marigold/oliveyoung-search-scraper
+
+# Product index
+GLOWSEARCH_PRODUCT_INDEX_ENABLED=true
+GLOWSEARCH_PRODUCT_INDEX_PATH=backend/data/product_index.sqlite3
+GLOWSEARCH_PRODUCT_INDEX_MIN_RESULTS=8
+GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_ENABLED=true
+GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP=true
+GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT=48
+GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY=2
+GLOWSEARCH_PRODUCT_INDEX_SEED_QUERIES=선크림,틴트,쿠션,마스카라,토너패드,클렌징오일,뮤드,메디힐,라운드랩
 ```
 
 Frontend:
@@ -159,7 +178,9 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - 상품 데이터는 Olive Young HTML, Olive Young public API, 검증 카탈로그, 선택형 Apify 결과에서만 가져옵니다.
 - 상품명, 가격, 이미지, 링크는 원본에 없으면 임의로 채우지 않습니다.
 - 영문 브랜드명이 없으면 `brand_registry.json`에 alias를 추가해 보강합니다.
-- 실시간 가격을 우선하므로 영구 제품 인덱스는 현재 검색 경로에 두지 않습니다.
+- SQLite 제품 인덱스는 검색 속도와 커버리지를 위한 저장소입니다. 가격/할인 정보는 live refresh 결과로 계속 갱신합니다.
+- 쿼리별 인덱스 순서는 Olive Young 공식 검색 수집 순서를 보존합니다. 인덱스가 아직 비어 있거나 결과가 부족하면 공식 검색을 실시간으로 보강합니다.
+- 운영에서 인덱스를 오래 유지하려면 Render persistent disk를 `GLOWSEARCH_PRODUCT_INDEX_PATH`에 연결하거나, 다음 단계에서 Postgres + full-text search로 이전합니다.
 
 ## 배포
 

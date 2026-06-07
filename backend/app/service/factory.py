@@ -8,6 +8,8 @@ from app.data_collector.browser_oliveyoung import BrowserOliveYoungCollector
 from app.data_collector.local_catalog import LocalVerifiedCatalogCollector
 from app.data_collector.oliveyoung import OliveYoungCollector
 from app.data_collector.oliveyoung_api import OliveYoungPublicApiCollector
+from app.indexing.agents import ProductIngestionAgent, SourceDiscoveryAgent
+from app.indexing.store import SQLiteProductIndexStore
 from app.normalizer.brand import BrandResolver
 from app.normalizer.product import ProductNormalizer
 from app.service.search_service import SearchService
@@ -21,10 +23,24 @@ def get_search_service() -> SearchService:
     brand_resolver = BrandResolver(settings.brand_registry_path)
     normalizer = ProductNormalizer(brand_resolver, settings.oliveyoung_base_url)
     cache = AsyncTTLCache(ttl_seconds=settings.cache_ttl_seconds)
+    index_store = (
+        SQLiteProductIndexStore(settings.product_index_path)
+        if settings.product_index_enabled
+        else None
+    )
+    ingestion_agent = ProductIngestionAgent(index_store) if index_store else None
+    discovery_agent = SourceDiscoveryAgent(settings.product_index_seed_queries)
     return SearchService(
         collectors=collectors,
         normalizer=normalizer,
         cache=cache,
+        product_index=index_store,
+        ingestion_agent=ingestion_agent,
+        source_discovery_agent=discovery_agent,
+        index_min_results=settings.product_index_min_results,
+        index_background_refresh_enabled=settings.product_index_background_refresh_enabled,
+        index_warmup_limit=settings.product_index_warmup_limit,
+        index_warmup_concurrency=settings.product_index_warmup_concurrency,
         source_time_budget_seconds=settings.source_time_budget_seconds,
         source_time_budgets={
             "oliveyoung:public-api": settings.oliveyoung_public_api_timeout_seconds,
