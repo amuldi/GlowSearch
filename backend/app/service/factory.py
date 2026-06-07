@@ -42,10 +42,16 @@ def get_search_service() -> SearchService:
         if index_store
         else None
     )
+    brand_seed_queries = list(settings.product_index_brand_queries)
+    if settings.product_index_brand_registry_warmup_enabled:
+        brand_seed_queries.extend(
+            brand_resolver.warmup_aliases(settings.product_index_brand_registry_warmup_limit)
+        )
     discovery_agent = SourceDiscoveryAgent(
         settings.product_index_seed_queries,
         category_queries=settings.product_index_category_queries,
-        brand_queries=settings.product_index_brand_queries,
+        brand_queries=brand_seed_queries,
+        max_seed_queries=settings.product_index_max_seed_queries,
     )
     return SearchService(
         collectors=collectors,
@@ -58,7 +64,8 @@ def get_search_service() -> SearchService:
         index_background_refresh_enabled=settings.product_index_background_refresh_enabled,
         index_warmup_limit=settings.product_index_warmup_limit,
         index_warmup_concurrency=settings.product_index_warmup_concurrency,
-        prefer_live_official_results=settings.oliveyoung_official_order_enabled,
+        prefer_live_official_results=settings.oliveyoung_live_search_required,
+        preserve_official_order=settings.oliveyoung_official_order_enabled,
         source_time_budget_seconds=settings.source_time_budget_seconds,
         source_time_budgets={
             "oliveyoung:public-api": settings.oliveyoung_public_api_timeout_seconds,

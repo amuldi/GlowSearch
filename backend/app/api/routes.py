@@ -1,7 +1,7 @@
 import os
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.core.config import get_settings
 from app.data_collector.base import SearchCriteria
@@ -54,3 +54,57 @@ async def search(
         limit=min(limit, settings.max_results),
     )
     return await service.search(term, criteria)
+
+
+@router.get("/index/status")
+async def index_status(
+    service: SearchService = Depends(get_search_service),
+) -> dict[str, int | str | None]:
+    return await service.index_stats()
+
+
+@router.post("/index/warm")
+async def warm_index(
+    request: Request,
+    q: Annotated[
+        list[str] | None,
+        Query(description="수집할 검색어. 생략하면 설정된 Olive Young seed 전체를 사용합니다."),
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=480, description="검색어별 수집 개수")] = 48,
+    wait: Annotated[bool, Query(description="true면 완료까지 기다립니다.")] = False,
+    token: Annotated[str | None, Query(description="GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN")] = None,
+    service: SearchService = Depends(get_search_service),
+) -> dict[str, int | str | bool]:
+    _require_index_admin(request, token)
+    if wait:
+        scheduled_queries = await service.warm_index(q, limit=limit)
+        return {
+            "status": "completed",
+            "scheduled_queries": scheduled_queries,
+            "limit": limit,
+            "wait": wait,
+        }
+    scheduled_queries = service.schedule_warm_index(q, limit=limit)
+    return {
+        "status": "scheduled",
+        "scheduled_queries": scheduled_queries,
+        "limit": limit,
+        "wait": wait,
+    }
+
+
+def _require_index_admin(request: Request, token: str | None) -> None:
+    settings = get_settings()
+    expected_token = settings.product_index_admin_token
+    if expected_token:
+        if token == expected_token:
+            return
+        raise HTTPException(status_code=403, detail="Invalid index admin token.")
+
+    client_host = request.client.host if request.client else ""
+    if client_host in {"127.0.0.1", "::1", "localhost"}:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Set GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN to enable remote index warmup.",
+    )

@@ -42,6 +42,7 @@ class BrandResolver:
     ):
         self._aliases: dict[str, str] = {}
         self._scan_aliases: list[tuple[str, str, str]] = []
+        self._warmup_aliases: list[str] = []
         self._external_resolvers = external_resolvers or []
         self._load_registry(registry_path)
 
@@ -72,6 +73,11 @@ class BrandResolver:
         for resolver in self._external_resolvers:
             resolver.close()
 
+    def warmup_aliases(self, limit: int | None = None) -> list[str]:
+        if limit is None or limit < 0:
+            return list(self._warmup_aliases)
+        return self._warmup_aliases[:limit]
+
     def match_text(self, value: str | None) -> BrandMatch | None:
         key = self._key(value)
         if not key:
@@ -101,6 +107,16 @@ class BrandResolver:
             if official is None:
                 continue
             values = [entry.official_en, *entry.aliases]
+            warmup_alias = next(
+                (
+                    alias_text
+                    for alias in entry.aliases
+                    if (alias_text := clean_text(alias)) and has_hangul(alias_text)
+                ),
+                None,
+            )
+            if warmup_alias and warmup_alias not in self._warmup_aliases:
+                self._warmup_aliases.append(warmup_alias)
             for alias in values:
                 key = self._key(alias)
                 if key:

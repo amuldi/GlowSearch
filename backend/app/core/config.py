@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     oliveyoung_base_url: str = "https://www.oliveyoung.co.kr"
     oliveyoung_official_order_enabled: bool = True
+    oliveyoung_live_search_required: bool = False
     oliveyoung_public_api_enabled: bool = True
     oliveyoung_public_api_base_url: str = "https://mcp.aka.page"
     oliveyoung_public_api_timeout_seconds: float = 6.0
@@ -40,7 +41,7 @@ class Settings(BaseSettings):
     oliveyoung_search_page_size: int = 48
     oliveyoung_search_max_pages: int = 10
 
-    browser_collector_enabled: bool = True
+    browser_collector_enabled: bool = False
     browser_headless: bool = True
     browser_timeout_seconds: float = 25.0
 
@@ -52,13 +53,17 @@ class Settings(BaseSettings):
 
     product_index_enabled: bool = True
     product_index_path: Path = BACKEND_DIR / "data" / "product_index.sqlite3"
+    product_index_admin_token: str | None = None
     product_index_min_results: int = 8
     product_index_background_refresh_enabled: bool = True
     product_index_warmup_on_startup: bool = True
     product_index_warmup_limit: int = 48
     product_index_warmup_concurrency: int = 2
+    product_index_max_seed_queries: int = 120
+    product_index_brand_registry_warmup_enabled: bool = True
+    product_index_brand_registry_warmup_limit: int = 80
     product_index_detail_enrichment_enabled: bool = True
-    product_index_detail_enrichment_max_records: int = 24
+    product_index_detail_enrichment_max_records: int = 12
     product_index_seed_queries: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "선크림",
@@ -67,6 +72,10 @@ class Settings(BaseSettings):
             "마스카라",
             "토너패드",
             "클렌징오일",
+            "립틴트",
+            "립밤",
+            "앰플",
+            "선세럼",
             "뮤드",
             "메디힐",
             "라운드랩",
@@ -75,23 +84,65 @@ class Settings(BaseSettings):
     product_index_category_queries: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "선크림",
+            "선스틱",
+            "선쿠션",
+            "선세럼",
+            "선스프레이",
             "톤업선크림",
             "쿠션",
             "파운데이션",
+            "베이스",
+            "프라이머",
             "컨실러",
             "파우더",
+            "팩트",
+            "블러셔",
+            "하이라이터",
+            "쉐딩",
+            "섀딩",
             "틴트",
+            "립틴트",
             "립밤",
             "립스틱",
+            "립글로스",
+            "립라이너",
             "아이섀도우",
+            "아이브로우",
             "아이라이너",
             "마스카라",
+            "픽서",
             "클렌징오일",
+            "클렌징워터",
+            "클렌징밤",
             "클렌징폼",
+            "필링",
+            "스크럽",
             "토너",
+            "스킨",
+            "에센스",
+            "앰플",
             "세럼",
+            "로션",
             "크림",
+            "수분크림",
+            "재생크림",
+            "아이크림",
             "토너패드",
+            "패드",
+            "마스크팩",
+            "팩",
+            "헤어오일",
+            "헤어팩",
+            "샴푸",
+            "트리트먼트",
+            "바디워시",
+            "바디로션",
+            "핸드크림",
+            "향수",
+            "디퓨저",
+            "네일",
+            "브러시",
+            "퍼프",
         ]
     )
     product_index_brand_queries: Annotated[list[str], NoDecode] = Field(
@@ -108,6 +159,29 @@ class Settings(BaseSettings):
             "어뮤즈",
             "토리든",
             "아누아",
+            "퓌",
+            "정샘물",
+            "닥터지",
+            "에스트라",
+            "이니스프리",
+            "라네즈",
+            "마녀공장",
+            "넘버즈인",
+            "바이오더마",
+            "피지오겔",
+            "센텔리안24",
+            "달바",
+            "스킨푸드",
+            "닥터자르트",
+            "브링그린",
+            "구달",
+            "릴리바이레드",
+            "투쿨포스쿨",
+            "더샘",
+            "바닐라코",
+            "에스쁘아",
+            "헤라",
+            "아이소이",
         ]
     )
 

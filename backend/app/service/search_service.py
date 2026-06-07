@@ -40,6 +40,7 @@ class SearchService:
         index_warmup_limit: int = 48,
         index_warmup_concurrency: int = 2,
         prefer_live_official_results: bool = False,
+        preserve_official_order: bool = True,
         source_time_budget_seconds: float = 3.0,
         source_time_budgets: dict[str, float] | None = None,
         allowed_result_source_prefixes: tuple[str, ...] | None = None,
@@ -55,6 +56,7 @@ class SearchService:
         self._index_warmup_limit = max(index_warmup_limit, 1)
         self._index_warmup_concurrency = max(index_warmup_concurrency, 1)
         self._prefer_live_official_results = prefer_live_official_results
+        self._preserve_official_order = preserve_official_order
         self._source_time_budget_seconds = source_time_budget_seconds
         self._source_time_budgets = source_time_budgets or {}
         self._allowed_result_source_prefixes = allowed_result_source_prefixes
@@ -189,7 +191,10 @@ class SearchService:
             cleaned_query,
             effective_criteria,
             brand_match,
-            preserve_order=collected.has_official_records or self._prefer_live_official_results,
+            preserve_order=(
+                (collected.has_official_records and self._preserve_official_order)
+                or self._prefer_live_official_results
+            ),
         )
         if require_relevant and allow_browser_retry and top_score <= 0 and collected.records:
             browser_collected = await self._collect_browser(collect_queries, collect_limit)
@@ -465,19 +470,67 @@ class SearchService:
         except Exception:
             return
 
-    async def warm_index(self) -> None:
-        if self._source_discovery_agent is None or self._ingestion_agent is None:
-            return
-        seeds = self._source_discovery_agent.seed_queries()
+    async def warm_index(
+        self,
+        queries: Iterable[str] | None = None,
+        *,
+        limit: int | None = None,
+    ) -> int:
+        seeds = self._warm_seed_queries(queries)
         if not seeds:
+            return 0
+        await self._warm_index_queries(seeds, limit or self._index_warmup_limit)
+        return len(seeds)
+
+    def schedule_warm_index(
+        self,
+        queries: Iterable[str] | None = None,
+        *,
+        limit: int | None = None,
+    ) -> int:
+        seeds = self._warm_seed_queries(queries)
+        if not seeds:
+            return 0
+        task = asyncio.create_task(
+            self._warm_index_queries_safely(seeds, limit or self._index_warmup_limit)
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return len(seeds)
+
+    async def index_stats(self) -> dict[str, int | str | None]:
+        if self._product_index is None:
+            return {
+                "product_count": 0,
+                "query_count": 0,
+                "last_refreshed_at": None,
+            }
+        return await self._product_index.stats()
+
+    def _warm_seed_queries(self, queries: Iterable[str] | None = None) -> list[str]:
+        if self._source_discovery_agent is None or self._ingestion_agent is None:
+            return []
+        if queries is None:
+            return self._source_discovery_agent.seed_queries()
+        return SourceDiscoveryAgent._dedupe(queries)
+
+    async def _warm_index_queries_safely(self, seeds: list[str], limit: int) -> None:
+        try:
+            await self._warm_index_queries(seeds, limit)
+        except Exception:
             return
+
+    async def _warm_index_queries(self, seeds: list[str], limit: int) -> None:
+        if self._ingestion_agent is None:
+            return
+        warm_limit = max(limit, 1)
         semaphore = asyncio.Semaphore(self._index_warmup_concurrency)
 
         async def warm_query(query: str) -> None:
             async with semaphore:
                 collected = await self._collect(
                     [query],
-                    self._index_warmup_limit,
+                    warm_limit,
                     allow_browser_fallback=False,
                 )
                 await self._ingestion_agent.ingest_search_results([query], collected.records)
@@ -631,7 +684,7 @@ class SearchService:
         return [
             product
             for product in results
-            if product.brand_en and product.product_name_ko
+            if product.product_name_ko and (product.brand_ko or product.brand_en)
         ]
 
     @classmethod
@@ -712,7 +765,7 @@ class SearchService:
         query_key = cls._key(product_query)
         haystack_key = cls._key(" ".join(
             value
-            for value in [product.brand_en, product.product_name_ko, product.shade]
+            for value in [product.brand_ko, product.brand_en, product.product_name_ko, product.shade]
             if value
         ))
         if not query_key or not haystack_key:

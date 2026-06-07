@@ -71,6 +71,22 @@ class IncompleteCollector:
         ]
 
 
+class MissingNameCollector:
+    name = "missing-name"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        return [
+            ProductSourceRecord(
+                source_brand_name="한글브랜드",
+                product_name_ko=None,
+                regular_price=12000,
+                shade=None,
+                image_url=None,
+                source="oliveyoung",
+            )
+        ]
+
+
 class SoldOutCollector:
     name = "sold-out"
 
@@ -784,7 +800,7 @@ async def test_search_service_enforces_source_time_budget(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_service_filters_results_missing_core_fields(tmp_path) -> None:
+async def test_search_service_keeps_results_missing_english_brand_alias(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text('{"entries":[]}', encoding="utf-8")
     service = SearchService(
@@ -797,6 +813,26 @@ async def test_search_service_filters_results_missing_core_fields(tmp_path) -> N
     )
 
     response = await service.search("제품", SearchCriteria(limit=24))
+
+    assert response.count == 1
+    assert response.results[0].brand_ko == "한글브랜드"
+    assert response.results[0].brand_en is None
+
+
+@pytest.mark.asyncio
+async def test_search_service_filters_results_missing_product_name(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    service = SearchService(
+        collectors=[MissingNameCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search("한글브랜드", SearchCriteria(limit=24))
 
     assert response.count == 0
     assert response.results == []

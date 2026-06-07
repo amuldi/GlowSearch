@@ -24,19 +24,24 @@ class SourceDiscoveryAgent:
         *,
         category_queries: Iterable[str] = (),
         brand_queries: Iterable[str] = (),
+        max_seed_queries: int | None = None,
     ):
         self._seed_queries = tuple(seed_queries)
         self._category_queries = tuple(category_queries)
         self._brand_queries = tuple(brand_queries)
+        self._max_seed_queries = max_seed_queries
 
     def seed_queries(self) -> list[str]:
-        return self._dedupe(
+        queries = self._dedupe(
             [
                 *self._seed_queries,
                 *self._category_queries,
                 *self._brand_queries,
             ]
         )
+        if self._max_seed_queries is not None and self._max_seed_queries >= 0:
+            return queries[: self._max_seed_queries]
+        return queries
 
     def category_queries(self) -> list[str]:
         return self._dedupe(self._category_queries)

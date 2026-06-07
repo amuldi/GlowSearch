@@ -21,6 +21,8 @@ class ProductIndexStore(Protocol):
         records: list[ProductSourceRecord],
     ) -> None: ...
 
+    async def stats(self) -> dict[str, int | str | None]: ...
+
     async def close(self) -> None: ...
 
 
@@ -102,6 +104,23 @@ class SQLiteProductIndexStore:
     async def close(self) -> None:
         async with self._lock:
             self._connection.close()
+
+    async def stats(self) -> dict[str, int | str | None]:
+        async with self._lock:
+            product_count = self._connection.execute(
+                "SELECT COUNT(*) AS count FROM products"
+            ).fetchone()["count"]
+            query_count = self._connection.execute(
+                "SELECT COUNT(DISTINCT query_key) AS count FROM query_products"
+            ).fetchone()["count"]
+            last_refreshed_at = self._connection.execute(
+                "SELECT MAX(last_refreshed_at) AS value FROM products"
+            ).fetchone()["value"]
+        return {
+            "product_count": int(product_count or 0),
+            "query_count": int(query_count or 0),
+            "last_refreshed_at": last_refreshed_at,
+        }
 
     def _ensure_schema(self) -> None:
         self._connection.execute(

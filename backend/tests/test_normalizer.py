@@ -104,3 +104,23 @@ def test_product_normalizer_preserves_nulls(tmp_path) -> None:
         "source_url": None,
         "source": "oliveyoung",
     }
+
+
+def test_brand_resolver_exposes_korean_warmup_aliases(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        """
+        {
+          "entries": [
+            {"official_en": "mude", "aliases": ["뮤드", "mude"], "sources": []},
+            {"official_en": "rom&nd", "aliases": ["rom&nd", "롬앤"], "sources": []}
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    resolver = BrandResolver(registry_path)
+
+    assert resolver.warmup_aliases() == ["뮤드", "롬앤"]
+    assert resolver.warmup_aliases(1) == ["뮤드"]

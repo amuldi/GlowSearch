@@ -77,6 +77,17 @@ def test_source_discovery_agent_combines_brand_category_and_product_seeds() -> N
     assert agent.brand_queries() == ["라운드랩", "틴트"]
 
 
+def test_source_discovery_agent_caps_warmup_seeds() -> None:
+    agent = SourceDiscoveryAgent(
+        ["뮤드"],
+        category_queries=["틴트"],
+        brand_queries=["라운드랩", "메디힐"],
+        max_seed_queries=2,
+    )
+
+    assert agent.seed_queries() == ["뮤드", "틴트"]
+
+
 @pytest.mark.asyncio
 async def test_product_index_keeps_official_query_rank_and_fallback_text(tmp_path) -> None:
     store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
@@ -190,6 +201,34 @@ async def test_search_service_prefers_live_official_results_over_warm_index(tmp_
     assert response.count == 1
     assert response.results[0].product_name_ko == "뮤드 공식 최신 상품"
     assert official.calls == ["뮤드"]
+
+
+@pytest.mark.asyncio
+async def test_search_service_schedules_custom_warm_index_queries(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    service = SearchService(
+        collectors=[OfficialCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        ingestion_agent=ProductIngestionAgent(store),
+        source_discovery_agent=SourceDiscoveryAgent(["선크림"]),
+        index_warmup_concurrency=1,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    scheduled = service.schedule_warm_index(["뮤드", "뮤드"], limit=1)
+    await service.drain_background_tasks()
+    indexed = await store.search("뮤드", 10)
+    await service.close()
+
+    assert scheduled == 1
+    assert [record.source_product_id for record in indexed] == ["official-live-1"]
 
 
 @pytest.mark.asyncio
