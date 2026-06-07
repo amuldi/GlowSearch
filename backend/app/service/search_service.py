@@ -532,7 +532,7 @@ class SearchService:
 
     @staticmethod
     def _broad_related_return_threshold(limit: int) -> int:
-        return max(1, min(limit, 36))
+        return max(1, min(limit, 24))
 
     @classmethod
     def _collector_result_priority(
@@ -779,12 +779,6 @@ class SearchService:
                 "필링젤",
                 "수딩젤",
                 "젤크림",
-                "젤네일",
-                "마사지젤",
-                "헤어젤",
-                "알로에젤",
-                "젤쿠션",
-                "젤클렌저",
             ),
         }
         return expansions.get(cls._key(value), ())

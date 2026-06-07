@@ -465,7 +465,7 @@ class ExpandedOliveYoungApiGelCollector:
     name = "oliveyoung:public-api"
 
     async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
-        if keyword == "젤클렌저":
+        if keyword == "젤크림":
             await asyncio.sleep(1)
             return []
         records_by_keyword = {
