@@ -203,6 +203,50 @@ async def test_search_service_returns_partial_warm_index_before_network(tmp_path
 
 
 @pytest.mark.asyncio
+async def test_search_service_returns_cached_records_before_index_or_network(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"mude","aliases":["뮤드"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    cache = AsyncTTLCache[_CollectedResult](ttl_seconds=60)
+    await cache.set(
+        "뮤드:8",
+        _CollectedResult(
+            records=[
+                ProductSourceRecord(
+                    source_brand_name="뮤드",
+                    product_name_ko="뮤드 캐시 상품",
+                    regular_price=17000,
+                    source="oliveyoung",
+                    source_product_id="cached-1",
+                )
+            ],
+            errors=[],
+            has_official_records=True,
+        ),
+    )
+    network = NetworkCollector()
+    service = SearchService(
+        collectors=[network],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=cache,
+        index_background_refresh_enabled=False,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("뮤드", SearchCriteria(limit=8))
+    await service.close()
+
+    assert response.count == 1
+    assert response.results[0].product_name_ko == "뮤드 캐시 상품"
+    assert network.calls == []
+
+
+@pytest.mark.asyncio
 async def test_search_service_prefers_live_official_results_over_warm_index(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text(

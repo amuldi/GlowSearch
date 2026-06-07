@@ -126,6 +126,27 @@ class SearchService:
         collect_queries = self._collect_queries(cleaned_query, effective_criteria, brand_match)
         cache_key = f"{'|'.join(query.casefold() for query in collect_queries)}:{collect_limit}"
 
+        cached_collected = None if self._prefer_live_official_results else await self._cache.get(cache_key)
+        if cached_collected is not None:
+            cached_results, cached_top_score = self._build_results(
+                cached_collected.records,
+                cleaned_query,
+                effective_criteria,
+                brand_match,
+                preserve_order=(
+                    (cached_collected.has_official_records and self._preserve_official_order)
+                    or self._prefer_live_official_results
+                ),
+            )
+            if cached_top_score > 0 or not cached_collected.records:
+                self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
+                return SearchResponse(
+                    query=cleaned_query,
+                    count=len(cached_results),
+                    results=[] if require_relevant and cached_top_score <= 0 else cached_results,
+                    source_errors=cached_collected.errors,
+                )
+
         indexed_collected = await self._collect_index([cleaned_query, *collect_queries], collect_limit)
         indexed_results, indexed_top_score = self._build_results(
             indexed_collected.records,
@@ -141,6 +162,7 @@ class SearchService:
             and (len(indexed_results) >= index_threshold or len(indexed_results) > 0)
             and not require_relevant
         ):
+            await self._cache.set(cache_key, indexed_collected)
             self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
             return SearchResponse(
                 query=cleaned_query,
@@ -149,7 +171,7 @@ class SearchService:
                 source_errors=[],
             )
 
-        collected = None if self._prefer_live_official_results else await self._cache.get(cache_key)
+        collected = None
         collected_from_live = False
         if collected is None:
             if self._can_use_verified_shortcut(cleaned_query, require_relevant):
