@@ -4,7 +4,7 @@
 
 :root {
   color: #171717;
-  background: #fafafa;
+  background: #fff7f6;
 }
 
 * {
@@ -29,4 +29,9 @@ button,
 input,
 textarea {
   font: inherit;
+}
+
+::selection {
+  background: #fff0f3;
+  color: #9f3f55;
 }

@@ -1,8 +1,8 @@
 "use client";
 
-import { Check, Copy, Search, X } from "lucide-react";
+import { Check, Copy, Loader2, Search, Sparkles, X } from "lucide-react";
 import type { KeyboardEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { searchProducts } from "@/lib/api";
 import type { Product, SearchResponse } from "@/types/product";
@@ -36,7 +36,9 @@ export default function Home() {
   const [resultLimit, setResultLimit] = useState(DEFAULT_RESULT_LIMIT);
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSearchButtonPressed, setIsSearchButtonPressed] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const searchButtonTimerRef = useRef<number | null>(null);
 
   const trimmedQuery = query.trim();
   const trimmedSubmittedQuery = submittedQuery.trim();
@@ -55,6 +57,14 @@ export default function Home() {
   const canLoadMore = Boolean(
     response && !isSubmittedBatchQuery && response.count >= resultLimit && resultLimit < MAX_RESULT_LIMIT,
   );
+
+  useEffect(() => {
+    return () => {
+      if (searchButtonTimerRef.current) {
+        window.clearTimeout(searchButtonTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setResultLimit(DEFAULT_RESULT_LIMIT);
@@ -128,10 +138,22 @@ export default function Home() {
     setQuery("");
   };
 
+  const triggerSearchButtonMotion = () => {
+    if (searchButtonTimerRef.current) {
+      window.clearTimeout(searchButtonTimerRef.current);
+    }
+    setIsSearchButtonPressed(true);
+    searchButtonTimerRef.current = window.setTimeout(() => {
+      setIsSearchButtonPressed(false);
+      searchButtonTimerRef.current = null;
+    }, 170);
+  };
+
   const submitSearch = () => {
-    if (!trimmedQuery) {
+    if (!trimmedQuery || isLoading) {
       return;
     }
+    triggerSearchButtonMotion();
     setSubmittedQuery(trimmedQuery);
     setResultLimit(DEFAULT_RESULT_LIMIT);
     setSearchRun((current) => current + 1);
@@ -146,9 +168,17 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-[#fafafa] px-4 py-8 text-ink sm:px-6 lg:px-8">
-      <section className="mx-auto flex w-full max-w-3xl flex-col items-center gap-5 pt-6 sm:pt-10">
-        <div className="flex w-full items-start gap-2 rounded-lg border border-line bg-white px-4 py-3 shadow-soft">
+    <main className="min-h-screen bg-[linear-gradient(180deg,#fff7f6_0%,#fbfffb_46%,#ffffff_100%)] px-4 py-7 text-ink sm:px-6 lg:px-8">
+      <section className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 pt-4 sm:pt-8">
+        <div className="flex items-center gap-2 rounded-full border border-blush/60 bg-white/80 px-3 py-1.5 text-xs font-semibold text-rosewood shadow-[0_8px_24px_rgba(166,68,90,0.08)]">
+          <Sparkles className="h-3.5 w-3.5 text-blush" aria-hidden="true" />
+          GlowSearch
+        </div>
+
+        <div
+          className="flex w-full items-start gap-2 rounded-[22px] border border-blush/50 bg-white/92 px-4 py-3 shadow-glow ring-1 ring-white/80 transition focus-within:border-mint/60 focus-within:shadow-[0_18px_60px_rgba(47,143,115,0.14)] sm:px-5"
+          aria-busy={isLoading}
+        >
           <Search className="mt-2.5 h-5 w-5 shrink-0 text-mint" aria-hidden="true" />
           <textarea
             value={query}
@@ -156,14 +186,14 @@ export default function Home() {
             onKeyDown={handleSearchKeyDown}
             rows={isInputBatchQuery ? Math.min(queryCount, 6) : 1}
             placeholder="관련 검색어"
-            className="min-h-10 min-w-0 flex-1 resize-y border-0 bg-transparent py-2 text-base leading-6 outline-none placeholder:text-neutral-400"
+            className="min-h-10 min-w-0 flex-1 resize-y border-0 bg-transparent py-2 text-lg font-medium leading-6 text-ink outline-none placeholder:text-neutral-400 sm:text-xl"
             aria-label="관련 검색어"
           />
           {query ? (
             <button
               type="button"
               onClick={clearSearchInput}
-              className="grid h-9 w-9 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100"
+              className="grid h-10 w-10 place-items-center rounded-full text-neutral-500 transition hover:bg-blush-soft hover:text-rosewood focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blush"
               aria-label="검색어 지우기"
               title="검색어 지우기"
             >
@@ -174,22 +204,40 @@ export default function Home() {
             type="button"
             onClick={submitSearch}
             disabled={!trimmedQuery || isLoading}
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-mint px-3 text-sm font-semibold text-white hover:bg-[#26765f] disabled:cursor-not-allowed disabled:bg-neutral-300"
+            className={[
+              "inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-mint px-4 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(47,143,115,0.28)] transition duration-150 hover:bg-[#26765f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint disabled:cursor-not-allowed disabled:bg-neutral-300 disabled:shadow-none sm:px-5",
+              isSearchButtonPressed ? "translate-y-px scale-[0.97]" : "translate-y-0 scale-100",
+            ].join(" ")}
             aria-label="검색"
             title="검색"
           >
-            <Search className="h-4 w-4" aria-hidden="true" />
-            검색
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Search className="h-4 w-4" aria-hidden="true" />
+            )}
+            {isLoading ? "검색중" : "검색"}
           </button>
         </div>
       </section>
 
       <section className="mx-auto mt-8 w-full max-w-5xl">
-        <div className="mb-4 min-h-6 text-sm text-neutral-600">{statusText}</div>
+        <div className="mb-4 flex min-h-6 items-center gap-2 text-sm font-medium text-neutral-600">
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin text-mint" aria-hidden="true" /> : null}
+          <span>{statusText}</span>
+        </div>
 
         {response?.source_errors.length ? (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             원본 사이트에서 상품 정보를 가져오지 못했습니다.
+          </div>
+        ) : null}
+
+        {!response && isLoading ? (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <ProductSkeleton key={index} />
+            ))}
           </div>
         ) : null}
 
@@ -204,7 +252,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setResultLimit((current) => Math.min(current + RESULT_PAGE_SIZE, MAX_RESULT_LIMIT))}
-              className="h-10 rounded-md border border-line bg-white px-4 text-sm font-medium text-neutral-800 hover:border-mint hover:text-mint"
+              className="h-10 rounded-full border border-line bg-white px-5 text-sm font-semibold text-neutral-800 shadow-sm transition hover:border-mint hover:text-mint"
             >
               더 보기
             </button>
@@ -258,13 +306,13 @@ function ProductCard({ product }: { product: Product }) {
   };
 
   const image = (
-    <div className="h-24 w-24 overflow-hidden rounded-md bg-neutral-100">
+    <div className="h-24 w-24 overflow-hidden rounded-lg bg-blush-soft">
       {product.image_url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={product.image_url}
           alt={product.product_name_ko ?? "상품 이미지"}
-          className="h-full w-full object-cover transition-transform duration-150 group-hover:scale-[1.03]"
+          className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.04]"
           loading="lazy"
         />
       ) : (
@@ -274,13 +322,13 @@ function ProductCard({ product }: { product: Product }) {
   );
 
   const name = (
-    <h2 className="line-clamp-2 text-sm font-medium leading-5">
+    <h2 className="line-clamp-2 text-sm font-semibold leading-5 text-ink">
       {product.product_name_ko ?? "상품명 미확인"}
     </h2>
   );
 
   return (
-    <article className="grid grid-cols-[96px_1fr] gap-4 rounded-lg border border-line bg-white p-3 shadow-soft">
+    <article className="grid grid-cols-[96px_1fr] gap-4 rounded-lg border border-blush/45 bg-white p-3 shadow-soft transition duration-150 hover:-translate-y-0.5 hover:border-mint/45 hover:shadow-[0_14px_36px_rgba(74,54,63,0.10)]">
       {product.source_url ? (
         <a
           href={product.source_url}
@@ -300,7 +348,7 @@ function ProductCard({ product }: { product: Product }) {
           <dl className="min-w-0 flex-1 space-y-1">
             <div>
               <dt className="text-[11px] font-medium text-neutral-500">브랜드명</dt>
-              <dd className="truncate text-sm font-semibold text-mint">{product.brand_ko ?? "브랜드 미확인"}</dd>
+              <dd className="truncate text-sm font-bold text-mint">{product.brand_ko ?? "브랜드 미확인"}</dd>
             </div>
             <div>
               <dt className="text-[11px] font-medium text-neutral-500">영문명</dt>
@@ -333,10 +381,10 @@ function ProductCard({ product }: { product: Product }) {
             {hasDiscount ? (
               <div>
                 <dt className="text-[11px] font-medium text-neutral-500">할인가</dt>
-                <dd className="text-sm font-semibold">
+                <dd className="text-sm font-bold text-rosewood">
                   {salePriceText}
                   {product.discount_rate ? (
-                    <span className="ml-1 text-xs font-semibold text-rose-600">
+                    <span className="ml-1 rounded-full bg-blush-soft px-1.5 py-0.5 text-[11px] font-bold text-rosewood">
                       {product.discount_rate}%
                     </span>
                   ) : null}
@@ -354,7 +402,7 @@ function ProductCard({ product }: { product: Product }) {
           <button
             type="button"
             onClick={copyProductInfo}
-            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-line px-2 text-xs font-medium text-neutral-700 hover:border-mint hover:text-mint"
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-line bg-white px-2.5 text-xs font-semibold text-neutral-700 transition hover:border-mint hover:bg-mint-soft hover:text-mint"
             aria-label="상품 정보 복사"
             title="상품 정보 복사"
           >
@@ -362,6 +410,21 @@ function ProductCard({ product }: { product: Product }) {
             {copied ? "복사됨" : "복사"}
           </button>
         </div>
+      </div>
+    </article>
+  );
+}
+
+function ProductSkeleton() {
+  return (
+    <article className="grid grid-cols-[96px_1fr] gap-4 rounded-lg border border-blush/45 bg-white p-3 shadow-soft">
+      <div className="h-24 w-24 animate-pulse rounded-lg bg-blush-soft" />
+      <div className="min-w-0 space-y-3 py-1">
+        <div className="h-3 w-20 animate-pulse rounded-full bg-mint-soft" />
+        <div className="h-4 w-28 animate-pulse rounded-full bg-neutral-100" />
+        <div className="h-4 w-full animate-pulse rounded-full bg-neutral-100" />
+        <div className="h-4 w-2/3 animate-pulse rounded-full bg-neutral-100" />
+        <div className="h-5 w-24 animate-pulse rounded-full bg-blush-soft" />
       </div>
     </article>
   );
