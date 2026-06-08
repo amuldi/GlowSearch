@@ -272,8 +272,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#fff7f6_0%,#fbfffb_46%,#ffffff_100%)] px-4 py-7 text-ink sm:px-6 lg:px-8">
       <section className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 pt-4 sm:pt-8">
-        <div className="flex items-center gap-3 text-3xl font-extrabold text-rosewood sm:text-4xl">
-          <BrandIcon className="h-12 w-12 sm:h-14 sm:w-14" />
+        <div className="text-4xl font-extrabold text-rosewood sm:text-5xl">
           GlowSearch
         </div>
 
@@ -509,103 +508,6 @@ function Pagination({
         <ChevronRight className="h-7 w-7" aria-hidden="true" />
       </button>
     </nav>
-  );
-}
-
-function BrandIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 96 96"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      <defs>
-        <filter id="brand-glass-shadow" x="0" y="0" width="96" height="96" colorInterpolationFilters="sRGB">
-          <feDropShadow dx="0" dy="7" stdDeviation="5" floodColor="#8F2F4F" floodOpacity="0.24" />
-          <feDropShadow dx="0" dy="1.5" stdDeviation="1.2" floodColor="#FFFFFF" floodOpacity="0.7" />
-        </filter>
-        <linearGradient id="brand-glass-fill" x1="26" y1="9" x2="72" y2="79" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#FFFFFF" stopOpacity="0.95" />
-          <stop offset="0.18" stopColor="#FFDDE8" stopOpacity="0.9" />
-          <stop offset="0.48" stopColor="#F37FA1" stopOpacity="0.74" />
-          <stop offset="0.78" stopColor="#C9476B" stopOpacity="0.82" />
-          <stop offset="1" stopColor="#8E2F4D" stopOpacity="0.92" />
-        </linearGradient>
-        <linearGradient id="brand-glass-rim" x1="19" y1="16" x2="74" y2="81" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#FFFFFF" stopOpacity="0.95" />
-          <stop offset="0.3" stopColor="#FFD3DF" stopOpacity="0.85" />
-          <stop offset="0.66" stopColor="#9E3153" stopOpacity="0.9" />
-          <stop offset="1" stopColor="#6F243D" stopOpacity="0.92" />
-        </linearGradient>
-        <linearGradient id="brand-top-glass" x1="31" y1="12" x2="53" y2="49" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#FFFFFF" stopOpacity="0.96" />
-          <stop offset="0.56" stopColor="#FFFFFF" stopOpacity="0.54" />
-          <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
-        </linearGradient>
-        <linearGradient id="brand-lower-glass" x1="35" y1="51" x2="59" y2="76" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#FFE9F0" stopOpacity="0.16" />
-          <stop offset="0.44" stopColor="#FFFFFF" stopOpacity="0.54" />
-          <stop offset="1" stopColor="#B33759" stopOpacity="0.12" />
-        </linearGradient>
-        <linearGradient id="brand-shine-line" x1="27" y1="20" x2="63" y2="56" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#FFFFFF" stopOpacity="0" />
-          <stop offset="0.25" stopColor="#FFFFFF" stopOpacity="0.95" />
-          <stop offset="0.74" stopColor="#FFF3F8" stopOpacity="0.58" />
-          <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
-        </linearGradient>
-        <clipPath id="brand-star-clip">
-          <path d="M48 7L58.2 33.2L86.4 35L64.6 52.8L72 80.3L48 65.2L24 80.3L31.4 52.8L9.6 35L37.8 33.2L48 7Z" />
-        </clipPath>
-      </defs>
-      <path
-        d="M48 9L57.6 33.7L84.3 35.4L63.6 52.2L70.6 78.1L48 63.9L25.4 78.1L32.4 52.2L11.7 35.4L38.4 33.7L48 9Z"
-        fill="#B43D5E"
-        opacity="0.18"
-        transform="translate(0 5)"
-      />
-      <path
-        d="M48 7L58.2 33.2L86.4 35L64.6 52.8L72 80.3L48 65.2L24 80.3L31.4 52.8L9.6 35L37.8 33.2L48 7Z"
-        fill="url(#brand-glass-fill)"
-        stroke="url(#brand-glass-rim)"
-        strokeWidth="2.7"
-        strokeLinejoin="round"
-        filter="url(#brand-glass-shadow)"
-      />
-      <g clipPath="url(#brand-star-clip)">
-        <path
-          d="M18 36.2C32.4 36.7 49.7 35.6 70.6 31.2L85.5 35.3L64.5 52.3C47.6 50.2 31.2 45.1 13.8 36.3L18 36.2Z"
-          fill="#FFFFFF"
-          opacity="0.22"
-        />
-        <path
-          d="M28 55.3C38 53.5 48.8 55.6 62.4 62.7L70.6 78.5L48 64.3L25.2 78.4L28 55.3Z"
-          fill="url(#brand-lower-glass)"
-        />
-        <path
-          d="M47.8 11.5L56 35.7L50.9 33.7L47.5 21.1L40.4 34.7L35.6 35L47.8 11.5Z"
-          fill="url(#brand-top-glass)"
-        />
-        <path
-          d="M24.5 39.6L37.9 39.1M37.9 39.1L47.4 18.5M37.9 39.1L32.6 52.1M32.6 52.1L47.8 60.8"
-          stroke="url(#brand-shine-line)"
-          strokeWidth="4.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </g>
-      <path
-        d="M48 7L58.2 33.2L86.4 35L64.6 52.8L72 80.3L48 65.2L24 80.3L31.4 52.8L9.6 35L37.8 33.2L48 7Z"
-        stroke="#FFFFFF"
-        strokeOpacity="0.45"
-        strokeWidth="1.1"
-        strokeLinejoin="round"
-      />
-      <path d="M17.5 15L20 21.8L26.8 24.3L20 26.8L17.5 33.6L15 26.8L8.2 24.3L15 21.8L17.5 15Z" fill="#FF91AD" />
-      <path d="M78 13L79.8 18.2L85 20L79.8 21.8L78 27L76.2 21.8L71 20L76.2 18.2L78 13Z" fill="#FFD6E2" />
-      <circle cx="70" cy="63" r="2.2" fill="#FFFFFF" opacity="0.85" />
-    </svg>
   );
 }
 
