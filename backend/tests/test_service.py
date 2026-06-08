@@ -479,7 +479,11 @@ class SparseOliveYoungApiGelCollector:
 class ExpandedOliveYoungApiGelCollector:
     name = "oliveyoung:public-api"
 
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
     async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        self.calls.append(keyword)
         if keyword == "젤크림":
             await asyncio.sleep(1)
             return []
@@ -882,13 +886,14 @@ async def test_search_service_waits_for_primary_html_on_sparse_broad_keyword(
 
 
 @pytest.mark.asyncio
-async def test_search_service_expands_single_related_keyword_queries(
+async def test_search_service_keeps_related_keyword_queries_off_critical_path(
     tmp_path,
 ) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    collector = ExpandedOliveYoungApiGelCollector()
     service = SearchService(
-        collectors=[ExpandedOliveYoungApiGelCollector()],
+        collectors=[collector],
         normalizer=ProductNormalizer(
             BrandResolver(registry_path),
             base_url="https://www.oliveyoung.co.kr",
@@ -903,16 +908,15 @@ async def test_search_service_expands_single_related_keyword_queries(
     elapsed = time.perf_counter() - started_at
 
     assert elapsed < 0.4
-    assert response.count == 3
+    assert response.count == 1
     assert [result.product_name_ko for result in response.results] == [
         "식물나라 가벼운 수분 선 젤",
-        "코스알엑스 약산성 굿모닝 젤 클렌저",
-        "비플레인 녹두 밀크 필링 젤",
     ]
+    assert collector.calls == ["젤"]
 
 
 @pytest.mark.asyncio
-async def test_search_service_expands_lip_tint_synonyms_across_sources(
+async def test_search_service_keeps_lip_tint_synonyms_off_critical_path(
     tmp_path,
 ) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -932,10 +936,8 @@ async def test_search_service_expands_lip_tint_synonyms_across_sources(
 
     response = await service.search("틴트", SearchCriteria(limit=4))
 
-    assert "립틴트" in collector.calls
-    assert response.count == 1
-    assert response.results[0].source == "musinsa"
-    assert response.results[0].source_label == "Musinsa"
+    assert collector.calls == ["틴트"]
+    assert response.count == 0
 
 
 @pytest.mark.asyncio

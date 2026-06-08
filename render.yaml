@@ -35,6 +35,16 @@ services:
         value: https://mcp.aka.page
       - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_TIMEOUT_SECONDS
         value: 6.0
+      - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RETRY_ATTEMPTS
+        value: 2
+      - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RETRY_BASE_DELAY_SECONDS
+        value: 0.5
+      - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RETRY_MAX_DELAY_SECONDS
+        value: 4.0
+      - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RATE_LIMIT_PER_SECOND
+        value: 1.0
+      - key: GLOWSEARCH_OLIVEYOUNG_HTML_COLLECTOR_ENABLED
+        value: false
       - key: GLOWSEARCH_BROWSER_COLLECTOR_ENABLED
         value: false
       - key: GLOWSEARCH_BROWSER_HEADLESS
@@ -52,13 +62,13 @@ services:
       - key: GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_ENABLED
         value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP
-        value: false
+        value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT
         value: 48
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY
-        value: 2
+        value: 1
       - key: GLOWSEARCH_PRODUCT_INDEX_MAX_SEED_QUERIES
-        value: 180
+        value: 30
       - key: GLOWSEARCH_PRODUCT_INDEX_BRAND_REGISTRY_WARMUP_ENABLED
         value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_BRAND_REGISTRY_WARMUP_LIMIT

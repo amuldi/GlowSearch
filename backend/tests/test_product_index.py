@@ -136,6 +136,34 @@ class SlowPublicGelCollector:
         ][:limit]
 
 
+class BackgroundExpandedGelCollector:
+    name = "oliveyoung:public-api"
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        self.calls.append(keyword)
+        records_by_keyword = {
+            "젤": ProductSourceRecord(
+                source_brand_name="식물나라",
+                product_name_ko="식물나라 수분 젤",
+                regular_price=12000,
+                source="oliveyoung",
+                source_product_id="expanded-gel-1",
+            ),
+            "클렌징젤": ProductSourceRecord(
+                source_brand_name="코스알엑스",
+                product_name_ko="코스알엑스 약산성 굿모닝 젤 클렌저",
+                regular_price=16000,
+                source="oliveyoung",
+                source_product_id="expanded-gel-2",
+            ),
+        }
+        record = records_by_keyword.get(keyword)
+        return [record] if record and limit > 0 else []
+
+
 class FakeIngestionCollector:
     name = "oliveyoung:public-api"
 
@@ -455,6 +483,37 @@ async def test_search_service_does_not_cancel_public_source_after_fast_verified_
         "에스네이처 수분 젤크림",
     ]
     assert public.calls[0] == "젤"
+
+
+@pytest.mark.asyncio
+async def test_search_service_refreshes_related_queries_in_background(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    collector = BackgroundExpandedGelCollector()
+    service = SearchService(
+        collectors=[collector],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        ingestion_agent=ProductIngestionAgent(store),
+        index_background_refresh_enabled=True,
+        background_collect_deadline_seconds=1.0,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("젤", SearchCriteria(limit=1))
+    await service.drain_background_tasks()
+    indexed = await store.search("클렌징젤", 10)
+    await service.close()
+
+    assert response.count == 1
+    assert response.results[0].product_name_ko == "식물나라 수분 젤"
+    assert "클렌징젤" in collector.calls
+    assert indexed[0].product_name_ko == "코스알엑스 약산성 굿모닝 젤 클렌저"
 
 
 @pytest.mark.asyncio

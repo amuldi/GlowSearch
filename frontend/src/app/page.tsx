@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, Loader2, Search, X } from "lucide-react";
+import { Check, ChevronRight, Copy, Loader2, Search, X } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -28,6 +28,7 @@ const jpyFormatter = new Intl.NumberFormat("ja-JP", {
 const RESULT_PAGE_SIZE = 48;
 const DEFAULT_RESULT_LIMIT = RESULT_PAGE_SIZE;
 const MAX_RESULT_LIMIT = 480;
+const MAX_PAGE_COUNT = MAX_RESULT_LIMIT / RESULT_PAGE_SIZE;
 const MIN_LOADING_MS = 180;
 
 export default function Home() {
@@ -35,6 +36,7 @@ export default function Home() {
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [searchRun, setSearchRun] = useState(0);
   const [resultLimit, setResultLimit] = useState(DEFAULT_RESULT_LIMIT);
+  const [currentPage, setCurrentPage] = useState(1);
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSearchButtonPressed, setIsSearchButtonPressed] = useState(false);
@@ -56,9 +58,20 @@ export default function Home() {
   const submittedQueryCount = submittedQueryTerms.length;
   const isInputBatchQuery = queryCount > 1;
   const isSubmittedBatchQuery = submittedQueryCount > 1;
-  const canLoadMore = Boolean(
+  const loadedResultCount = response?.results.length ?? 0;
+  const loadedPageCount = Math.max(1, Math.ceil(Math.max(loadedResultCount, 1) / RESULT_PAGE_SIZE));
+  const mayHaveMorePages = Boolean(
     response && !isSubmittedBatchQuery && response.count >= resultLimit && resultLimit < MAX_RESULT_LIMIT,
   );
+  const totalPageCount = response && !isSubmittedBatchQuery && loadedResultCount > 0
+    ? mayHaveMorePages
+      ? MAX_PAGE_COUNT
+      : loadedPageCount
+    : 0;
+  const boundedCurrentPage = Math.min(currentPage, Math.max(totalPageCount, 1));
+  const visibleStartIndex = (boundedCurrentPage - 1) * RESULT_PAGE_SIZE;
+  const visibleEndIndex = visibleStartIndex + RESULT_PAGE_SIZE;
+  const visibleResults = response?.results.slice(visibleStartIndex, visibleEndIndex) ?? [];
 
   useEffect(() => {
     return () => {
@@ -70,6 +83,7 @@ export default function Home() {
 
   useEffect(() => {
     setResultLimit(DEFAULT_RESULT_LIMIT);
+    setCurrentPage(1);
   }, [trimmedSubmittedQuery]);
 
   useEffect(() => {
@@ -131,8 +145,9 @@ export default function Home() {
     if (response && isSubmittedBatchQuery) {
       return `${submittedQueryCount.toLocaleString("ko-KR")}개 검색어 중 ${response.count.toLocaleString("ko-KR")}개 결과`;
     }
-    if (response && !isSubmittedBatchQuery && response.count >= resultLimit) {
-      return `${response.count.toLocaleString("ko-KR")}개 결과 표시 중`;
+    if (response && !isSubmittedBatchQuery && response.count > 0) {
+      const end = Math.min(visibleEndIndex, response.count);
+      return `${response.count.toLocaleString("ko-KR")}개 결과 중 ${(visibleStartIndex + 1).toLocaleString("ko-KR")}-${end.toLocaleString("ko-KR")} 표시`;
     }
     if (response) return `${response.count.toLocaleString("ko-KR")}개 결과`;
     return "";
@@ -144,6 +159,8 @@ export default function Home() {
     resultLimit,
     submittedQueryCount,
     trimmedSubmittedQuery,
+    visibleEndIndex,
+    visibleStartIndex,
   ]);
 
   const clearSearchInput = () => {
@@ -171,7 +188,17 @@ export default function Home() {
     setResponse(null);
     setSubmittedQuery(trimmedQuery);
     setResultLimit(DEFAULT_RESULT_LIMIT);
+    setCurrentPage(1);
     setSearchRun((current) => current + 1);
+  };
+
+  const goToPage = (page: number) => {
+    const nextPage = Math.min(Math.max(page, 1), MAX_PAGE_COUNT);
+    setCurrentPage(nextPage);
+    const nextLimit = nextPage * RESULT_PAGE_SIZE;
+    if (nextLimit > resultLimit) {
+      setResultLimit(Math.min(nextLimit, MAX_RESULT_LIMIT));
+    }
   };
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -264,7 +291,7 @@ export default function Home() {
           </div>
         ) : null}
 
-        {!response && isLoading ? (
+        {(!response || (isLoading && visibleResults.length === 0)) && isLoading ? (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, index) => (
               <ProductSkeleton key={index} />
@@ -282,24 +309,70 @@ export default function Home() {
         ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {response?.results.map((product, index) => (
+          {visibleResults.map((product, index) => (
             <ProductCard key={`${product.source}-${product.product_name_ko ?? index}`} product={product} />
           ))}
         </div>
 
-        {canLoadMore ? (
-          <div className="mt-5 flex justify-center">
-            <button
-              type="button"
-              onClick={() => setResultLimit((current) => Math.min(current + RESULT_PAGE_SIZE, MAX_RESULT_LIMIT))}
-              className="h-10 rounded-full border border-line bg-white px-5 text-sm font-semibold text-neutral-800 shadow-sm transition hover:border-rose hover:text-rosewood"
-            >
-              더 보기
-            </button>
-          </div>
+        {totalPageCount > 1 ? (
+          <Pagination
+            currentPage={boundedCurrentPage}
+            totalPageCount={totalPageCount}
+            isLoading={isLoading}
+            onPageChange={goToPage}
+          />
         ) : null}
       </section>
     </main>
+  );
+}
+
+function Pagination({
+  currentPage,
+  totalPageCount,
+  isLoading,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPageCount: number;
+  isLoading: boolean;
+  onPageChange: (page: number) => void;
+}) {
+  const pages = Array.from({ length: totalPageCount }, (_, index) => index + 1);
+  return (
+    <nav className="mt-9 flex items-center justify-center gap-5 text-neutral-700" aria-label="검색 결과 페이지">
+      {pages.map((page) => {
+        const isActive = page === currentPage;
+        return (
+          <button
+            key={page}
+            type="button"
+            onClick={() => onPageChange(page)}
+            disabled={isLoading && !isActive}
+            className={[
+              "grid h-9 w-9 place-items-center text-xl transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose",
+              isActive
+                ? "font-extrabold text-ink"
+                : "font-medium text-neutral-600 hover:text-rosewood",
+              isLoading && !isActive ? "cursor-wait opacity-50" : "",
+            ].join(" ")}
+            aria-current={isActive ? "page" : undefined}
+            aria-label={`${page}페이지`}
+          >
+            {page}
+          </button>
+        );
+      })}
+      <button
+        type="button"
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage >= totalPageCount || isLoading}
+        className="grid h-9 w-9 place-items-center text-ink transition hover:text-rosewood disabled:cursor-not-allowed disabled:opacity-30"
+        aria-label="다음 페이지"
+      >
+        <ChevronRight className="h-7 w-7" aria-hidden="true" />
+      </button>
+    </nav>
   );
 }
 

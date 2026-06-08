@@ -157,6 +157,12 @@ class SearchService:
         product_query = self._product_query(cleaned_query, brand_match)
         collect_limit = self._collect_limit(effective_criteria, product_query)
         collect_queries = self._collect_queries(cleaned_query, effective_criteria, brand_match)
+        live_collect_queries = self._live_collect_queries(
+            cleaned_query,
+            collect_queries,
+            product_query,
+            brand_match,
+        )
         has_related_expansions = bool(self._related_query_expansions(product_query or cleaned_query))
         is_broad_single_query = brand_match is None and self._is_single_related_query(
             product_query or cleaned_query
@@ -264,7 +270,7 @@ class SearchService:
                     )
 
             collected = await self._collect(
-                collect_queries,
+                live_collect_queries,
                 collect_limit,
                 allow_browser_fallback=allow_browser_fallback,
             )
@@ -274,6 +280,8 @@ class SearchService:
 
         if collected_from_live:
             self._schedule_ingest([cleaned_query, *collect_queries], collected.records)
+            if live_collect_queries != collect_queries:
+                self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
 
         result_records = collected.records
         if indexed_collected.records and not collected.has_official_records:
@@ -655,7 +663,8 @@ class SearchService:
         if any(task_query != primary_query for _collector, task_query, _index in tasks.values()):
             return True
         return any(
-            tasks[task][0].name == "oliveyoung" and tasks[task][1] == primary_query
+            tasks[task][0].name in {"oliveyoung", "oliveyoung:public-api"}
+            and tasks[task][1] == primary_query
             for task in pending
         )
 
@@ -809,16 +818,22 @@ class SearchService:
             return
         try:
             queries = [query for query in collect_queries if clean_text(query)]
-            collected = await self._collect(
-                queries,
-                limit,
-                allow_browser_fallback=False,
-                deadline_seconds=self._background_collect_deadline_seconds,
-            )
-            await self._ingestion_agent.ingest_search_results(
-                [original_query, *queries],
-                collected.records,
-            )
+            for query in queries:
+                collected = await self._collect(
+                    [query],
+                    limit,
+                    allow_browser_fallback=False,
+                    deadline_seconds=self._background_collect_deadline_seconds,
+                )
+                if not collected.records:
+                    continue
+                target_queries = [query]
+                if query != original_query:
+                    target_queries.append(original_query)
+                await self._ingestion_agent.ingest_search_results(
+                    target_queries,
+                    collected.records,
+                )
             self._last_index_error = None
         except Exception as exc:
             self._last_index_error = f"{type(exc).__name__}: {exc}"
@@ -957,6 +972,21 @@ class SearchService:
             seen.add(key)
             queries.append(text)
         return queries or [query]
+
+    @classmethod
+    def _live_collect_queries(
+        cls,
+        cleaned_query: str,
+        collect_queries: list[str],
+        product_query: str,
+        brand_match: BrandMatch | None,
+    ) -> list[str]:
+        primary_query = clean_text(collect_queries[0] if collect_queries else cleaned_query)
+        if not primary_query:
+            return collect_queries
+        if brand_match is None and cls._is_single_related_query(product_query or cleaned_query):
+            return [primary_query]
+        return collect_queries
 
     @classmethod
     def _related_query_expansions(cls, value: str) -> tuple[str, ...]:

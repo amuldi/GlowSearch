@@ -21,12 +21,14 @@ GlowSearch는 화장품 상품을 빠르게 찾기 위한 Next.js + FastAPI 검�
 - 공식 Olive Young HTML collector와 browser collector는 준수/차단 리스크 때문에 기본 비활성화했습니다.
 - 캐시와 SQLite product index를 먼저 조회하고, 부족하면 live source를 병렬로 보강합니다.
 - `젤` 같은 넓은 단일 검색어는 verified-cache 1건에서 멈추지 않고 공개 adapter 결과를 기다리도록 보완했습니다.
+- 넓은 단일 검색어의 관련 확장어는 첫 응답을 늦추지 않도록 background refresh로 넘깁니다.
 - live 결과는 백그라운드에서 인덱스에 저장되어 다음 검색부터 빠르게 재사용됩니다.
 - 상품 record에 category, rating, review_count, description, options, sold_out, updated_at 필드를 추가했습니다.
 - 원가와 현재가가 같으면 `sale_price`와 `discount_rate`를 노출하지 않습니다.
 - source attribution, source label, source priority를 유지합니다.
 - 안전 수집 CLI와 CSV export를 추가했습니다.
 - diagnostics와 index status endpoint로 운영 상태를 확인할 수 있습니다.
+- 결과가 많으면 프론트에서 48개씩 페이지 번호로 나눠 표시합니다.
 
 ## 중요한 데이터 원칙
 
@@ -56,7 +58,7 @@ Next.js UI
   -> SQLiteProductIndexStore 조회
        - query별 rank 유지
        - 상품명/브랜드/카테고리/설명/옵션 search_text fallback
-  -> 부족하면 빠른 source 병렬 실행
+  -> 부족하면 primary query만 빠른 source로 병렬 실행
        - OliveYoungPublicApiCollector
        - LocalVerifiedCatalogCollector
        - ApifyOliveYoungCollector, optional
@@ -67,7 +69,7 @@ Next.js UI
   -> ProductNormalizer 적용
   -> dedupe, filter, ranking
   -> SearchResponse 반환
-  -> live 결과는 ProductIngestionAgent가 SQLite index에 저장
+  -> live 결과와 관련 확장어 refresh는 ProductIngestionAgent가 SQLite index에 저장
 ```
 
 ## 주요 모듈
@@ -278,12 +280,30 @@ cd backend
 
 현재 SQLite는 로컬/소규모 운영용입니다.
 
+Render free plan의 일반 filesystem은 ephemeral입니다. 현재처럼 `/tmp`에 SQLite를 두면 재배포, 재시작, cold start 이후 인덱스가 비거나 작아질 수 있습니다. 이 경우 검색 요청이 매번 live source를 기다리므로 느리고, source timeout이 나면 결과가 적게 나옵니다.
+
 권장 순서:
 
-1. Render persistent disk를 `GLOWSEARCH_PRODUCT_INDEX_PATH`에 연결
+1. Render paid service로 올리고 persistent disk를 `/var/data`에 연결
 2. 상품 수와 source가 늘면 Postgres full-text search로 이전
 3. prefix/typo search가 중요해지면 Meilisearch 또는 Typesense 검토
 4. 대규모 검색/분석이 필요해지면 OpenSearch 검토
+
+Persistent disk를 붙이면 backend 환경 변수는 다음처럼 바꿉니다.
+
+```bash
+GLOWSEARCH_PRODUCT_INDEX_PATH=/var/data/glowsearch/product_index.sqlite3
+```
+
+Render Dashboard 절차:
+
+1. Backend service를 paid plan으로 변경합니다.
+2. Disks에서 persistent disk를 추가합니다.
+3. Mount path를 `/var/data`로 설정합니다.
+4. `GLOWSEARCH_PRODUCT_INDEX_PATH`를 `/var/data/glowsearch/product_index.sqlite3`로 설정합니다.
+5. 배포 후 `/index/warm` 또는 startup warmup으로 seed index를 채웁니다.
+
+Render docs 기준 persistent disk는 유료 web service, private service, background worker에 붙일 수 있고, 지정한 mount path 아래 데이터만 재배포/재시작 후 보존됩니다.
 
 Render에서 `GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN`을 설정하면 warmup을 수동 또는 Cron으로 실행할 수 있습니다.
 
@@ -291,6 +311,17 @@ Render에서 `GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN`을 설정하면 warmup을 �
 curl -X POST "https://glowsearch-backend.onrender.com/index/warm?token=$GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN&limit=48"
 curl -X POST "https://glowsearch-backend.onrender.com/index/warm?token=$GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN&q=뮤드&q=롬앤&limit=48&wait=true"
 ```
+
+현재 `render.yaml`은 cold start 이후에도 최소 coverage를 만들기 위해 낮은 부하의 startup warmup을 켭니다.
+
+```bash
+GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP=true
+GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY=1
+GLOWSEARCH_PRODUCT_INDEX_MAX_SEED_QUERIES=30
+GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT=48
+```
+
+이 설정은 persistent disk를 붙이기 전 임시 보완입니다. 장기적으로는 persistent disk 또는 Postgres가 필요합니다.
 
 ## 운영/법무 주의
 
