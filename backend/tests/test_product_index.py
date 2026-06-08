@@ -94,6 +94,48 @@ class BroadGelCollector:
         ][:limit]
 
 
+class FastVerifiedGelCollector:
+    name = "oliveyoung:verified-cache"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        return [
+            ProductSourceRecord(
+                source_brand_name="식물나라",
+                product_name_ko="식물나라 부분 캐시 젤",
+                regular_price=17000,
+                source="oliveyoung",
+                source_product_id="verified-gel-1",
+            )
+        ][:limit]
+
+
+class SlowPublicGelCollector:
+    name = "oliveyoung:public-api"
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        self.calls.append(keyword)
+        await asyncio.sleep(0.05)
+        return [
+            ProductSourceRecord(
+                source_brand_name="홀리카홀리카",
+                product_name_ko="홀리카홀리카 젤테일 아이섀도우",
+                regular_price=4900,
+                source="oliveyoung",
+                source_product_id="public-gel-1",
+            ),
+            ProductSourceRecord(
+                source_brand_name="에스네이처",
+                product_name_ko="에스네이처 수분 젤크림",
+                regular_price=22900,
+                source="oliveyoung",
+                source_product_id="public-gel-2",
+            ),
+        ][:limit]
+
+
 class FakeIngestionCollector:
     name = "oliveyoung:public-api"
 
@@ -382,6 +424,37 @@ async def test_search_service_does_not_stop_at_partial_index_for_broad_single_qu
     assert response.count == 1
     assert response.results[0].product_name_ko == "식물나라 수분 젤"
     assert official.calls[0] == "젤"
+
+
+@pytest.mark.asyncio
+async def test_search_service_does_not_cancel_public_source_after_fast_verified_hit(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    public = SlowPublicGelCollector()
+    service = SearchService(
+        collectors=[FastVerifiedGelCollector(), public],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        index_background_refresh_enabled=False,
+        live_collect_deadline_seconds=0.5,
+        live_first_result_grace_seconds=0.01,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("젤", SearchCriteria(limit=2))
+    await service.close()
+
+    assert response.count == 2
+    assert [product.product_name_ko for product in response.results] == [
+        "홀리카홀리카 젤테일 아이섀도우",
+        "에스네이처 수분 젤크림",
+    ]
+    assert public.calls[0] == "젤"
 
 
 @pytest.mark.asyncio

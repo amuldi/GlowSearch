@@ -463,14 +463,23 @@ class SearchService:
                     if error:
                         errors.append(error)
                     if source_records:
-                        first_result_at = first_result_at or perf_counter()
+                        if not self._should_keep_waiting_before_grace(
+                            collector,
+                            query,
+                            primary_query,
+                            len(source_records),
+                            limit,
+                            pending,
+                            tasks,
+                        ):
+                            first_result_at = first_result_at or perf_counter()
                         if (
                             self._is_oliveyoung_collector(collector)
                             and query == primary_query
                         ):
                             ordered_records = (
                                 [*source_records, *official_primary_records]
-                                if collector.name == "oliveyoung"
+                                if collector.name in {"oliveyoung", "oliveyoung:public-api"}
                                 else [*official_primary_records, *source_records]
                             )
                             official_primary_records = self._dedupe_records(
@@ -648,6 +657,27 @@ class SearchService:
         return any(
             tasks[task][0].name == "oliveyoung" and tasks[task][1] == primary_query
             for task in pending
+        )
+
+    @classmethod
+    def _should_keep_waiting_before_grace(
+        cls,
+        collector: ProductCollector,
+        query: str,
+        primary_query: str,
+        record_count: int,
+        limit: int,
+        pending: set[asyncio.Task[tuple[list[ProductSourceRecord], str | None, bool]]],
+        tasks: dict[
+            asyncio.Task[tuple[list[ProductSourceRecord], str | None, bool]],
+            tuple[ProductCollector, str, int],
+        ],
+    ) -> bool:
+        return (
+            cls._is_oliveyoung_collector(collector)
+            and cls._is_single_related_query(primary_query)
+            and record_count < cls._broad_related_return_threshold(limit)
+            and cls._has_pending_primary_oliveyoung_task(pending, tasks, primary_query)
         )
 
     @classmethod
