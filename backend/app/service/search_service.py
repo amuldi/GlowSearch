@@ -90,6 +90,7 @@ class SearchService:
         failed = False
         try:
             response = await self._search(query, criteria)
+            self._schedule_search_gap(response.query, criteria, response)
             return response
         except Exception:
             failed = True
@@ -980,6 +981,14 @@ class SearchService:
             "last_index_error": self._last_index_error,
         }
 
+    async def recent_search_gaps(self, limit: int = 20) -> list[dict[str, int | str | None]]:
+        if self._product_index is None:
+            return []
+        recent = getattr(self._product_index, "recent_search_gaps", None)
+        if recent is None:
+            return []
+        return await recent(limit)
+
     def suggest(self, query: str, limit: int = 10) -> list[str]:
         cleaned_query = clean_text(query)
         if not cleaned_query or limit <= 0:
@@ -1060,8 +1069,10 @@ class SearchService:
                 candidates.extend(brand_search_terms)
         if brand_match is None:
             candidates.append(query)
+            candidates.extend(self._normalizer.query_aliases(query, limit=12))
         if product_query:
             candidates.append(product_query)
+            candidates.extend(self._normalizer.query_aliases(product_query, limit=12))
         compact_product_query = self._compact_product_query(product_query)
         if compact_product_query and compact_product_query != product_query:
             candidates.append(compact_product_query)
@@ -1079,6 +1090,46 @@ class SearchService:
             seen.add(key)
             queries.append(text)
         return queries or [query]
+
+    def _schedule_search_gap(
+        self,
+        query: str,
+        criteria: SearchCriteria,
+        response: SearchResponse,
+    ) -> None:
+        if self._product_index is None:
+            return
+        threshold = self._search_gap_threshold(criteria)
+        if threshold <= 0 or response.count >= threshold:
+            return
+        reason = "empty_result" if response.count == 0 else "low_result_count"
+        task = asyncio.create_task(self._record_search_gap_safely(query, response.count, reason))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    @staticmethod
+    def _search_gap_threshold(criteria: SearchCriteria) -> int:
+        if criteria.limit <= 1:
+            return 0
+        return min(criteria.limit, 8)
+
+    async def _record_search_gap_safely(
+        self,
+        query: str,
+        result_count: int,
+        reason: str,
+    ) -> None:
+        if self._product_index is None:
+            return
+        record_gap = getattr(self._product_index, "record_search_gap", None)
+        if record_gap is None:
+            return
+        try:
+            await record_gap(query, result_count, reason)
+            self._metrics.record_search_gap()
+        except Exception as exc:
+            self._last_index_error = f"{type(exc).__name__}: {exc}"
+            self._metrics.record_background_index_error(self._last_index_error)
 
     def _brand_search_terms(
         self,

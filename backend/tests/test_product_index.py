@@ -10,6 +10,7 @@ from app.ingestion.oliveyoung_pipeline import OliveYoungIngestionPipeline
 from app.indexing.agents import ProductIngestionAgent, SourceDiscoveryAgent
 from app.indexing.store import SQLiteProductIndexStore
 from app.models.product import ProductSourceRecord
+from app.normalizer.brand import BrandAlias
 from app.normalizer.brand import BrandResolver
 from app.normalizer.product import ProductNormalizer
 from app.service.search_service import SearchService, _CollectedResult
@@ -333,6 +334,63 @@ async def test_product_index_persists_extended_product_fields(tmp_path) -> None:
     assert records[0].sold_out is False
     assert records[0].updated_at == "2026-06-08T00:00:00+00:00"
     assert all_records[0].source_product_id == "A1"
+
+
+@pytest.mark.asyncio
+async def test_product_index_searches_fts_terms_and_brand_aliases(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_brand_aliases(
+        [
+            BrandAlias(official_en="TOO COOL FOR SCHOOL", alias="투쿨포스쿨"),
+            BrandAlias(official_en="TOO COOL FOR SCHOOL", alias="too cool for school"),
+            BrandAlias(official_en="Derma:B", alias="더마비"),
+            BrandAlias(official_en="Derma:B", alias="Derma:B"),
+        ]
+    )
+    await store.upsert_search_results(
+        "초기",
+        [
+            ProductSourceRecord(
+                source_brand_name="투쿨포스쿨",
+                product_name_ko="투쿨포스쿨 디테일링 메탈 마스카라",
+                regular_price=16000,
+                source="oliveyoung",
+                source_product_id="too-cool-1",
+            ),
+            ProductSourceRecord(
+                source_brand_name="더마비",
+                product_name_ko="[단독/대용량] 더마비 데일리 모이스처 바디로션 860ml",
+                regular_price=23000,
+                source="oliveyoung",
+                source_product_id="dermab-1",
+            ),
+        ],
+    )
+
+    english_brand = await store.search("too cool", 10)
+    partial_category = await store.search("로션", 10)
+    await store.close()
+
+    assert [record.source_product_id for record in english_brand] == ["too-cool-1"]
+    assert [record.source_product_id for record in partial_category] == ["dermab-1"]
+
+
+@pytest.mark.asyncio
+async def test_product_index_records_search_gaps(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+
+    await store.record_search_gap("없는 상품", result_count=0, reason="empty_result")
+    await store.record_search_gap("없는 상품", result_count=1, reason="low_result_count")
+    stats = await store.stats()
+    gaps = await store.recent_search_gaps()
+    await store.close()
+
+    assert stats["search_gap_count"] == 1
+    assert stats["last_search_gap_at"] is not None
+    assert gaps[0]["query"] == "없는 상품"
+    assert gaps[0]["result_count"] == 1
+    assert gaps[0]["miss_count"] == 2
+    assert gaps[0]["last_reason"] == "low_result_count"
 
 
 @pytest.mark.asyncio

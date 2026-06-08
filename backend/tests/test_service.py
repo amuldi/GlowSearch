@@ -5,6 +5,7 @@ import pytest
 
 from app.cache.ttl import AsyncTTLCache
 from app.data_collector.base import SearchCriteria, SourceUnavailableError
+from app.indexing.store import SQLiteProductIndexStore
 from app.models.product import ProductSourceRecord
 from app.normalizer.brand import BrandResolver
 from app.normalizer.product import ProductNormalizer
@@ -1280,6 +1281,36 @@ async def test_search_service_expands_english_brand_query_to_korean_alias(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_search_service_expands_partial_english_brand_alias_query(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        (
+            '{"entries":[{"official_en":"TOO COOL FOR SCHOOL",'
+            '"aliases":["투쿨포스쿨","too cool for school"],"sources":[]}]}'
+        ),
+        encoding="utf-8",
+    )
+    collector = TooCoolAliasCollector()
+    service = SearchService(
+        collectors=[collector],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        preserve_official_order=True,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("too cool", SearchCriteria(limit=4))
+
+    assert "투쿨포스쿨" in collector.calls
+    assert response.count == 4
+    assert response.results[0].brand_ko == "투쿨포스쿨"
+    assert response.results[0].brand_en == "TOO COOL FOR SCHOOL"
+
+
+@pytest.mark.asyncio
 async def test_search_service_does_not_stop_at_partial_brand_index(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text(
@@ -1308,6 +1339,34 @@ async def test_search_service_does_not_stop_at_partial_brand_index(tmp_path) -> 
     assert "투쿨포스쿨" in collector.calls
     assert response.count == 4
     assert response.results[0].product_name_ko == "투쿨포스쿨 공식 검색 상품 0"
+
+
+@pytest.mark.asyncio
+async def test_search_service_records_empty_and_low_result_gaps(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    service = SearchService(
+        collectors=[],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        index_background_refresh_enabled=False,
+    )
+
+    response = await service.search("없는 상품", SearchCriteria(limit=24))
+    await service.drain_background_tasks()
+    gaps = await service.recent_search_gaps()
+    diagnostics = service.diagnostics()
+    await service.close()
+
+    assert response.count == 0
+    assert gaps[0]["query"] == "없는 상품"
+    assert gaps[0]["last_reason"] == "empty_result"
+    assert diagnostics["metrics"]["search_gaps"] == 1
 
 
 def test_search_service_suggests_brand_aliases_and_related_terms(tmp_path) -> None:

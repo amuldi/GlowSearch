@@ -98,6 +98,7 @@ async def diagnostics(
     settings = get_settings()
     payload = service.diagnostics()
     payload["index"] = await service.index_stats()
+    payload["search_gaps"] = await service.recent_search_gaps(limit=20)
     payload["config"] = {
         "product_index_enabled": settings.product_index_enabled,
         "warmup_on_startup": settings.product_index_warmup_on_startup,

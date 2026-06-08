@@ -34,6 +34,9 @@ GlowSearch는 화장품 상품을 빠르게 찾기 위한 Next.js + FastAPI 검�
 - `/suggest` 자동완성 API를 추가해 브랜드/카테고리/관련 검색어 후보를 검색창 아래에 표시합니다.
 - 공개 JSON adapter는 `nextPage`뿐 아니라 `totalCount`/`totalPages`도 확인해 뒤쪽 상품을 덜 놓치도록 했습니다.
 - 검색 응답은 빠른 limit로 유지하고, 백그라운드 refresh는 더 큰 limit으로 인덱스를 채워 다음 검색 속도와 coverage를 개선합니다.
+- SQLite index에 FTS5 검색 문서를 추가해 브랜드/상품명/카테고리/설명/옵션의 부분 키워드 검색을 강화했습니다.
+- `brand_aliases` 테이블을 추가해 `too cool`, `TOO COOL FOR SCHOOL`, `투쿨포스쿨` 같은 영문/한글 alias 검색을 같은 결과군으로 확장합니다.
+- `search_gaps` 테이블을 추가해 결과가 없거나 너무 적은 검색어를 기록하고, 다음 warmup/coverage job의 우선순위로 사용할 수 있게 했습니다.
 
 ## 중요한 데이터 원칙
 
@@ -62,7 +65,9 @@ Next.js UI
   -> TTL cache 조회
   -> SQLiteProductIndexStore 조회
        - query별 rank 유지
-       - 상품명/브랜드/카테고리/설명/옵션 search_text fallback
+       - brand_aliases 기반 한글/영문 브랜드 alias 확장
+       - FTS5 문서로 상품명/브랜드/카테고리/설명/옵션 부분 키워드 검색
+       - search_text LIKE fallback
   -> 부족하면 primary query만 빠른 source로 병렬 실행
        - OliveYoungPublicApiCollector
        - LocalVerifiedCatalogCollector
@@ -75,6 +80,7 @@ Next.js UI
   -> dedupe, filter, ranking
   -> SearchResponse 반환
   -> live 결과와 관련 확장어 refresh는 ProductIngestionAgent가 SQLite index에 저장
+  -> 결과가 없거나 부족한 검색어는 search_gaps에 기록
 ```
 
 ## 주요 모듈
@@ -171,6 +177,8 @@ curl 'http://localhost:8000/suggest?q=투&limit=10'
 curl https://glowsearch-backend.onrender.com/index/status
 curl https://glowsearch-backend.onrender.com/diagnostics
 ```
+
+`/diagnostics`에는 최근 검색 gap도 포함됩니다. 결과가 적은 검색어를 확인한 뒤 `/index/warm` 또는 ingestion CLI의 seed로 넣으면 다음 검색부터 더 빠르고 넓게 반환됩니다.
 
 ## 로컬 실행
 
@@ -293,6 +301,16 @@ cd backend
 
 현재 SQLite는 로컬/소규모 운영용입니다.
 
+현재 SQLite index는 세 가지 테이블 축으로 동작합니다.
+
+| 테이블 | 역할 |
+| --- | --- |
+| `products` | 원본 source가 준 상품 record 저장 |
+| `query_products` | 특정 검색어에서 source가 반환한 공식 rank 보존 |
+| `products_fts` | 브랜드/상품명/카테고리/설명/옵션/alias 기반 빠른 검색 |
+| `brand_aliases` | 브랜드 영문명, 한글명, 하위 브랜드, 별칭 연결 |
+| `search_gaps` | 결과 없음/부족 검색어를 다음 수집 대상으로 기록 |
+
 Render free plan의 일반 filesystem은 ephemeral입니다. 현재처럼 `/tmp`에 SQLite를 두면 재배포, 재시작, cold start 이후 인덱스가 비거나 작아질 수 있습니다. 이 경우 검색 요청이 매번 live source를 기다리므로 느리고, source timeout이 나면 결과가 적게 나옵니다.
 
 권장 순서:
@@ -343,6 +361,12 @@ GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_LIMIT=240
 cd backend
 .venv/bin/python scripts/ingest_oliveyoung.py --use-default-seeds --coverage-pairs 200 --limit 240 --db-path data/product_index.sqlite3
 ```
+
+`/diagnostics`의 `search_gaps`에 반복적으로 보이는 검색어는 다음 세 가지 중 하나로 처리합니다.
+
+1. 브랜드/하위 브랜드 문제면 `backend/data/brand_registry.json`에 alias를 추가합니다.
+2. 카테고리/성분/상품군 문제면 `GLOWSEARCH_PRODUCT_INDEX_CATEGORY_QUERIES` 또는 기본 seed에 추가합니다.
+3. 특정 상품군 coverage 문제면 ingestion CLI나 `/index/warm`으로 해당 검색어를 먼저 warmup합니다.
 
 ## 운영/법무 주의
 
@@ -407,7 +431,7 @@ cd backend
 최근 검증 결과:
 
 - backend ruff 통과
-- backend pytest 86 passed
+- backend pytest 통과
 - frontend typecheck 통과
 - frontend build 통과
 - Render health의 `release_sha`로 현재 배포 commit 확인

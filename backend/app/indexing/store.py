@@ -2,23 +2,31 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
 from app.models.product import ProductSourceRecord
+from app.normalizer.brand import BrandAlias
 from app.search.synonyms import search_key
 
 
 class ProductIndexStore(Protocol):
     async def search(self, query: str, limit: int) -> list[ProductSourceRecord]: ...
 
+    async def upsert_brand_aliases(self, aliases: list[BrandAlias]) -> None: ...
+
     async def upsert_search_results(
         self,
         query: str,
         records: list[ProductSourceRecord],
     ) -> None: ...
+
+    async def record_search_gap(self, query: str, result_count: int, reason: str) -> None: ...
+
+    async def recent_search_gaps(self, limit: int = 20) -> list[dict[str, int | str | None]]: ...
 
     async def stats(self) -> dict[str, int | str | None]: ...
 
@@ -34,6 +42,7 @@ class SQLiteProductIndexStore:
         self._connection = sqlite3.connect(self._db_path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
         self._lock = asyncio.Lock()
+        self._fts_enabled = True
         self._ensure_schema()
 
     async def search(self, query: str, limit: int) -> list[ProductSourceRecord]:
@@ -57,26 +66,80 @@ class SQLiteProductIndexStore:
                 return records
 
             seen = {_record_key(record) for record in records}
-            fallback_rows = self._connection.execute(
-                """
-                SELECT *
-                FROM products
-                WHERE search_text LIKE ?
-                ORDER BY last_seen_at DESC, id DESC
-                LIMIT ?
-                """,
-                (f"%{query_key}%", limit * 3),
-            ).fetchall()
-            for row in fallback_rows:
-                record = _row_to_record(row)
-                record_key = _record_key(record)
-                if record_key in seen:
-                    continue
-                seen.add(record_key)
-                records.append(record)
+            for row in self._search_fallback_rows(query, limit * 4):
+                self._append_unique_record(records, seen, row)
                 if len(records) >= limit:
                     break
             return records
+
+    async def upsert_brand_aliases(self, aliases: list[BrandAlias]) -> None:
+        if not aliases:
+            return
+        async with self._lock:
+            self._upsert_brand_aliases_locked(aliases)
+            self._backfill_fts_if_needed_locked()
+            self._connection.commit()
+
+    def seed_brand_aliases(self, aliases: list[BrandAlias]) -> None:
+        if not aliases:
+            return
+        self._upsert_brand_aliases_locked(aliases)
+        self._backfill_fts_if_needed_locked()
+        self._connection.commit()
+
+    async def record_search_gap(self, query: str, result_count: int, reason: str) -> None:
+        query_text = query.strip()
+        query_key = _key(query_text)
+        if not query_key:
+            return
+        now = datetime.now(tz=UTC).isoformat()
+        async with self._lock:
+            self._connection.execute(
+                """
+                INSERT INTO search_gaps(
+                    query_key,
+                    query,
+                    normalized_query,
+                    result_count,
+                    miss_count,
+                    last_reason,
+                    first_seen_at,
+                    last_seen_at
+                )
+                VALUES(?, ?, ?, ?, 1, ?, ?, ?)
+                ON CONFLICT(query_key) DO UPDATE SET
+                    query = excluded.query,
+                    result_count = excluded.result_count,
+                    miss_count = search_gaps.miss_count + 1,
+                    last_reason = excluded.last_reason,
+                    last_seen_at = excluded.last_seen_at
+                """,
+                (query_key, query_text, query_key, max(result_count, 0), reason, now, now),
+            )
+            self._connection.commit()
+
+    async def recent_search_gaps(self, limit: int = 20) -> list[dict[str, int | str | None]]:
+        async with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT query, normalized_query, result_count, miss_count, last_reason, last_seen_at
+                FROM search_gaps
+                ORDER BY last_seen_at DESC
+                LIMIT ?
+                """,
+                (max(limit, 1),),
+            ).fetchall()
+        return [
+            {
+                "query": row["query"],
+                "normalized_query": row["normalized_query"],
+                "result_count": int(row["result_count"] or 0),
+                "miss_count": int(row["miss_count"] or 0),
+                "last_reason": row["last_reason"],
+                "last_seen_at": row["last_seen_at"],
+            }
+            for row in rows
+        ]
 
     async def upsert_search_results(
         self,
@@ -117,10 +180,22 @@ class SQLiteProductIndexStore:
             last_refreshed_at = self._connection.execute(
                 "SELECT MAX(last_refreshed_at) AS value FROM products"
             ).fetchone()["value"]
+            alias_count = self._connection.execute(
+                "SELECT COUNT(*) AS count FROM brand_aliases"
+            ).fetchone()["count"]
+            gap_count = self._connection.execute(
+                "SELECT COUNT(*) AS count FROM search_gaps"
+            ).fetchone()["count"]
+            last_gap_at = self._connection.execute(
+                "SELECT MAX(last_seen_at) AS value FROM search_gaps"
+            ).fetchone()["value"]
         return {
             "product_count": int(product_count or 0),
             "query_count": int(query_count or 0),
+            "brand_alias_count": int(alias_count or 0),
+            "search_gap_count": int(gap_count or 0),
             "last_refreshed_at": last_refreshed_at,
+            "last_search_gap_at": last_gap_at,
         }
 
     async def all_products(self, limit: int | None = None) -> list[ProductSourceRecord]:
@@ -195,7 +270,57 @@ class SQLiteProductIndexStore:
         self._connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_query_products_rank ON query_products(query_key, rank)"
         )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS brand_aliases (
+                alias_key TEXT PRIMARY KEY,
+                alias TEXT NOT NULL,
+                official_en TEXT NOT NULL,
+                source TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        self._connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_brand_aliases_official ON brand_aliases(official_en)"
+        )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS search_gaps (
+                query_key TEXT PRIMARY KEY,
+                query TEXT NOT NULL,
+                normalized_query TEXT NOT NULL,
+                result_count INTEGER NOT NULL,
+                miss_count INTEGER NOT NULL,
+                last_reason TEXT,
+                first_seen_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL
+            )
+            """
+        )
+        self._ensure_fts_table()
         self._connection.commit()
+
+    def _ensure_fts_table(self) -> None:
+        try:
+            self._connection.execute(
+                """
+                CREATE VIRTUAL TABLE IF NOT EXISTS products_fts USING fts5(
+                    record_key UNINDEXED,
+                    source_brand_name,
+                    product_name_ko,
+                    category,
+                    description,
+                    shade,
+                    options,
+                    aliases,
+                    search_terms,
+                    tokenize='unicode61'
+                )
+                """
+            )
+        except sqlite3.OperationalError:
+            self._fts_enabled = False
 
     def _ensure_columns(self, table: str, columns: dict[str, str]) -> None:
         existing = {
@@ -206,6 +331,27 @@ class SQLiteProductIndexStore:
             if column in existing:
                 continue
             self._connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+    def _upsert_brand_aliases_locked(self, aliases: list[BrandAlias]) -> None:
+        now = datetime.now(tz=UTC).isoformat()
+        for alias in aliases:
+            alias_key = _key(alias.alias)
+            official = alias.official_en.strip()
+            alias_text = alias.alias.strip()
+            if not alias_key or not official or not alias_text:
+                continue
+            self._connection.execute(
+                """
+                INSERT INTO brand_aliases(alias_key, alias, official_en, source, updated_at)
+                VALUES(?, ?, ?, ?, ?)
+                ON CONFLICT(alias_key) DO UPDATE SET
+                    alias = excluded.alias,
+                    official_en = excluded.official_en,
+                    source = excluded.source,
+                    updated_at = excluded.updated_at
+                """,
+                (alias_key, alias_text, official, alias.source, now),
+            )
 
     def _upsert_product(self, record: ProductSourceRecord, now: str) -> int:
         record_key = _record_key(record)
@@ -296,7 +442,206 @@ class SQLiteProductIndexStore:
             "SELECT id FROM products WHERE record_key = ?",
             (record_key,),
         ).fetchone()
+        self._upsert_product_fts(record_key, record)
         return int(row["id"])
+
+    def _upsert_product_fts(self, record_key: str, record: ProductSourceRecord) -> None:
+        if not self._fts_enabled:
+            return
+        try:
+            self._connection.execute(
+                "DELETE FROM products_fts WHERE record_key = ?",
+                (record_key,),
+            )
+            self._connection.execute(
+                """
+                INSERT INTO products_fts(
+                    record_key,
+                    source_brand_name,
+                    product_name_ko,
+                    category,
+                    description,
+                    shade,
+                    options,
+                    aliases,
+                    search_terms
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record_key,
+                    record.source_brand_name,
+                    record.product_name_ko,
+                    record.category,
+                    record.description,
+                    record.shade,
+                    " ".join(record.options or []),
+                    " ".join(self._alias_terms_for_record(record)),
+                    _search_terms(record),
+                ),
+            )
+        except sqlite3.OperationalError:
+            self._fts_enabled = False
+
+    def _backfill_fts_if_needed_locked(self) -> None:
+        if not self._fts_enabled:
+            return
+        try:
+            product_count = self._connection.execute(
+                "SELECT COUNT(*) AS count FROM products"
+            ).fetchone()["count"]
+            fts_count = self._connection.execute(
+                "SELECT COUNT(*) AS count FROM products_fts"
+            ).fetchone()["count"]
+        except sqlite3.OperationalError:
+            self._fts_enabled = False
+            return
+        if not product_count or fts_count >= product_count:
+            return
+        rows = self._connection.execute("SELECT * FROM products").fetchall()
+        for row in rows:
+            self._upsert_product_fts(row["record_key"], _row_to_record(row))
+
+    def _search_fallback_rows(self, query: str, limit: int) -> list[sqlite3.Row]:
+        rows: list[sqlite3.Row] = []
+        seen_record_keys: set[str] = set()
+        for candidate in self._fallback_queries(query):
+            if self._fts_enabled:
+                for row in self._search_fts_rows(candidate, limit):
+                    record_key = row["record_key"]
+                    if record_key in seen_record_keys:
+                        continue
+                    seen_record_keys.add(record_key)
+                    rows.append(row)
+                    if len(rows) >= limit:
+                        return rows
+            candidate_key = _key(candidate)
+            if not candidate_key:
+                continue
+            like_rows = self._connection.execute(
+                """
+                SELECT *
+                FROM products
+                WHERE search_text LIKE ?
+                ORDER BY last_seen_at DESC, id DESC
+                LIMIT ?
+                """,
+                (f"%{candidate_key}%", limit),
+            ).fetchall()
+            for row in like_rows:
+                record_key = row["record_key"]
+                if record_key in seen_record_keys:
+                    continue
+                seen_record_keys.add(record_key)
+                rows.append(row)
+                if len(rows) >= limit:
+                    return rows
+        return rows
+
+    def _search_fts_rows(self, query: str, limit: int) -> list[sqlite3.Row]:
+        match_query = _fts_match_query(query)
+        if not match_query:
+            return []
+        try:
+            return self._connection.execute(
+                """
+                SELECT p.*, bm25(products_fts) AS fts_rank
+                FROM products_fts
+                JOIN products p ON p.record_key = products_fts.record_key
+                WHERE products_fts MATCH ?
+                ORDER BY fts_rank ASC, p.last_seen_at DESC, p.id DESC
+                LIMIT ?
+                """,
+                (match_query, limit),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            self._fts_enabled = False
+            return []
+
+    def _fallback_queries(self, query: str) -> list[str]:
+        candidates = [query]
+        query_key = _key(query)
+        if len(query_key) >= 2:
+            rows = self._connection.execute(
+                """
+                SELECT DISTINCT official_en
+                FROM brand_aliases
+                WHERE alias_key = ?
+                   OR alias_key LIKE ?
+                   OR ? LIKE alias_key || '%'
+                   OR instr(alias_key, ?) > 0
+                ORDER BY length(alias_key) ASC
+                LIMIT 8
+                """,
+                (query_key, f"{query_key}%", query_key, query_key),
+            ).fetchall()
+            for row in rows:
+                alias_rows = self._connection.execute(
+                    """
+                    SELECT alias
+                    FROM brand_aliases
+                    WHERE official_en = ?
+                    ORDER BY CASE WHEN alias GLOB '*[가-힣]*' THEN 0 ELSE 1 END, length(alias)
+                    LIMIT 8
+                    """,
+                    (row["official_en"],),
+                ).fetchall()
+                candidates.extend(row["alias"] for row in alias_rows)
+        return _dedupe_texts(candidates)
+
+    def _alias_terms_for_record(self, record: ProductSourceRecord) -> list[str]:
+        keys = {
+            _key(record.source_brand_name),
+            *[
+                alias_key
+                for alias_key in self._record_brand_alias_keys(record.product_name_ko)
+            ],
+        }
+        aliases: list[str] = []
+        for key in keys:
+            if not key:
+                continue
+            rows = self._connection.execute(
+                """
+                SELECT related.alias
+                FROM brand_aliases seed
+                JOIN brand_aliases related ON related.official_en = seed.official_en
+                WHERE seed.alias_key = ?
+                ORDER BY CASE WHEN related.alias GLOB '*[가-힣]*' THEN 0 ELSE 1 END, length(related.alias)
+                """,
+                (key,),
+            ).fetchall()
+            aliases.extend(row["alias"] for row in rows)
+        return _dedupe_texts(aliases)
+
+    def _record_brand_alias_keys(self, value: str | None) -> list[str]:
+        text_key = _key(value)
+        if len(text_key) < 2:
+            return []
+        rows = self._connection.execute(
+            """
+            SELECT alias_key
+            FROM brand_aliases
+            WHERE instr(?, alias_key) > 0
+            ORDER BY length(alias_key) DESC
+            LIMIT 8
+            """,
+            (text_key,),
+        ).fetchall()
+        return [row["alias_key"] for row in rows]
+
+    @staticmethod
+    def _append_unique_record(
+        records: list[ProductSourceRecord],
+        seen: set[str],
+        row: sqlite3.Row,
+    ) -> None:
+        record = _row_to_record(row)
+        record_key = _record_key(record)
+        if record_key in seen:
+            return
+        seen.add(record_key)
+        records.append(record)
 
 
 def _row_to_record(row: sqlite3.Row) -> ProductSourceRecord:
@@ -339,6 +684,76 @@ def _search_text(record: ProductSourceRecord) -> str:
             if value
         )
     )
+
+
+def _search_terms(record: ProductSourceRecord) -> str:
+    values = [
+        record.source_brand_name,
+        record.product_name_ko,
+        record.category,
+        record.description,
+        record.shade,
+        record.source_product_id,
+        " ".join(record.options or []),
+    ]
+    terms: list[str] = []
+    for value in values:
+        text = value.strip() if isinstance(value, str) else ""
+        if not text:
+            continue
+        terms.append(text.casefold())
+        terms.extend(_tokens(text))
+        terms.extend(_compact_ngrams(_key(text)))
+    return " ".join(_dedupe_texts(terms))
+
+
+def _fts_match_query(value: str | None) -> str:
+    terms = [
+        term
+        for term in [
+            *_tokens(value),
+            _key(value),
+            *_compact_ngrams(_key(value), min_size=2, max_size=4),
+        ]
+        if term and len(term) >= 2
+    ]
+    escaped = [_escape_fts_token(term) for term in _dedupe_texts(terms)[:32]]
+    return " OR ".join(f'"{term}"' for term in escaped if term)
+
+
+def _tokens(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [token.casefold() for token in re.findall(r"[0-9A-Za-z가-힣]+", value)]
+
+
+def _compact_ngrams(value: str | None, *, min_size: int = 2, max_size: int = 8) -> list[str]:
+    key = _key(value)
+    if len(key) < min_size:
+        return []
+    terms = [key]
+    capped_max = min(max_size, len(key))
+    for size in range(min_size, capped_max + 1):
+        for start in range(0, len(key) - size + 1):
+            terms.append(key[start : start + size])
+    return terms
+
+
+def _escape_fts_token(value: str) -> str:
+    return value.replace('"', '""')
+
+
+def _dedupe_texts(values: list[str] | tuple[str, ...]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = value.strip() if isinstance(value, str) else ""
+        key = text.casefold()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(text)
+    return deduped
 
 
 def _options_json(options: list[str] | None) -> str | None:

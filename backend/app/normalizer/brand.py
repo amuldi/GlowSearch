@@ -28,6 +28,13 @@ class BrandMatch:
     matched_text: str | None = None
 
 
+@dataclass(frozen=True)
+class BrandAlias:
+    official_en: str
+    alias: str
+    source: str = "registry"
+
+
 class ExternalBrandResolver(Protocol):
     def resolve(self, source_brand_name: str | None, *fallback_texts: str | None) -> str | None: ...
 
@@ -86,6 +93,53 @@ class BrandResolver:
         if official is None:
             return []
         return list(self._official_aliases.get(official, []))
+
+    def aliases_for_query(self, value: str | None, limit: int | None = None) -> list[str]:
+        key = self._key(value)
+        if len(key) < 2:
+            return []
+
+        officials: list[str] = []
+        seen_officials: set[str] = set()
+        for alias_key, _alias, official in self._scan_aliases:
+            if not alias_key:
+                continue
+            if (
+                alias_key == key
+                or alias_key.startswith(key)
+                or key.startswith(alias_key)
+                or key in alias_key
+                or alias_key in key
+            ):
+                if official in seen_officials:
+                    continue
+                seen_officials.add(official)
+                officials.append(official)
+
+        aliases: list[str] = []
+        seen_aliases: set[str] = set()
+        for official in officials:
+            for alias in self._official_aliases.get(official, []):
+                alias_key = self._key(alias)
+                if not alias_key or alias_key in seen_aliases:
+                    continue
+                seen_aliases.add(alias_key)
+                aliases.append(alias)
+                if limit is not None and len(aliases) >= limit:
+                    return aliases
+        return aliases
+
+    def index_aliases(self) -> list[BrandAlias]:
+        aliases: list[BrandAlias] = []
+        seen: set[tuple[str, str]] = set()
+        for official, values in self._official_aliases.items():
+            for alias in values:
+                key = (official, self._key(alias))
+                if not key[1] or key in seen:
+                    continue
+                seen.add(key)
+                aliases.append(BrandAlias(official_en=official, alias=alias))
+        return aliases
 
     def suggestion_aliases(self) -> list[str]:
         aliases: list[str] = []

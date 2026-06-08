@@ -60,6 +60,9 @@ class SearchMetrics:
             self._counters["background_index_errors"] += 1
             self._last_background_error = error
 
+    def record_search_gap(self) -> None:
+        self._counters["search_gaps"] += 1
+
     def snapshot(self) -> dict[str, object]:
         source_names = sorted(
             set(self._source_successes)
@@ -95,6 +98,7 @@ class SearchMetrics:
                 for source in source_names
             },
             "background_index_errors": self._counters["background_index_errors"],
+            "search_gaps": self._counters["search_gaps"],
             "last_background_error": self._last_background_error,
             "last_source_errors": list(self._last_source_errors),
         }

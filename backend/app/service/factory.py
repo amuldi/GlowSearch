@@ -34,6 +34,8 @@ def get_search_service() -> SearchService:
         if settings.product_index_enabled
         else None
     )
+    if isinstance(index_store, SQLiteProductIndexStore):
+        index_store.seed_brand_aliases(normalizer.index_aliases())
     detail_enricher = (
         OliveYoungDetailEnrichmentAgent(settings)
         if settings.product_index_detail_enrichment_enabled

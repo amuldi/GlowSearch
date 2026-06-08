@@ -1,7 +1,7 @@
 import re
 
 from app.models.product import ProductSearchResult, ProductSourceRecord
-from app.normalizer.brand import BrandMatch, BrandResolver
+from app.normalizer.brand import BrandAlias, BrandMatch, BrandResolver
 from app.normalizer.text import clean_text, has_hangul, normalize_image_url
 
 
@@ -48,6 +48,12 @@ class ProductNormalizer:
 
     def brand_aliases(self, official_en: str | None) -> list[str]:
         return self._brand_resolver.aliases_for(official_en)
+
+    def query_aliases(self, value: str | None, limit: int | None = None) -> list[str]:
+        return self._brand_resolver.aliases_for_query(value, limit)
+
+    def index_aliases(self) -> list[BrandAlias]:
+        return self._brand_resolver.index_aliases()
 
     def suggestion_aliases(self) -> list[str]:
         return self._brand_resolver.suggestion_aliases()
