@@ -557,16 +557,26 @@ function ProductCard({ product }: { product: Product }) {
       <div className="min-w-0">
         <div className="mb-2 flex items-center justify-between gap-2">
           <SourceBadge product={product} />
+          <button
+            type="button"
+            onClick={copyProductInfo}
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-line bg-white px-2.5 text-xs font-semibold text-neutral-700 transition hover:border-rose hover:bg-blush-soft hover:text-rosewood"
+            aria-label="상품 정보 복사"
+            title="상품 정보 복사"
+          >
+            {copied ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
+            {copied ? "복사됨" : "복사"}
+          </button>
         </div>
-        <div className="flex items-start gap-2">
-          <dl className="min-w-0 flex-1 space-y-1">
+        <div>
+          <dl className="min-w-0 space-y-1">
             <div>
               <dt className="text-[11px] font-medium text-neutral-500">브랜드명</dt>
-              <dd className="truncate text-sm font-bold text-rosewood">{product.brand_ko ?? "브랜드 미확인"}</dd>
+              <dd className="whitespace-normal break-words text-sm font-bold leading-5 text-rosewood">{product.brand_ko ?? "브랜드 미확인"}</dd>
             </div>
             <div>
               <dt className="text-[11px] font-medium text-neutral-500">영문명</dt>
-              <dd className="truncate text-xs font-medium text-neutral-700">{product.brand_en ?? "영문명 미확인"}</dd>
+              <dd className="whitespace-normal break-words text-xs font-medium leading-4 text-neutral-700">{product.brand_en ?? "영문명 미확인"}</dd>
             </div>
             <div>
               <dt className="text-[11px] font-medium text-neutral-500">제품명</dt>
@@ -612,17 +622,6 @@ function ProductCard({ product }: { product: Product }) {
               </div>
             ) : null}
           </dl>
-
-          <button
-            type="button"
-            onClick={copyProductInfo}
-            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-line bg-white px-2.5 text-xs font-semibold text-neutral-700 transition hover:border-rose hover:bg-blush-soft hover:text-rosewood"
-            aria-label="상품 정보 복사"
-            title="상품 정보 복사"
-          >
-            {copied ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
-            {copied ? "복사됨" : "복사"}
-          </button>
         </div>
       </div>
     </article>
