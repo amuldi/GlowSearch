@@ -387,8 +387,8 @@ cd backend
 최근 검증 결과:
 
 - backend ruff 통과
-- backend pytest 83 passed
+- backend pytest 85 passed
 - frontend typecheck 통과
 - frontend build 통과
-- Render health `release_sha=da56739...` 확인
-- `젤&limit=2` 검색에서 공개 adapter 결과 2건 반환 확인
+- Render health의 `release_sha`로 현재 배포 commit 확인
+- `젤`, `로션` 검색에서 Olive Young source 결과 반환 확인
