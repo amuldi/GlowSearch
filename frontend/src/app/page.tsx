@@ -4,7 +4,7 @@ import { Check, ChevronRight, Copy, Loader2, Search, X } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { searchProducts } from "@/lib/api";
+import { fetchSearchSuggestions, searchProducts } from "@/lib/api";
 import type { Product, SearchResponse } from "@/types/product";
 
 const currencyFormatter = new Intl.NumberFormat("ko-KR", {
@@ -40,6 +40,9 @@ export default function Home() {
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSearchButtonPressed, setIsSearchButtonPressed] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const searchButtonTimerRef = useRef<number | null>(null);
   const searchRequestIdRef = useRef(0);
@@ -72,6 +75,9 @@ export default function Home() {
   const visibleStartIndex = (boundedCurrentPage - 1) * RESULT_PAGE_SIZE;
   const visibleEndIndex = visibleStartIndex + RESULT_PAGE_SIZE;
   const visibleResults = response?.results.slice(visibleStartIndex, visibleEndIndex) ?? [];
+  const canShowSuggestions = Boolean(
+    isSuggestionsOpen && trimmedQuery && !isInputBatchQuery && suggestions.length > 0,
+  );
 
   useEffect(() => {
     return () => {
@@ -137,6 +143,33 @@ export default function Home() {
     trimmedSubmittedQuery,
   ]);
 
+  useEffect(() => {
+    if (!trimmedQuery || isInputBatchQuery) {
+      setSuggestions([]);
+      setActiveSuggestionIndex(-1);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      fetchSearchSuggestions(trimmedQuery, controller.signal)
+        .then((data) => {
+          setSuggestions(data.suggestions.filter((suggestion) => suggestion !== trimmedQuery));
+          setActiveSuggestionIndex(-1);
+        })
+        .catch((error) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          setSuggestions([]);
+          setActiveSuggestionIndex(-1);
+        });
+    }, 120);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [isInputBatchQuery, trimmedQuery]);
+
   const statusText = useMemo(() => {
     if (!trimmedSubmittedQuery) return "";
     if (isLoading) return "검색 중입니다.";
@@ -165,6 +198,9 @@ export default function Home() {
 
   const clearSearchInput = () => {
     setQuery("");
+    setSuggestions([]);
+    setIsSuggestionsOpen(false);
+    setActiveSuggestionIndex(-1);
   };
 
   const triggerSearchButtonMotion = () => {
@@ -178,18 +214,26 @@ export default function Home() {
     }, 170);
   };
 
-  const submitSearch = () => {
-    if (!trimmedQuery || isLoading) {
+  const submitSearch = (nextQuery?: string) => {
+    const searchQuery = (nextQuery ?? query).trim();
+    if (!searchQuery || isLoading) {
       return;
     }
     triggerSearchButtonMotion();
     setIsLoading(true);
     setErrorMessage(null);
     setResponse(null);
-    setSubmittedQuery(trimmedQuery);
+    setQuery(searchQuery);
+    setSubmittedQuery(searchQuery);
+    setIsSuggestionsOpen(false);
+    setActiveSuggestionIndex(-1);
     setResultLimit(DEFAULT_RESULT_LIMIT);
     setCurrentPage(1);
     setSearchRun((current) => current + 1);
+  };
+
+  const chooseSuggestion = (suggestion: string) => {
+    submitSearch(suggestion);
   };
 
   const goToPage = (page: number) => {
@@ -202,10 +246,26 @@ export default function Home() {
   };
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (canShowSuggestions && event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveSuggestionIndex((current) => (current + 1) % suggestions.length);
+      return;
+    }
+    if (canShowSuggestions && event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveSuggestionIndex((current) => (
+        current <= 0 ? suggestions.length - 1 : current - 1
+      ));
+      return;
+    }
     if (event.key !== "Enter" || event.shiftKey) {
       return;
     }
     event.preventDefault();
+    if (canShowSuggestions && activeSuggestionIndex >= 0) {
+      chooseSuggestion(suggestions[activeSuggestionIndex]);
+      return;
+    }
     submitSearch();
   };
 
@@ -217,54 +277,69 @@ export default function Home() {
           GlowSearch
         </div>
 
-        <div
-          className="flex w-full items-start gap-2 rounded-[22px] border border-blush/55 bg-white/92 px-4 py-3 shadow-glow ring-1 ring-white/80 transition focus-within:border-rose/70 focus-within:shadow-[0_18px_60px_rgba(159,63,85,0.16)] sm:px-5"
-          aria-busy={isLoading}
-        >
-          <Search className="mt-2.5 h-5 w-5 shrink-0 text-rosewood" aria-hidden="true" />
-          <textarea
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={handleSearchKeyDown}
-            rows={isInputBatchQuery ? Math.min(queryCount, 6) : 1}
-            placeholder="브랜드, 제품명, 성분 검색"
-            className="min-h-10 min-w-0 flex-1 resize-y border-0 bg-transparent py-2 text-lg font-medium leading-6 text-ink outline-none placeholder:text-neutral-400 sm:text-xl"
-            aria-label="브랜드, 제품명, 성분 검색"
-          />
-          {query ? (
+        <div className="relative w-full">
+          <div
+            className="flex w-full items-start gap-2 rounded-[22px] border border-blush/55 bg-white/92 px-4 py-3 shadow-glow ring-1 ring-white/80 transition focus-within:border-rose/70 focus-within:shadow-[0_18px_60px_rgba(159,63,85,0.16)] sm:px-5"
+            aria-busy={isLoading}
+          >
+            <Search className="mt-2.5 h-5 w-5 shrink-0 text-rosewood" aria-hidden="true" />
+            <textarea
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              onFocus={() => setIsSuggestionsOpen(true)}
+              onBlur={() => {
+                window.setTimeout(() => setIsSuggestionsOpen(false), 120);
+              }}
+              rows={isInputBatchQuery ? Math.min(queryCount, 6) : 1}
+              placeholder="브랜드, 제품명, 성분 검색"
+              className="min-h-10 min-w-0 flex-1 resize-y border-0 bg-transparent py-2 text-lg font-medium leading-6 text-ink outline-none placeholder:text-neutral-400 sm:text-xl"
+              aria-label="브랜드, 제품명, 성분 검색"
+            />
+            {query ? (
+              <button
+                type="button"
+                onClick={clearSearchInput}
+                className="grid h-10 w-10 place-items-center rounded-full text-neutral-500 transition hover:bg-blush-soft hover:text-rosewood focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blush"
+                aria-label="검색어 지우기"
+                title="검색어 지우기"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            ) : null}
             <button
               type="button"
-              onClick={clearSearchInput}
-              className="grid h-10 w-10 place-items-center rounded-full text-neutral-500 transition hover:bg-blush-soft hover:text-rosewood focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blush"
-              aria-label="검색어 지우기"
-              title="검색어 지우기"
+              onClick={() => submitSearch()}
+              disabled={!trimmedQuery || isLoading}
+              className={[
+                "inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-semibold text-white transition duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose sm:px-5",
+                !trimmedQuery && !isLoading
+                  ? "cursor-not-allowed bg-neutral-300 shadow-none"
+                  : isLoading
+                    ? "cursor-progress bg-rosewood shadow-[0_10px_22px_rgba(159,63,85,0.28)]"
+                    : "bg-rosewood shadow-[0_10px_22px_rgba(159,63,85,0.28)] hover:bg-[#873247]",
+                isSearchButtonPressed ? "translate-y-px scale-[0.97]" : "translate-y-0 scale-100",
+              ].join(" ")}
+              aria-label="검색"
+              title="검색"
             >
-              <X className="h-4 w-4" aria-hidden="true" />
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Search className="h-4 w-4" aria-hidden="true" />
+              )}
+              {isLoading ? "검색중" : "검색"}
             </button>
+          </div>
+
+          {canShowSuggestions ? (
+            <SuggestionDropdown
+              activeIndex={activeSuggestionIndex}
+              query={trimmedQuery}
+              suggestions={suggestions}
+              onChoose={chooseSuggestion}
+            />
           ) : null}
-          <button
-            type="button"
-            onClick={submitSearch}
-            disabled={!trimmedQuery || isLoading}
-            className={[
-              "inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-semibold text-white transition duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose sm:px-5",
-              !trimmedQuery && !isLoading
-                ? "cursor-not-allowed bg-neutral-300 shadow-none"
-                : isLoading
-                  ? "cursor-progress bg-rosewood shadow-[0_10px_22px_rgba(159,63,85,0.28)]"
-                  : "bg-rosewood shadow-[0_10px_22px_rgba(159,63,85,0.28)] hover:bg-[#873247]",
-              isSearchButtonPressed ? "translate-y-px scale-[0.97]" : "translate-y-0 scale-100",
-            ].join(" ")}
-            aria-label="검색"
-            title="검색"
-          >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Search className="h-4 w-4" aria-hidden="true" />
-            )}
-            {isLoading ? "검색중" : "검색"}
-          </button>
         </div>
 
         {isLoading ? (
@@ -324,6 +399,67 @@ export default function Home() {
         ) : null}
       </section>
     </main>
+  );
+}
+
+function SuggestionDropdown({
+  suggestions,
+  query,
+  activeIndex,
+  onChoose,
+}: {
+  suggestions: string[];
+  query: string;
+  activeIndex: number;
+  onChoose: (suggestion: string) => void;
+}) {
+  return (
+    <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-[22px] border border-blush/55 bg-white/96 py-3 shadow-[0_24px_70px_rgba(74,54,63,0.13)] ring-1 ring-white/80 backdrop-blur">
+      <ul role="listbox" aria-label="관련 검색어">
+        {suggestions.map((suggestion, index) => {
+          const isActive = index === activeIndex;
+          return (
+            <li key={suggestion}>
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => onChoose(suggestion)}
+                className={[
+                  "flex w-full items-center px-6 py-3 text-left text-base font-semibold transition sm:px-8 sm:text-lg",
+                  isActive
+                    ? "bg-blush-soft text-rosewood"
+                    : "text-ink hover:bg-blush-soft/70 hover:text-rosewood",
+                ].join(" ")}
+                role="option"
+                aria-selected={isActive}
+              >
+                <HighlightedSuggestion value={suggestion} query={query} />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function HighlightedSuggestion({ value, query }: { value: string; query: string }) {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return <>{value}</>;
+
+  const index = value.toLocaleLowerCase().indexOf(trimmedQuery.toLocaleLowerCase());
+  if (index < 0) return <>{value}</>;
+
+  const before = value.slice(0, index);
+  const match = value.slice(index, index + trimmedQuery.length);
+  const after = value.slice(index + trimmedQuery.length);
+
+  return (
+    <>
+      {before}
+      <span className="font-extrabold text-[#45B316]">{match}</span>
+      {after}
+    </>
   );
 }
 

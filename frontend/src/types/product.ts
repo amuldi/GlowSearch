@@ -29,6 +29,11 @@ export type SearchResponse = {
   source_errors: string[];
 };
 
+export type SuggestionResponse = {
+  query: string;
+  suggestions: string[];
+};
+
 export type SearchParams = {
   query: string;
   limit?: number;

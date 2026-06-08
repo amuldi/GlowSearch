@@ -107,6 +107,33 @@ RELATED_QUERY_EXPANSIONS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+SUGGESTION_TERMS: tuple[str, ...] = (
+    "투쿨포스쿨",
+    "TOO COOL FOR SCHOOL",
+    "투크",
+    "투에이엔",
+    "투슬래시포",
+    "투크 블러셔",
+    "립타투",
+    "타투",
+    "눈썹타투",
+    "두피타투",
+    "아토앤오투",
+    "틴트",
+    "립틴트",
+    "립글로스",
+    "쿠션",
+    "파운데이션",
+    "선크림",
+    "선스틱",
+    "클렌징젤",
+    "필링젤",
+    "수딩젤",
+    "젤크림",
+    "로션",
+    "바디로션",
+)
+
 
 def canonical_text(value: str | None) -> str:
     text = clean_text(value)

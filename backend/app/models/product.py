@@ -52,3 +52,8 @@ class SearchResponse(BaseModel):
     count: int
     results: list[ProductSearchResult]
     source_errors: list[str] = Field(default_factory=list)
+
+
+class SuggestionResponse(BaseModel):
+    query: str
+    suggestions: list[str] = Field(default_factory=list)

@@ -226,6 +226,59 @@ class ImplicitBrandKeywordCollector:
         ]
 
 
+class TooCoolAliasCollector:
+    name = "oliveyoung:public-api"
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        self.calls.append(keyword)
+        if keyword != "투쿨포스쿨":
+            return []
+        return [
+            ProductSourceRecord(
+                source_brand_name="투쿨포스쿨",
+                product_name_ko=f"투쿨포스쿨 공식 검색 상품 {index}",
+                regular_price=12000 + index,
+                source="oliveyoung",
+                source_product_id=f"too-cool-{index}",
+            )
+            for index in range(min(limit, 4))
+        ]
+
+
+class PartialTooCoolIndexStore:
+    async def search(self, query: str, limit: int) -> list[ProductSourceRecord]:
+        if query not in {"투쿨포스쿨", "too cool for school", "TOO COOL FOR SCHOOL"}:
+            return []
+        return [
+            ProductSourceRecord(
+                source_brand_name="투쿨포스쿨",
+                product_name_ko="투쿨포스쿨 부분 인덱스 상품",
+                regular_price=10000,
+                source="oliveyoung",
+                source_product_id="partial-too-cool-1",
+            )
+        ][:limit]
+
+    async def upsert_search_results(
+        self,
+        query: str,
+        records: list[ProductSourceRecord],
+    ) -> None:
+        return None
+
+    async def stats(self) -> dict[str, int | str | None]:
+        return {"product_count": 1, "query_count": 1, "last_refreshed_at": None}
+
+    async def all_products(self, limit: int | None = None) -> list[ProductSourceRecord]:
+        return []
+
+    async def close(self) -> None:
+        return None
+
+
 class BatchKeywordCollector:
     name = "batch"
 
@@ -1194,6 +1247,89 @@ async def test_search_service_infers_brand_from_query_and_returns_official_field
     assert response.results[0].product_name_ko == "베일 스킨 틴트 (+듀얼미러팔레트)"
     assert response.results[0].price == 24000
     assert response.results[0].source_url == "https://example.test/products/123"
+
+
+@pytest.mark.asyncio
+async def test_search_service_expands_english_brand_query_to_korean_alias(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        (
+            '{"entries":[{"official_en":"TOO COOL FOR SCHOOL",'
+            '"aliases":["투쿨포스쿨","too cool for school"],"sources":[]}]}'
+        ),
+        encoding="utf-8",
+    )
+    collector = TooCoolAliasCollector()
+    service = SearchService(
+        collectors=[collector],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        preserve_official_order=True,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("too cool for school", SearchCriteria(limit=4))
+
+    assert "투쿨포스쿨" in collector.calls
+    assert response.count == 4
+    assert response.results[0].brand_ko == "투쿨포스쿨"
+    assert response.results[0].brand_en == "TOO COOL FOR SCHOOL"
+
+
+@pytest.mark.asyncio
+async def test_search_service_does_not_stop_at_partial_brand_index(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        (
+            '{"entries":[{"official_en":"TOO COOL FOR SCHOOL",'
+            '"aliases":["투쿨포스쿨","too cool for school"],"sources":[]}]}'
+        ),
+        encoding="utf-8",
+    )
+    collector = TooCoolAliasCollector()
+    service = SearchService(
+        collectors=[collector],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=PartialTooCoolIndexStore(),
+        index_min_results=1,
+        preserve_official_order=True,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("투쿨포스쿨", SearchCriteria(limit=4))
+
+    assert "투쿨포스쿨" in collector.calls
+    assert response.count == 4
+    assert response.results[0].product_name_ko == "투쿨포스쿨 공식 검색 상품 0"
+
+
+def test_search_service_suggests_brand_aliases_and_related_terms(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        (
+            '{"entries":[{"official_en":"TOO COOL FOR SCHOOL",'
+            '"aliases":["투쿨포스쿨","too cool for school"],"sources":[]}]}'
+        ),
+        encoding="utf-8",
+    )
+    service = SearchService(
+        collectors=[],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    assert "투쿨포스쿨" in service.suggest("투", limit=10)
+    assert "TOO COOL FOR SCHOOL" in service.suggest("too", limit=10)
 
 
 @pytest.mark.asyncio

@@ -30,6 +30,8 @@ GlowSearch는 화장품 상품을 빠르게 찾기 위한 Next.js + FastAPI 검�
 - 안전 수집 CLI와 CSV export를 추가했습니다.
 - diagnostics와 index status endpoint로 운영 상태를 확인할 수 있습니다.
 - 결과가 많으면 프론트에서 48개씩 페이지 번호로 나눠 표시합니다.
+- 영문 브랜드명 검색은 브랜드 registry의 한국어 alias로 확장해서 Olive Young 중심 검색 결과를 더 잘 찾도록 했습니다.
+- `/suggest` 자동완성 API를 추가해 브랜드/카테고리/관련 검색어 후보를 검색창 아래에 표시합니다.
 
 ## 중요한 데이터 원칙
 
@@ -106,6 +108,12 @@ frontend/src/
 
 ```bash
 curl 'http://localhost:8000/search?q=젤&limit=24'
+```
+
+자동완성:
+
+```bash
+curl 'http://localhost:8000/suggest?q=투&limit=10'
 ```
 
 지원 파라미터:

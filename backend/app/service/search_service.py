@@ -16,7 +16,7 @@ from app.normalizer.brand import BrandMatch
 from app.normalizer.product import ProductNormalizer
 from app.normalizer.text import clean_text
 from app.observability.metrics import SearchMetrics, Timer
-from app.search.synonyms import related_query_expansions, search_key
+from app.search.synonyms import SUGGESTION_TERMS, related_query_expansions, search_key
 from app.service.source_policy import SourcePolicy
 
 
@@ -169,10 +169,14 @@ class SearchService:
         is_broad_single_query = brand_match is None and self._is_broad_related_query(
             product_query or cleaned_query
         )
-        cache_key = f"{'|'.join(query.casefold() for query in collect_queries)}:{collect_limit}"
+        is_brand_only_query = self._is_brand_only_query(brand_match, product_query)
+        cache_keys = self._cache_keys(collect_queries, collect_limit)
+        cache_key = cache_keys[0]
         fallback_results: list[ProductSearchResult] = []
 
-        cached_collected = None if self._prefer_live_official_results else await self._cache.get(cache_key)
+        cached_collected = (
+            None if self._prefer_live_official_results else await self._get_cached(cache_keys)
+        )
         if not self._prefer_live_official_results:
             self._metrics.record_cache_lookup(cached_collected is not None)
         if cached_collected is not None:
@@ -186,11 +190,17 @@ class SearchService:
                     or self._prefer_live_official_results
                 ),
             )
-            cached_has_enough_results = (
-                not (has_related_expansions or is_broad_single_query)
-                or len(cached_results) >= self._broad_related_return_threshold(criteria.limit)
-                or not cached_collected.records
-            )
+            if is_brand_only_query:
+                cached_has_enough_results = len(cached_results) >= self._brand_return_threshold(
+                    criteria.limit
+                )
+            elif has_related_expansions or is_broad_single_query:
+                cached_has_enough_results = (
+                    len(cached_results) >= self._broad_related_return_threshold(criteria.limit)
+                    or not cached_collected.records
+                )
+            else:
+                cached_has_enough_results = True
             if (
                 cached_top_score > 0
                 or cached_collected.has_official_records
@@ -229,11 +239,16 @@ class SearchService:
         ) and len(indexed_results) > len(fallback_results):
             fallback_results = indexed_results
         index_threshold = min(criteria.limit, self._index_min_results)
-        index_has_enough_results = (
-            len(indexed_results) >= self._broad_related_return_threshold(criteria.limit)
-            if has_related_expansions or is_broad_single_query
-            else len(indexed_results) >= index_threshold or len(indexed_results) > 0
-        )
+        if is_brand_only_query:
+            index_has_enough_results = len(indexed_results) >= self._brand_return_threshold(
+                criteria.limit
+            )
+        elif has_related_expansions or is_broad_single_query:
+            index_has_enough_results = len(indexed_results) >= self._broad_related_return_threshold(
+                criteria.limit
+            )
+        else:
+            index_has_enough_results = len(indexed_results) >= index_threshold or len(indexed_results) > 0
         if (
             not self._prefer_live_official_results
             and (indexed_top_score > 0 or indexed_collected.has_official_records)
@@ -324,7 +339,7 @@ class SearchService:
                 or self._prefer_live_official_results
             ),
         )
-        if top_score <= 0 and fallback_results and not require_relevant:
+        if (top_score <= 0 or not results) and fallback_results and not require_relevant:
             return SearchResponse(
                 query=cleaned_query,
                 count=len(fallback_results[: criteria.limit]),
@@ -377,6 +392,30 @@ class SearchService:
             errors=[],
             has_official_records=self._has_oliveyoung_records(records),
         )
+
+    @staticmethod
+    def _cache_keys(collect_queries: list[str], collect_limit: int) -> list[str]:
+        normalized_queries = [query.casefold() for query in collect_queries]
+        keys = [
+            f"{'|'.join(normalized_queries)}:{collect_limit}",
+        ]
+        if normalized_queries:
+            keys.append(f"{normalized_queries[0]}:{collect_limit}")
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for key in keys:
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(key)
+        return deduped
+
+    async def _get_cached(self, cache_keys: list[str]) -> _CollectedResult | None:
+        for cache_key in cache_keys:
+            cached = await self._cache.get(cache_key)
+            if cached is not None:
+                return cached
+        return None
 
     def _build_results(
         self,
@@ -742,7 +781,15 @@ class SearchService:
         return cls._is_single_related_query(query) and bool(cls._related_query_expansions(query))
 
     @staticmethod
+    def _is_brand_only_query(brand_match: BrandMatch | None, product_query: str) -> bool:
+        return brand_match is not None and not clean_text(product_query)
+
+    @staticmethod
     def _broad_related_return_threshold(limit: int) -> int:
+        return max(1, min(limit, 24))
+
+    @staticmethod
+    def _brand_return_threshold(limit: int) -> int:
         return max(1, min(limit, 24))
 
     @classmethod
@@ -921,6 +968,23 @@ class SearchService:
             "last_index_error": self._last_index_error,
         }
 
+    def suggest(self, query: str, limit: int = 10) -> list[str]:
+        cleaned_query = clean_text(query)
+        if not cleaned_query or limit <= 0:
+            return []
+
+        candidates: list[str] = [
+            *SUGGESTION_TERMS,
+            *self._normalizer.suggestion_aliases(),
+            *self._related_query_expansions(cleaned_query),
+        ]
+        if self._source_discovery_agent is not None:
+            candidates.extend(self._source_discovery_agent.brand_queries())
+            candidates.extend(self._source_discovery_agent.category_queries())
+            candidates.extend(self._source_discovery_agent.seed_queries())
+
+        return self._rank_suggestions(cleaned_query, candidates, limit)
+
     def _warm_seed_queries(self, queries: Iterable[str] | None = None) -> list[str]:
         if self._source_discovery_agent is None or self._ingestion_agent is None:
             return []
@@ -963,46 +1027,57 @@ class SearchService:
     def _needs_browser_supplement(records: list[ProductSourceRecord], _limit: int) -> bool:
         return not records
 
-    @classmethod
     def _collect_queries(
-        cls,
+        self,
         query: str,
         criteria: SearchCriteria,
         brand_match: BrandMatch | None = None,
     ) -> list[str]:
         brand = clean_text(criteria.brand)
-        brand_search_term = clean_text(brand_match.matched_alias if brand_match else brand)
-        product_query = cls._product_query(query, brand_match)
+        brand_search_terms = self._brand_search_terms(brand, brand_match)
+        product_query = self._product_query(query, brand_match)
         candidates = []
-        if brand_search_term:
+        if brand_search_terms:
             if product_query:
-                candidates.append(f"{brand_search_term} {product_query}")
-                compact_product_query = cls._compact_product_query(product_query)
-                if compact_product_query and compact_product_query != product_query:
-                    candidates.append(f"{brand_search_term} {compact_product_query}")
+                compact_product_query = self._compact_product_query(product_query)
+                for brand_search_term in brand_search_terms:
+                    candidates.append(f"{brand_search_term} {product_query}")
+                    if compact_product_query and compact_product_query != product_query:
+                        candidates.append(f"{brand_search_term} {compact_product_query}")
             else:
-                candidates.append(brand_search_term)
+                candidates.extend(brand_search_terms)
         if brand_match is None:
             candidates.append(query)
         if product_query:
             candidates.append(product_query)
-        compact_product_query = cls._compact_product_query(product_query)
+        compact_product_query = self._compact_product_query(product_query)
         if compact_product_query and compact_product_query != product_query:
             candidates.append(compact_product_query)
-        candidates.extend(cls._related_query_expansions(product_query or query))
-        if brand_search_term:
-            candidates.append(brand_search_term)
+        candidates.extend(self._related_query_expansions(product_query or query))
+        if brand_search_terms:
+            candidates.extend(brand_search_terms)
 
         queries: list[str] = []
         seen: set[str] = set()
         for candidate in candidates:
             text = clean_text(candidate)
-            key = cls._key(text)
+            key = self._key(text)
             if not text or not key or key in seen:
                 continue
             seen.add(key)
             queries.append(text)
         return queries or [query]
+
+    def _brand_search_terms(
+        self,
+        brand: str | None,
+        brand_match: BrandMatch | None,
+    ) -> list[str]:
+        if brand_match is not None:
+            return self._normalizer.brand_aliases(brand_match.official_en) or [
+                brand_match.matched_alias
+            ]
+        return [brand] if brand else []
 
     @classmethod
     def _live_collect_queries(
@@ -1017,6 +1092,15 @@ class SearchService:
             return collect_queries
         if brand_match is None and cls._is_broad_related_query(product_query or cleaned_query):
             return [primary_query]
+        if brand_match is not None and not clean_text(product_query):
+            related_queries = set(cls._related_query_expansions(cleaned_query))
+            if not related_queries:
+                return [primary_query]
+            return [
+                query
+                for query in collect_queries
+                if query == primary_query or query in related_queries
+            ]
         return collect_queries
 
     @classmethod
@@ -1493,6 +1577,34 @@ class SearchService:
             .replace("땡큐요엠핑크", "요염핑")
         )
         return text
+
+    @classmethod
+    def _rank_suggestions(
+        cls,
+        query: str,
+        candidates: Iterable[str | None],
+        limit: int,
+    ) -> list[str]:
+        query_key = cls._key(query)
+        if not query_key:
+            return []
+        ranked: list[tuple[tuple[int, int, int], str]] = []
+        seen: set[str] = set()
+        for index, candidate in enumerate(candidates):
+            text = clean_text(candidate)
+            candidate_key = cls._key(text)
+            if not text or not candidate_key or candidate_key in seen:
+                continue
+            seen.add(candidate_key)
+            if candidate_key.startswith(query_key):
+                score = 100
+            elif query_key in candidate_key:
+                score = 80
+            else:
+                continue
+            ranked.append(((score, -len(candidate_key), -index), text))
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        return [text for _score, text in ranked[:limit]]
 
     @staticmethod
     def _dedupe_errors(errors: Iterable[str]) -> list[str]:

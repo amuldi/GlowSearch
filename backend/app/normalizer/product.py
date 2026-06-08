@@ -46,6 +46,12 @@ class ProductNormalizer:
     def match_brand_in_text(self, text: str) -> BrandMatch | None:
         return self._brand_resolver.match_text(text)
 
+    def brand_aliases(self, official_en: str | None) -> list[str]:
+        return self._brand_resolver.aliases_for(official_en)
+
+    def suggestion_aliases(self) -> list[str]:
+        return self._brand_resolver.suggestion_aliases()
+
     def close(self) -> None:
         self._brand_resolver.close()
 

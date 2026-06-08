@@ -41,6 +41,7 @@ class BrandResolver:
         external_resolvers: list[ExternalBrandResolver] | None = None,
     ):
         self._aliases: dict[str, str] = {}
+        self._official_aliases: dict[str, list[str]] = {}
         self._scan_aliases: list[tuple[str, str, str]] = []
         self._warmup_aliases: list[str] = []
         self._external_resolvers = external_resolvers or []
@@ -78,6 +79,26 @@ class BrandResolver:
             return list(self._warmup_aliases)
         return self._warmup_aliases[:limit]
 
+    def aliases_for(self, official_en: str | None) -> list[str]:
+        official = self._aliases.get(self._key(official_en)) or self._clean_latin_brand(
+            official_en
+        )
+        if official is None:
+            return []
+        return list(self._official_aliases.get(official, []))
+
+    def suggestion_aliases(self) -> list[str]:
+        aliases: list[str] = []
+        seen: set[str] = set()
+        for values in self._official_aliases.values():
+            for value in values:
+                key = self._key(value)
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                aliases.append(value)
+        return aliases
+
     def match_text(self, value: str | None) -> BrandMatch | None:
         key = self._key(value)
         if not key:
@@ -107,6 +128,9 @@ class BrandResolver:
             if official is None:
                 continue
             values = [entry.official_en, *entry.aliases]
+            official_aliases = self._ordered_aliases(values)
+            if official_aliases:
+                self._official_aliases[official] = official_aliases
             warmup_alias = next(
                 (
                     alias_text
@@ -123,6 +147,22 @@ class BrandResolver:
                     self._aliases[key] = official
                     self._scan_aliases.append((key, alias, official))
         self._scan_aliases.sort(key=lambda item: len(item[0]), reverse=True)
+
+    @classmethod
+    def _ordered_aliases(cls, values: list[str]) -> list[str]:
+        aliases: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            text = clean_text(value)
+            key = cls._key(text)
+            if not text or not key or key in seen:
+                continue
+            seen.add(key)
+            aliases.append(text)
+        return [
+            *[alias for alias in aliases if has_hangul(alias)],
+            *[alias for alias in aliases if not has_hangul(alias)],
+        ]
 
     @staticmethod
     def _key(value: str | None) -> str:

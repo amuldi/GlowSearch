@@ -610,7 +610,7 @@ async def test_search_service_skips_slow_index_read_before_network(tmp_path) -> 
 
 
 @pytest.mark.asyncio
-async def test_search_service_returns_cached_records_before_index_or_network(tmp_path) -> None:
+async def test_search_service_keeps_partial_cached_brand_records_as_fallback(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text(
         '{"entries":[{"official_en":"mude","aliases":["뮤드"],"sources":[]}]}',
@@ -650,7 +650,7 @@ async def test_search_service_returns_cached_records_before_index_or_network(tmp
 
     assert response.count == 1
     assert response.results[0].product_name_ko == "뮤드 캐시 상품"
-    assert network.calls == []
+    assert network.calls == ["뮤드"]
 
 
 @pytest.mark.asyncio

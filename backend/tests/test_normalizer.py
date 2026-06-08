@@ -201,3 +201,12 @@ def test_brand_resolver_exposes_korean_warmup_aliases(tmp_path) -> None:
 
     assert resolver.warmup_aliases() == ["뮤드", "롬앤"]
     assert resolver.warmup_aliases(1) == ["뮤드"]
+
+
+def test_brand_resolver_exposes_aliases_with_korean_first() -> None:
+    resolver = BrandResolver(PROJECT_REGISTRY_PATH)
+
+    aliases = resolver.aliases_for("too cool for school")
+
+    assert aliases[0] == "투쿨포스쿨"
+    assert "TOO COOL FOR SCHOOL" in aliases

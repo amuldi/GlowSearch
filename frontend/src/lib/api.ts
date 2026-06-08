@@ -1,4 +1,4 @@
-import type { SearchParams, SearchResponse } from "@/types/product";
+import type { SearchParams, SearchResponse, SuggestionResponse } from "@/types/product";
 
 const DEFAULT_API_BASE_URL =
   process.env.NODE_ENV === "production"
@@ -27,4 +27,26 @@ export async function searchProducts(
     throw new Error(`검색 요청 실패: ${response.status}`);
   }
   return response.json() as Promise<SearchResponse>;
+}
+
+export async function fetchSearchSuggestions(
+  query: string,
+  signal?: AbortSignal,
+): Promise<SuggestionResponse> {
+  const url = new URL("/suggest", API_BASE_URL);
+  url.searchParams.set("q", query);
+  url.searchParams.set("limit", "10");
+
+  const response = await fetch(url, {
+    method: "GET",
+    signal,
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`추천 검색어 요청 실패: ${response.status}`);
+  }
+  return response.json() as Promise<SuggestionResponse>;
 }
