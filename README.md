@@ -387,7 +387,7 @@ cd backend
 최근 검증 결과:
 
 - backend ruff 통과
-- backend pytest 85 passed
+- backend pytest 86 passed
 - frontend typecheck 통과
 - frontend build 통과
 - Render health의 `release_sha`로 현재 배포 commit 확인

@@ -136,6 +136,18 @@ class SlowPublicGelCollector:
         ][:limit]
 
 
+class SlowEmptyPublicCollector:
+    name = "oliveyoung:public-api"
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        self.calls.append(keyword)
+        await asyncio.sleep(1)
+        return []
+
+
 class BackgroundExpandedGelCollector:
     name = "oliveyoung:public-api"
 
@@ -455,6 +467,60 @@ async def test_search_service_does_not_stop_at_partial_index_for_broad_single_qu
 
 
 @pytest.mark.asyncio
+async def test_search_service_returns_partial_index_for_specific_single_query(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "클렌징젤",
+        [
+            ProductSourceRecord(
+                source_brand_name="아벤느",
+                product_name_ko="아벤느 클리낭스 클렌징 젤 400ml",
+                regular_price=20900,
+                source="oliveyoung",
+                source_product_id="indexed-cleanser-gel-1",
+            ),
+            ProductSourceRecord(
+                source_brand_name="제로이드",
+                product_name_ko="제로이드 더마뉴얼 클렌징젤 200ml",
+                regular_price=22000,
+                source="oliveyoung",
+                source_product_id="indexed-cleanser-gel-2",
+            ),
+        ],
+    )
+    public = SlowEmptyPublicCollector()
+    service = SearchService(
+        collectors=[public],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        index_min_results=8,
+        index_background_refresh_enabled=False,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    started_at = time.perf_counter()
+    response = await service.search("클렌징젤", SearchCriteria(limit=4))
+    elapsed = time.perf_counter() - started_at
+    await service.close()
+
+    assert elapsed < 0.4
+    assert response.count == 2
+    assert public.calls == []
+    assert [product.product_name_ko for product in response.results] == [
+        "아벤느 클리낭스 클렌징 젤 400ml",
+        "제로이드 더마뉴얼 클렌징젤 200ml",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_search_service_does_not_cancel_public_source_after_fast_verified_hit(
     tmp_path,
 ) -> None:
@@ -588,7 +654,7 @@ async def test_search_service_returns_cached_records_before_index_or_network(tmp
 
 
 @pytest.mark.asyncio
-async def test_search_service_trusts_cached_official_related_keyword_results(
+async def test_search_service_returns_cached_official_related_keyword_results_immediately(
     tmp_path,
 ) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -630,11 +696,11 @@ async def test_search_service_trusts_cached_official_related_keyword_results(
 
     assert response.count == 1
     assert response.results[0].product_name_ko == "라운드랩 수분 장벽 크림"
-    assert network.calls == ["히알루론산"]
+    assert network.calls == []
 
 
 @pytest.mark.asyncio
-async def test_search_service_trusts_indexed_official_related_keyword_results(
+async def test_search_service_returns_indexed_official_related_keyword_results_immediately(
     tmp_path,
 ) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -674,7 +740,7 @@ async def test_search_service_trusts_indexed_official_related_keyword_results(
 
     assert response.count == 1
     assert response.results[0].product_name_ko == "라운드랩 수분 장벽 크림"
-    assert network.calls == ["히알루론산"]
+    assert network.calls == []
 
 
 @pytest.mark.asyncio

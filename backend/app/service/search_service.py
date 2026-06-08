@@ -166,7 +166,7 @@ class SearchService:
             brand_match,
         )
         has_related_expansions = bool(self._related_query_expansions(product_query or cleaned_query))
-        is_broad_single_query = brand_match is None and self._is_single_related_query(
+        is_broad_single_query = brand_match is None and self._is_broad_related_query(
             product_query or cleaned_query
         )
         cache_key = f"{'|'.join(query.casefold() for query in collect_queries)}:{collect_limit}"
@@ -543,7 +543,7 @@ class SearchService:
                                 [*official_primary_records, *official_fallback_records]
                             )
                             if (
-                                self._is_single_related_query(primary_query)
+                                self._is_broad_related_query(primary_query)
                                 and len(broad_records)
                                 >= self._broad_related_return_threshold(limit)
                                 and not self._has_pending_primary_oliveyoung_task(
@@ -684,7 +684,7 @@ class SearchService:
             or not cls._is_oliveyoung_collector(collector)
             or query != primary_query
             or record_count >= limit
-            or not cls._is_single_related_query(query)
+            or not cls._is_broad_related_query(query)
         ):
             return False
         if any(task_query != primary_query for _collector, task_query, _index in tasks.values()):
@@ -711,7 +711,7 @@ class SearchService:
     ) -> bool:
         return (
             cls._is_oliveyoung_collector(collector)
-            and cls._is_single_related_query(primary_query)
+            and cls._is_broad_related_query(primary_query)
             and record_count < cls._broad_related_return_threshold(limit)
             and cls._has_pending_primary_oliveyoung_task(pending, tasks, primary_query)
         )
@@ -736,6 +736,10 @@ class SearchService:
     @classmethod
     def _is_single_related_query(cls, query: str) -> bool:
         return len(cls._tokens(query)) == 1 and bool(cls._key(query))
+
+    @classmethod
+    def _is_broad_related_query(cls, query: str) -> bool:
+        return cls._is_single_related_query(query) and bool(cls._related_query_expansions(query))
 
     @staticmethod
     def _broad_related_return_threshold(limit: int) -> int:
@@ -1011,7 +1015,7 @@ class SearchService:
         primary_query = clean_text(collect_queries[0] if collect_queries else cleaned_query)
         if not primary_query:
             return collect_queries
-        if brand_match is None and cls._is_single_related_query(product_query or cleaned_query):
+        if brand_match is None and cls._is_broad_related_query(product_query or cleaned_query):
             return [primary_query]
         return collect_queries
 
