@@ -158,7 +158,11 @@ class SearchService:
         collect_limit = self._collect_limit(effective_criteria, product_query)
         collect_queries = self._collect_queries(cleaned_query, effective_criteria, brand_match)
         has_related_expansions = bool(self._related_query_expansions(product_query or cleaned_query))
+        is_broad_single_query = brand_match is None and self._is_single_related_query(
+            product_query or cleaned_query
+        )
         cache_key = f"{'|'.join(query.casefold() for query in collect_queries)}:{collect_limit}"
+        fallback_results: list[ProductSearchResult] = []
 
         cached_collected = None if self._prefer_live_official_results else await self._cache.get(cache_key)
         if not self._prefer_live_official_results:
@@ -175,7 +179,7 @@ class SearchService:
                 ),
             )
             cached_has_enough_results = (
-                not has_related_expansions
+                not (has_related_expansions or is_broad_single_query)
                 or len(cached_results) >= self._broad_related_return_threshold(criteria.limit)
                 or not cached_collected.records
             )
@@ -191,6 +195,10 @@ class SearchService:
                     results=[] if require_relevant and cached_top_score <= 0 else cached_results,
                     source_errors=cached_collected.errors,
                 )
+            if cached_top_score > 0 or (
+                cached_collected.has_official_records and cached_results
+            ):
+                fallback_results = cached_results
 
         try:
             indexed_collected = await asyncio.wait_for(
@@ -207,10 +215,15 @@ class SearchService:
             preserve_order=True,
         )
         self._metrics.record_index_lookup(bool(indexed_collected.records))
+        if (
+            indexed_top_score > 0
+            or (indexed_collected.has_official_records and indexed_results)
+        ) and len(indexed_results) > len(fallback_results):
+            fallback_results = indexed_results
         index_threshold = min(criteria.limit, self._index_min_results)
         index_has_enough_results = (
             len(indexed_results) >= self._broad_related_return_threshold(criteria.limit)
-            if has_related_expansions
+            if has_related_expansions or is_broad_single_query
             else len(indexed_results) >= index_threshold or len(indexed_results) > 0
         )
         if (
@@ -276,6 +289,13 @@ class SearchService:
                 or self._prefer_live_official_results
             ),
         )
+        if top_score <= 0 and fallback_results and not require_relevant:
+            return SearchResponse(
+                query=cleaned_query,
+                count=len(fallback_results[: criteria.limit]),
+                results=fallback_results[: criteria.limit],
+                source_errors=collected.errors,
+            )
         if require_relevant and allow_browser_retry and top_score <= 0 and collected.records:
             browser_collected = await self._collect_browser(collect_queries, collect_limit)
             browser_results, browser_top_score = self._build_results(
