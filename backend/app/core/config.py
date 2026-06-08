@@ -87,6 +87,7 @@ class Settings(BaseSettings):
     product_index_admin_token: str | None = None
     product_index_min_results: int = 1
     product_index_background_refresh_enabled: bool = True
+    product_index_background_refresh_limit: int = 240
     product_index_warmup_on_startup: bool = False
     product_index_warmup_limit: int = 48
     product_index_warmup_concurrency: int = 2

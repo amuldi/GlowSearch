@@ -176,6 +176,25 @@ class BackgroundExpandedGelCollector:
         return [record] if record and limit > 0 else []
 
 
+class LimitRecordingRefreshCollector:
+    name = "oliveyoung:public-api"
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, int]] = []
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        self.calls.append((keyword, limit))
+        return [
+            ProductSourceRecord(
+                source_brand_name="라운드랩",
+                product_name_ko="라운드랩 백그라운드 보강 상품",
+                regular_price=24000,
+                source="oliveyoung",
+                source_product_id="background-refresh-1",
+            )
+        ][:limit]
+
+
 class FakeIngestionCollector:
     name = "oliveyoung:public-api"
 
@@ -697,6 +716,54 @@ async def test_search_service_returns_cached_official_related_keyword_results_im
     assert response.count == 1
     assert response.results[0].product_name_ko == "라운드랩 수분 장벽 크림"
     assert network.calls == []
+
+
+@pytest.mark.asyncio
+async def test_search_service_uses_larger_background_refresh_limit(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"ROUND LAB","aliases":["라운드랩"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    cache = AsyncTTLCache[_CollectedResult](ttl_seconds=60)
+    await cache.set(
+        "히알루론산:1",
+        _CollectedResult(
+            records=[
+                ProductSourceRecord(
+                    source_brand_name="라운드랩",
+                    product_name_ko="라운드랩 수분 장벽 크림",
+                    regular_price=24000,
+                    source="oliveyoung",
+                    source_product_id="related-cached-1",
+                )
+            ],
+            errors=[],
+            has_official_records=True,
+        ),
+    )
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    collector = LimitRecordingRefreshCollector()
+    service = SearchService(
+        collectors=[collector],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=cache,
+        product_index=store,
+        ingestion_agent=ProductIngestionAgent(store),
+        index_background_refresh_enabled=True,
+        index_background_refresh_limit=12,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("히알루론산", SearchCriteria(limit=1))
+    await service.drain_background_tasks()
+    await service.close()
+
+    assert response.count == 1
+    assert collector.calls == [("히알루론산", 12)]
 
 
 @pytest.mark.asyncio

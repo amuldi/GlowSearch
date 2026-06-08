@@ -33,6 +33,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--max-queries", type=int, default=None, help="처리할 query 최대 개수.")
     parser.add_argument("--limit", type=int, default=48, help="query별 수집 개수.")
+    parser.add_argument(
+        "--coverage-pairs",
+        type=int,
+        default=0,
+        help="브랜드+카테고리 조합 query 최대 개수. 검색 누락 보강용이며 기본값은 0입니다.",
+    )
     parser.add_argument("--db-path", type=Path, default=None, help="SQLite index 경로 override.")
     parser.add_argument("--csv", type=Path, default=None, help="수집 후 전체 index를 CSV로 export.")
     parser.add_argument("--csv-limit", type=int, default=None, help="CSV export 최대 row 수.")
@@ -66,6 +72,8 @@ async def main() -> int:
         queries.extend(settings.product_index_seed_queries)
         queries.extend(settings.product_index_category_queries)
         queries.extend(settings.product_index_brand_queries)
+    if args.coverage_pairs > 0:
+        queries.extend(_coverage_pair_queries(settings, args.coverage_pairs))
     if args.max_queries is not None and args.max_queries >= 0:
         queries = queries[: args.max_queries]
     if not queries:
@@ -94,6 +102,22 @@ async def main() -> int:
     finally:
         await store.close()
     return 0
+
+
+def _coverage_pair_queries(settings: Settings, limit: int) -> list[str]:
+    pairs: list[str] = []
+    seen: set[str] = set()
+    for brand in settings.product_index_brand_queries:
+        for category in settings.product_index_category_queries:
+            query = f"{brand} {category}".strip()
+            key = query.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            pairs.append(query)
+            if len(pairs) >= limit:
+                return pairs
+    return pairs
 
 
 if __name__ == "__main__":

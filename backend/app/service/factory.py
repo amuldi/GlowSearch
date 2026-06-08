@@ -64,6 +64,7 @@ def get_search_service() -> SearchService:
         source_discovery_agent=discovery_agent,
         index_min_results=settings.product_index_min_results,
         index_background_refresh_enabled=settings.product_index_background_refresh_enabled,
+        index_background_refresh_limit=settings.product_index_background_refresh_limit,
         index_warmup_limit=settings.product_index_warmup_limit,
         index_warmup_concurrency=settings.product_index_warmup_concurrency,
         prefer_live_official_results=settings.oliveyoung_live_search_required,

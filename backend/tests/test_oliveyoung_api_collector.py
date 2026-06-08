@@ -141,6 +141,49 @@ async def test_oliveyoung_public_api_collector_uses_large_page_for_broad_search(
 
 
 @pytest.mark.asyncio
+async def test_oliveyoung_public_api_collector_continues_when_total_count_indicates_more() -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params["page"])
+        calls.append(page)
+        return httpx.Response(
+            200,
+            json={
+                "success": True,
+                "data": {
+                    "products": [
+                        {
+                            "goodsNumber": f"A00000000000{page}",
+                            "goodsName": f"투쿨포스쿨 테스트 상품 {page}",
+                            "priceToPay": 10000 + page,
+                            "originalPrice": 12000 + page,
+                            "discountRate": 10,
+                        }
+                    ],
+                    "totalCount": 2,
+                },
+            },
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://mcp.aka.page",
+    ) as client:
+        collector = OliveYoungPublicApiCollector(
+            Settings(oliveyoung_public_api_rate_limit_per_second=0),
+            client=client,
+        )
+        records = await collector.search("투쿨포스쿨", limit=3)
+
+    assert calls == [1, 2]
+    assert [record.source_product_id for record in records] == [
+        "A000000000001",
+        "A000000000002",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_oliveyoung_public_api_collector_retries_transient_errors() -> None:
     calls = 0
     sleep_calls: list[float] = []

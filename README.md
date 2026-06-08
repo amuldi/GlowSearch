@@ -32,6 +32,8 @@ GlowSearch는 화장품 상품을 빠르게 찾기 위한 Next.js + FastAPI 검�
 - 결과가 많으면 프론트에서 48개씩 페이지 번호로 나눠 표시합니다.
 - 영문 브랜드명 검색은 브랜드 registry의 한국어 alias로 확장해서 Olive Young 중심 검색 결과를 더 잘 찾도록 했습니다.
 - `/suggest` 자동완성 API를 추가해 브랜드/카테고리/관련 검색어 후보를 검색창 아래에 표시합니다.
+- 공개 JSON adapter는 `nextPage`뿐 아니라 `totalCount`/`totalPages`도 확인해 뒤쪽 상품을 덜 놓치도록 했습니다.
+- 검색 응답은 빠른 limit로 유지하고, 백그라운드 refresh는 더 큰 limit으로 인덱스를 채워 다음 검색 속도와 coverage를 개선합니다.
 
 ## 중요한 데이터 원칙
 
@@ -236,6 +238,7 @@ GLOWSEARCH_PRODUCT_INDEX_PATH=backend/data/product_index.sqlite3
 GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN=
 GLOWSEARCH_PRODUCT_INDEX_MIN_RESULTS=1
 GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_ENABLED=true
+GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_LIMIT=240
 GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP=false
 GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT=48
 GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY=2
@@ -278,6 +281,7 @@ cd backend
 | `--use-default-seeds` | 설정의 seed/category/brand query 사용 |
 | `--max-queries` | 처리할 query 수 제한 |
 | `--limit` | query별 수집 개수 |
+| `--coverage-pairs` | 브랜드+카테고리 조합 query 수 제한. 누락 보강용 |
 | `--db-path` | SQLite index 경로 |
 | `--csv` | CSV export 경로 |
 | `--rate-limit` | 공개 adapter 초당 요청 수 |
@@ -328,9 +332,17 @@ GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP=true
 GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY=1
 GLOWSEARCH_PRODUCT_INDEX_MAX_SEED_QUERIES=80
 GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT=48
+GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_LIMIT=240
 ```
 
 이 설정은 persistent disk를 붙이기 전 임시 보완입니다. 장기적으로는 persistent disk 또는 Postgres가 필요합니다.
+
+누락 보강을 더 촘촘하게 하고 싶으면 운영 Cron 또는 로컬 job에서 다음처럼 제한된 브랜드+카테고리 조합을 인덱싱합니다. 이 작업은 사용자 검색 요청과 분리되어야 합니다.
+
+```bash
+cd backend
+.venv/bin/python scripts/ingest_oliveyoung.py --use-default-seeds --coverage-pairs 200 --limit 240 --db-path data/product_index.sqlite3
+```
 
 ## 운영/법무 주의
 

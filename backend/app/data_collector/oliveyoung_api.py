@@ -68,7 +68,14 @@ class OliveYoungPublicApiCollector:
                     for item in products
                     if (record := self._record_from_item(item)) is not None
                 )
-                if not data.get("nextPage"):
+                if not _has_next_page(
+                    data,
+                    page=page,
+                    page_size=page_size,
+                    product_count=len(products),
+                    collected_count=len(records),
+                    limit=limit,
+                ):
                     break
                 page += 1
         return records[:limit]
@@ -214,6 +221,34 @@ def _parse_int(value: Any) -> int | None:
         digits = "".join(char for char in value if char.isdigit())
         return int(digits) if digits else None
     return None
+
+
+def _has_next_page(
+    data: dict[str, Any],
+    *,
+    page: int,
+    page_size: int,
+    product_count: int,
+    collected_count: int,
+    limit: int,
+) -> bool:
+    if collected_count >= limit:
+        return False
+    next_page = data.get("nextPage")
+    if isinstance(next_page, bool):
+        return next_page
+
+    total_pages = _parse_int(_first_value(data, "totalPages", "pageCount", "totalPage"))
+    if total_pages is not None:
+        return page < total_pages
+
+    total_count = _parse_int(
+        _first_value(data, "totalCount", "totalElements", "total", "count")
+    )
+    if total_count is not None:
+        return collected_count < min(total_count, limit)
+
+    return product_count >= page_size
 
 
 def _parse_float(value: Any) -> float | None:

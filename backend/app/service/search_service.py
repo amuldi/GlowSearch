@@ -44,6 +44,7 @@ class SearchService:
         source_discovery_agent: SourceDiscoveryAgent | None = None,
         index_min_results: int = 8,
         index_background_refresh_enabled: bool = True,
+        index_background_refresh_limit: int = 240,
         index_warmup_limit: int = 48,
         index_warmup_concurrency: int = 2,
         prefer_live_official_results: bool = False,
@@ -65,6 +66,7 @@ class SearchService:
         self._source_discovery_agent = source_discovery_agent
         self._index_min_results = max(index_min_results, 1)
         self._index_background_refresh_enabled = index_background_refresh_enabled
+        self._index_background_refresh_limit = max(index_background_refresh_limit, 1)
         self._index_warmup_limit = max(index_warmup_limit, 1)
         self._index_warmup_concurrency = max(index_warmup_concurrency, 1)
         self._prefer_live_official_results = prefer_live_official_results
@@ -79,6 +81,7 @@ class SearchService:
         )
         self._metrics = metrics or SearchMetrics()
         self._background_tasks: set[asyncio.Task[None]] = set()
+        self._background_refresh_keys: set[str] = set()
         self._last_index_error: str | None = None
 
     async def search(self, query: str, criteria: SearchCriteria) -> SearchResponse:
@@ -865,11 +868,20 @@ class SearchService:
     ) -> None:
         if not self._index_background_refresh_enabled or self._ingestion_agent is None:
             return
+        queries = tuple(query for query in collect_queries if clean_text(query))
+        if not queries:
+            return
+        refresh_limit = max(limit, self._index_background_refresh_limit)
+        refresh_key = f"{'|'.join(self._key(query) for query in queries)}:{refresh_limit}"
+        if refresh_key in self._background_refresh_keys:
+            return
+        self._background_refresh_keys.add(refresh_key)
         task = asyncio.create_task(
-            self._refresh_index_safely(original_query, tuple(collect_queries), limit)
+            self._refresh_index_safely(original_query, queries, refresh_limit)
         )
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
+        task.add_done_callback(lambda _task: self._background_refresh_keys.discard(refresh_key))
 
     async def _ingest_safely(
         self,
