@@ -10,7 +10,7 @@ GlowSearch는 화장품 상품을 빠르게 찾기 위한 Next.js + FastAPI 검�
 - Backend health: [https://glowsearch-backend.onrender.com/health](https://glowsearch-backend.onrender.com/health)
 - Search API 예시: [https://glowsearch-backend.onrender.com/search?q=%EC%A0%A4&limit=2](https://glowsearch-backend.onrender.com/search?q=%EC%A0%A4&limit=2)
 
-최근 배포 확인 기준 백엔드 `release_sha`는 `da56739`입니다.
+현재 배포 중인 백엔드 commit은 `/health`의 `release_sha`로 확인합니다.
 
 ## 지금까지 구현한 내용
 
@@ -22,6 +22,7 @@ GlowSearch는 화장품 상품을 빠르게 찾기 위한 Next.js + FastAPI 검�
 - 캐시와 SQLite product index를 먼저 조회하고, 부족하면 live source를 병렬로 보강합니다.
 - `젤` 같은 넓은 단일 검색어는 verified-cache 1건에서 멈추지 않고 공개 adapter 결과를 기다리도록 보완했습니다.
 - 넓은 단일 검색어의 관련 확장어는 첫 응답을 늦추지 않도록 background refresh로 넘깁니다.
+- 단, `로션`처럼 1차 단어가 0개를 반환하는 경우에는 짧은 deadline 안에서 관련 확장어를 즉시 보강해 빈 화면을 줄입니다.
 - live 결과는 백그라운드에서 인덱스에 저장되어 다음 검색부터 빠르게 재사용됩니다.
 - 상품 record에 category, rating, review_count, description, options, sold_out, updated_at 필드를 추가했습니다.
 - 원가와 현재가가 같으면 `sale_price`와 `discount_rate`를 노출하지 않습니다.
@@ -230,7 +231,7 @@ GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_ENABLED=true
 GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP=false
 GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT=48
 GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY=2
-GLOWSEARCH_PRODUCT_INDEX_MAX_SEED_QUERIES=180
+GLOWSEARCH_PRODUCT_INDEX_MAX_SEED_QUERIES=80
 GLOWSEARCH_PRODUCT_INDEX_DETAIL_ENRICHMENT_ENABLED=true
 GLOWSEARCH_PRODUCT_INDEX_DETAIL_ENRICHMENT_MAX_RECORDS=12
 
@@ -317,7 +318,7 @@ curl -X POST "https://glowsearch-backend.onrender.com/index/warm?token=$GLOWSEAR
 ```bash
 GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP=true
 GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY=1
-GLOWSEARCH_PRODUCT_INDEX_MAX_SEED_QUERIES=30
+GLOWSEARCH_PRODUCT_INDEX_MAX_SEED_QUERIES=80
 GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT=48
 ```
 

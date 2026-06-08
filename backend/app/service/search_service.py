@@ -30,6 +30,8 @@ class _CollectedResult:
 class SearchService:
     _BATCH_CONCURRENCY = 4
     _INDEX_READ_TIMEOUT_SECONDS = 0.35
+    _LIVE_EMPTY_RESCUE_QUERY_LIMIT = 4
+    _LIVE_EMPTY_RESCUE_DEADLINE_SECONDS = 2.4
 
     def __init__(
         self,
@@ -274,6 +276,31 @@ class SearchService:
                 collect_limit,
                 allow_browser_fallback=allow_browser_fallback,
             )
+            if not collected.records and live_collect_queries != collect_queries:
+                rescue_queries = self._live_empty_rescue_queries(
+                    live_collect_queries,
+                    collect_queries,
+                )
+                if rescue_queries:
+                    rescue_collected = await self._collect(
+                        rescue_queries,
+                        collect_limit,
+                        allow_browser_fallback=False,
+                        deadline_seconds=self._live_empty_rescue_deadline(),
+                    )
+                    if rescue_collected.records:
+                        collected = _CollectedResult(
+                            records=self._dedupe_records(
+                                [*collected.records, *rescue_collected.records]
+                            ),
+                            errors=self._dedupe_errors(
+                                [*collected.errors, *rescue_collected.errors]
+                            ),
+                            has_official_records=(
+                                collected.has_official_records
+                                or rescue_collected.has_official_records
+                            ),
+                        )
             collected_from_live = True
             if not self._prefer_live_official_results:
                 await self._cache.set(cache_key, collected)
@@ -987,6 +1014,31 @@ class SearchService:
         if brand_match is None and cls._is_single_related_query(product_query or cleaned_query):
             return [primary_query]
         return collect_queries
+
+    @classmethod
+    def _live_empty_rescue_queries(
+        cls,
+        live_collect_queries: list[str],
+        collect_queries: list[str],
+    ) -> list[str]:
+        live_keys = {cls._key(query) for query in live_collect_queries if cls._key(query)}
+        rescue_queries: list[str] = []
+        for query in collect_queries:
+            text = clean_text(query)
+            key = cls._key(text)
+            if not text or not key or key in live_keys:
+                continue
+            live_keys.add(key)
+            rescue_queries.append(text)
+            if len(rescue_queries) >= cls._LIVE_EMPTY_RESCUE_QUERY_LIMIT:
+                break
+        return rescue_queries
+
+    def _live_empty_rescue_deadline(self) -> float:
+        return max(
+            0.8,
+            min(self._live_collect_deadline_seconds, self._LIVE_EMPTY_RESCUE_DEADLINE_SECONDS),
+        )
 
     @classmethod
     def _related_query_expansions(cls, value: str) -> tuple[str, ...]:

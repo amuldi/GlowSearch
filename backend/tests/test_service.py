@@ -535,6 +535,27 @@ class TintSynonymCollector:
         ][:limit]
 
 
+class LotionExpansionCollector:
+    name = "oliveyoung:public-api"
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        self.calls.append(keyword)
+        if keyword != "바디로션":
+            return []
+        return [
+            ProductSourceRecord(
+                source_brand_name="더마비",
+                product_name_ko="[단독/대용량] 더마비 데일리 모이스처 바디로션 860ml",
+                regular_price=23000,
+                source="oliveyoung",
+                source_product_id="lotion-1",
+            )
+        ][:limit]
+
+
 class JungSaemMoolSubBrandCollector:
     name = "oliveyoung:public-api"
 
@@ -916,7 +937,7 @@ async def test_search_service_keeps_related_keyword_queries_off_critical_path(
 
 
 @pytest.mark.asyncio
-async def test_search_service_keeps_lip_tint_synonyms_off_critical_path(
+async def test_search_service_rescues_empty_primary_with_related_queries(
     tmp_path,
 ) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -936,8 +957,35 @@ async def test_search_service_keeps_lip_tint_synonyms_off_critical_path(
 
     response = await service.search("틴트", SearchCriteria(limit=4))
 
-    assert collector.calls == ["틴트"]
-    assert response.count == 0
+    assert collector.calls[:2] == ["틴트", "립틴트"]
+    assert response.count == 1
+    assert response.results[0].product_name_ko == "롬앤 글래스팅 립틴트"
+
+
+@pytest.mark.asyncio
+async def test_search_service_rescues_empty_lotion_query_with_category_expansion(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    collector = LotionExpansionCollector()
+    service = SearchService(
+        collectors=[collector],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("로션", SearchCriteria(limit=4))
+
+    assert "로션" in collector.calls
+    assert "바디로션" in collector.calls
+    assert response.count == 1
+    assert response.results[0].brand_ko == "더마비"
+    assert response.results[0].product_name_ko == "[단독/대용량] 더마비 데일리 모이스처 바디로션 860ml"
 
 
 @pytest.mark.asyncio
