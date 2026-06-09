@@ -17,6 +17,9 @@ class IngestionSummary:
     query_count: int
     product_count: int
     stored_count: int
+    job_count: int = 0
+    completed_jobs: int = 0
+    failed_jobs: int = 0
     failures: list[str] = field(default_factory=list)
     started_at: str | None = None
     finished_at: str | None = None
@@ -66,6 +69,66 @@ class OliveYoungIngestionPipeline:
             query_count=len(clean_queries),
             product_count=product_count,
             stored_count=stored_count,
+            failures=failures,
+            started_at=started_at,
+            finished_at=_now(),
+        )
+
+    async def ingest_catalog_jobs(
+        self,
+        *,
+        max_jobs: int,
+        limit_per_query: int,
+        kind: str | None = "oliveyoung-search",
+    ) -> IngestionSummary:
+        started_at = _now()
+        jobs = await self._store.claim_catalog_jobs(limit=max(max_jobs, 1), kind=kind)
+        failures: list[str] = []
+        product_count = 0
+        stored_count = 0
+        completed_jobs = 0
+        failed_jobs = 0
+
+        for job in jobs:
+            try:
+                records = await self._collector.search(job.query, limit_per_query)
+                records = _dedupe_records(records)
+                product_count += len(records)
+                if records:
+                    await self._ingestion_agent.ingest_search_results([job.query], records)
+                    stored_count += len(records)
+                await self._store.complete_catalog_job(
+                    job.id,
+                    status="completed",
+                    product_count=len(records),
+                )
+                completed_jobs += 1
+            except SourceUnavailableError as exc:
+                message = f"{job.query}: {exc}"
+                failures.append(message)
+                await self._store.complete_catalog_job(
+                    job.id,
+                    status="failed",
+                    error=message,
+                )
+                failed_jobs += 1
+            except Exception as exc:
+                message = f"{job.query}: {type(exc).__name__}: {exc}"
+                failures.append(message)
+                await self._store.complete_catalog_job(
+                    job.id,
+                    status="failed",
+                    error=message,
+                )
+                failed_jobs += 1
+
+        return IngestionSummary(
+            query_count=len(jobs),
+            product_count=product_count,
+            stored_count=stored_count,
+            job_count=len(jobs),
+            completed_jobs=completed_jobs,
+            failed_jobs=failed_jobs,
             failures=failures,
             started_at=started_at,
             finished_at=_now(),

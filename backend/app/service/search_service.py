@@ -989,6 +989,31 @@ class SearchService:
             return []
         return await recent(limit)
 
+    async def catalog_job_stats(self) -> dict[str, int | str | None]:
+        if self._product_index is None:
+            return {
+                "total": 0,
+                "pending": 0,
+                "running": 0,
+                "completed": 0,
+                "failed": 0,
+                "skipped": 0,
+                "last_finished_at": None,
+                "last_error": None,
+            }
+        stats = getattr(self._product_index, "catalog_job_stats", None)
+        if stats is None:
+            return {}
+        return await stats()
+
+    async def recent_catalog_jobs(self, limit: int = 20) -> list[dict[str, int | str | None]]:
+        if self._product_index is None:
+            return []
+        recent = getattr(self._product_index, "recent_catalog_jobs", None)
+        if recent is None:
+            return []
+        return await recent(limit)
+
     def suggest(self, query: str, limit: int = 10) -> list[str]:
         cleaned_query = clean_text(query)
         if not cleaned_query or limit <= 0:

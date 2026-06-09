@@ -4,6 +4,7 @@ import asyncio
 import json
 import re
 import sqlite3
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
@@ -11,6 +12,20 @@ from typing import Protocol
 from app.models.product import ProductSourceRecord
 from app.normalizer.brand import BrandAlias
 from app.search.synonyms import search_key
+
+
+@dataclass(frozen=True)
+class CatalogIngestionJob:
+    id: int
+    job_key: str
+    kind: str
+    query: str
+    normalized_query: str
+    priority: int
+    status: str
+    attempt_count: int
+    max_attempts: int
+    last_error: str | None = None
 
 
 class ProductIndexStore(Protocol):
@@ -27,6 +42,35 @@ class ProductIndexStore(Protocol):
     async def record_search_gap(self, query: str, result_count: int, reason: str) -> None: ...
 
     async def recent_search_gaps(self, limit: int = 20) -> list[dict[str, int | str | None]]: ...
+
+    async def enqueue_catalog_jobs(
+        self,
+        queries: list[str],
+        *,
+        kind: str = "oliveyoung-search",
+        priority: int = 100,
+        max_attempts: int = 3,
+    ) -> int: ...
+
+    async def claim_catalog_jobs(
+        self,
+        *,
+        limit: int,
+        kind: str | None = None,
+    ) -> list[CatalogIngestionJob]: ...
+
+    async def complete_catalog_job(
+        self,
+        job_id: int,
+        *,
+        status: str,
+        product_count: int = 0,
+        error: str | None = None,
+    ) -> None: ...
+
+    async def catalog_job_stats(self) -> dict[str, int | str | None]: ...
+
+    async def recent_catalog_jobs(self, limit: int = 20) -> list[dict[str, int | str | None]]: ...
 
     async def stats(self) -> dict[str, int | str | None]: ...
 
@@ -137,6 +181,228 @@ class SQLiteProductIndexStore:
                 "miss_count": int(row["miss_count"] or 0),
                 "last_reason": row["last_reason"],
                 "last_seen_at": row["last_seen_at"],
+            }
+            for row in rows
+        ]
+
+    async def enqueue_catalog_jobs(
+        self,
+        queries: list[str],
+        *,
+        kind: str = "oliveyoung-search",
+        priority: int = 100,
+        max_attempts: int = 3,
+    ) -> int:
+        now = datetime.now(tz=UTC).isoformat()
+        clean_kind = _clean_job_kind(kind)
+        inserted_or_updated = 0
+        async with self._lock:
+            for query in _dedupe_texts(queries):
+                query_key = _key(query)
+                if not query_key:
+                    continue
+                job_key = f"{clean_kind}:{query_key}"
+                before = self._connection.total_changes
+                self._connection.execute(
+                    """
+                    INSERT INTO catalog_jobs(
+                        job_key,
+                        kind,
+                        query,
+                        normalized_query,
+                        priority,
+                        status,
+                        attempt_count,
+                        max_attempts,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES(?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?)
+                    ON CONFLICT(job_key) DO UPDATE SET
+                        query = excluded.query,
+                        priority = MIN(catalog_jobs.priority, excluded.priority),
+                        max_attempts = MAX(catalog_jobs.max_attempts, excluded.max_attempts),
+                        status = CASE
+                            WHEN catalog_jobs.status IN ('completed', 'running') THEN catalog_jobs.status
+                            ELSE 'pending'
+                        END,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        job_key,
+                        clean_kind,
+                        query,
+                        query_key,
+                        max(priority, 0),
+                        max(max_attempts, 1),
+                        now,
+                        now,
+                    ),
+                )
+                if self._connection.total_changes > before:
+                    inserted_or_updated += 1
+            self._connection.commit()
+        return inserted_or_updated
+
+    async def claim_catalog_jobs(
+        self,
+        *,
+        limit: int,
+        kind: str | None = None,
+    ) -> list[CatalogIngestionJob]:
+        if limit <= 0:
+            return []
+        clean_kind = _clean_job_kind(kind) if kind else None
+        now = datetime.now(tz=UTC).isoformat()
+        async with self._lock:
+            params: tuple[object, ...]
+            kind_clause = ""
+            if clean_kind:
+                kind_clause = "AND kind = ?"
+                params = (clean_kind, limit)
+            else:
+                params = (limit,)
+            rows = self._connection.execute(
+                f"""
+                SELECT *
+                FROM catalog_jobs
+                WHERE status IN ('pending', 'failed')
+                  AND attempt_count < max_attempts
+                  {kind_clause}
+                ORDER BY priority ASC, COALESCE(last_seen_at, '') ASC, id ASC
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+            if not rows:
+                return []
+            job_ids = [int(row["id"]) for row in rows]
+            placeholders = ",".join("?" for _ in job_ids)
+            self._connection.execute(
+                f"""
+                UPDATE catalog_jobs
+                SET status = 'running',
+                    attempt_count = attempt_count + 1,
+                    started_at = ?,
+                    updated_at = ?
+                WHERE id IN ({placeholders})
+                """,
+                (now, now, *job_ids),
+            )
+            claimed_rows = self._connection.execute(
+                f"SELECT * FROM catalog_jobs WHERE id IN ({placeholders}) ORDER BY priority ASC, id ASC",
+                tuple(job_ids),
+            ).fetchall()
+            self._connection.commit()
+        return [_catalog_job_from_row(row) for row in claimed_rows]
+
+    async def complete_catalog_job(
+        self,
+        job_id: int,
+        *,
+        status: str,
+        product_count: int = 0,
+        error: str | None = None,
+    ) -> None:
+        clean_status = status if status in {"completed", "failed", "skipped"} else "failed"
+        now = datetime.now(tz=UTC).isoformat()
+        async with self._lock:
+            self._connection.execute(
+                """
+                UPDATE catalog_jobs
+                SET status = ?,
+                    product_count = ?,
+                    last_error = ?,
+                    finished_at = ?,
+                    last_seen_at = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    clean_status,
+                    max(product_count, 0),
+                    error,
+                    now,
+                    now,
+                    now,
+                    job_id,
+                ),
+            )
+            self._connection.commit()
+
+    async def catalog_job_stats(self) -> dict[str, int | str | None]:
+        async with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT status, COUNT(*) AS count
+                FROM catalog_jobs
+                GROUP BY status
+                """
+            ).fetchall()
+            total = self._connection.execute(
+                "SELECT COUNT(*) AS count FROM catalog_jobs"
+            ).fetchone()["count"]
+            last_finished_at = self._connection.execute(
+                "SELECT MAX(finished_at) AS value FROM catalog_jobs"
+            ).fetchone()["value"]
+            last_error = self._connection.execute(
+                """
+                SELECT last_error
+                FROM catalog_jobs
+                WHERE last_error IS NOT NULL
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+        status_counts = {row["status"]: int(row["count"] or 0) for row in rows}
+        return {
+            "total": int(total or 0),
+            "pending": status_counts.get("pending", 0),
+            "running": status_counts.get("running", 0),
+            "completed": status_counts.get("completed", 0),
+            "failed": status_counts.get("failed", 0),
+            "skipped": status_counts.get("skipped", 0),
+            "last_finished_at": last_finished_at,
+            "last_error": last_error["last_error"] if last_error else None,
+        }
+
+    async def recent_catalog_jobs(self, limit: int = 20) -> list[dict[str, int | str | None]]:
+        async with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT
+                    id,
+                    kind,
+                    query,
+                    normalized_query,
+                    priority,
+                    status,
+                    attempt_count,
+                    max_attempts,
+                    product_count,
+                    last_error,
+                    updated_at
+                FROM catalog_jobs
+                ORDER BY updated_at DESC, id DESC
+                LIMIT ?
+                """,
+                (max(limit, 1),),
+            ).fetchall()
+        return [
+            {
+                "id": int(row["id"]),
+                "kind": row["kind"],
+                "query": row["query"],
+                "normalized_query": row["normalized_query"],
+                "priority": int(row["priority"] or 0),
+                "status": row["status"],
+                "attempt_count": int(row["attempt_count"] or 0),
+                "max_attempts": int(row["max_attempts"] or 0),
+                "product_count": (
+                    int(row["product_count"]) if row["product_count"] is not None else None
+                ),
+                "last_error": row["last_error"],
+                "updated_at": row["updated_at"],
             }
             for row in rows
         ]
@@ -297,6 +563,34 @@ class SQLiteProductIndexStore:
                 last_seen_at TEXT NOT NULL
             )
             """
+        )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS catalog_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_key TEXT NOT NULL UNIQUE,
+                kind TEXT NOT NULL,
+                query TEXT NOT NULL,
+                normalized_query TEXT NOT NULL,
+                priority INTEGER NOT NULL DEFAULT 100,
+                status TEXT NOT NULL DEFAULT 'pending',
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                max_attempts INTEGER NOT NULL DEFAULT 3,
+                product_count INTEGER,
+                last_error TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                started_at TEXT,
+                finished_at TEXT,
+                last_seen_at TEXT
+            )
+            """
+        )
+        self._connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_catalog_jobs_status_priority ON catalog_jobs(status, priority, id)"
+        )
+        self._connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_catalog_jobs_kind_status ON catalog_jobs(kind, status)"
         )
         self._ensure_fts_table()
         self._connection.commit()
@@ -668,6 +962,21 @@ def _row_to_record(row: sqlite3.Row) -> ProductSourceRecord:
     )
 
 
+def _catalog_job_from_row(row: sqlite3.Row) -> CatalogIngestionJob:
+    return CatalogIngestionJob(
+        id=int(row["id"]),
+        job_key=row["job_key"],
+        kind=row["kind"],
+        query=row["query"],
+        normalized_query=row["normalized_query"],
+        priority=int(row["priority"] or 0),
+        status=row["status"],
+        attempt_count=int(row["attempt_count"] or 0),
+        max_attempts=int(row["max_attempts"] or 0),
+        last_error=row["last_error"],
+    )
+
+
 def _search_text(record: ProductSourceRecord) -> str:
     return _key(
         " ".join(
@@ -754,6 +1063,13 @@ def _dedupe_texts(values: list[str] | tuple[str, ...]) -> list[str]:
         seen.add(key)
         deduped.append(text)
     return deduped
+
+
+def _clean_job_kind(value: str | None) -> str:
+    text = (value or "").strip().casefold()
+    text = re.sub(r"[^0-9a-z가-힣:_-]+", "-", text)
+    text = re.sub(r"-+", "-", text).strip("-")
+    return text or "oliveyoung-search"
 
 
 def _options_json(options: list[str] | None) -> str | None:

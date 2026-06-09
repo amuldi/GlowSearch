@@ -19,6 +19,7 @@ from app.indexing.agents import OliveYoungDetailEnrichmentAgent, ProductIngestio
 from app.indexing.store import SQLiteProductIndexStore
 from app.ingestion.export import write_products_csv
 from app.ingestion.oliveyoung_pipeline import OliveYoungIngestionPipeline
+from app.normalizer.brand import BrandResolver
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,6 +40,30 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="브랜드+카테고리 조합 query 최대 개수. 검색 누락 보강용이며 기본값은 0입니다.",
     )
+    parser.add_argument(
+        "--include-gaps",
+        action="store_true",
+        help="DB에 기록된 search_gaps를 수집 후보에 포함합니다.",
+    )
+    parser.add_argument("--gap-limit", type=int, default=100, help="포함할 search_gaps 최대 개수.")
+    parser.add_argument(
+        "--enqueue-catalog",
+        action="store_true",
+        help="즉시 수집하지 않고 catalog_jobs 큐에 수집 후보를 등록합니다.",
+    )
+    parser.add_argument(
+        "--run-catalog-jobs",
+        action="store_true",
+        help="catalog_jobs 큐에서 pending 작업을 가져와 수집합니다.",
+    )
+    parser.add_argument("--max-jobs", type=int, default=50, help="한 번에 처리할 catalog job 수.")
+    parser.add_argument(
+        "--job-kind",
+        default="oliveyoung-search",
+        help="catalog job kind. 기본값은 oliveyoung-search입니다.",
+    )
+    parser.add_argument("--job-priority", type=int, default=100, help="등록할 catalog job 우선순위.")
+    parser.add_argument("--job-max-attempts", type=int, default=3, help="catalog job 최대 재시도 수.")
     parser.add_argument("--db-path", type=Path, default=None, help="SQLite index 경로 override.")
     parser.add_argument("--csv", type=Path, default=None, help="수집 후 전체 index를 CSV로 export.")
     parser.add_argument("--csv-limit", type=int, default=None, help="CSV export 최대 row 수.")
@@ -67,20 +92,12 @@ async def main() -> int:
     if updates:
         settings = settings.model_copy(update=updates)
 
-    queries = list(args.query)
-    if args.use_default_seeds:
-        queries.extend(settings.product_index_seed_queries)
-        queries.extend(settings.product_index_category_queries)
-        queries.extend(settings.product_index_brand_queries)
-    if args.coverage_pairs > 0:
-        queries.extend(_coverage_pair_queries(settings, args.coverage_pairs))
+    store = SQLiteProductIndexStore(settings.product_index_path)
+    brand_resolver = BrandResolver(settings.brand_registry_path)
+    store.seed_brand_aliases(brand_resolver.index_aliases())
+    queries = await _collect_queries(args, settings, store)
     if args.max_queries is not None and args.max_queries >= 0:
         queries = queries[: args.max_queries]
-    if not queries:
-        print("Provide --query or --use-default-seeds.", file=sys.stderr)
-        return 2
-
-    store = SQLiteProductIndexStore(settings.product_index_path)
     detail_enricher = OliveYoungDetailEnrichmentAgent(settings) if args.enrich_details else None
     ingestion_agent = ProductIngestionAgent(store, detail_enricher=detail_enricher)
     pipeline = OliveYoungIngestionPipeline(
@@ -89,8 +106,38 @@ async def main() -> int:
         ingestion_agent=ingestion_agent,
     )
     try:
-        summary = await pipeline.ingest_queries(queries, limit_per_query=max(args.limit, 1))
-        payload = asdict(summary)
+        if args.enqueue_catalog:
+            if not queries:
+                print("Provide --query, --use-default-seeds, --coverage-pairs, or --include-gaps.", file=sys.stderr)
+                return 2
+            enqueued_count = await store.enqueue_catalog_jobs(
+                queries,
+                kind=args.job_kind,
+                priority=args.job_priority,
+                max_attempts=args.job_max_attempts,
+            )
+            payload: dict[str, object] = {
+                "enqueued_jobs": enqueued_count,
+                "candidate_queries": len(queries),
+                "catalog_job_stats": await store.catalog_job_stats(),
+            }
+            if not args.run_catalog_jobs:
+                print(json.dumps(payload, ensure_ascii=False, indent=2))
+                return 0
+        if args.run_catalog_jobs:
+            summary = await pipeline.ingest_catalog_jobs(
+                max_jobs=max(args.max_jobs, 1),
+                limit_per_query=max(args.limit, 1),
+                kind=args.job_kind,
+            )
+            payload = asdict(summary)
+            payload["catalog_job_stats"] = await store.catalog_job_stats()
+        else:
+            if not queries:
+                print("Provide --query or --use-default-seeds.", file=sys.stderr)
+                return 2
+            summary = await pipeline.ingest_queries(queries, limit_per_query=max(args.limit, 1))
+            payload = asdict(summary)
         if args.csv is not None:
             exported_count = write_products_csv(
                 await store.all_products(limit=args.csv_limit),
@@ -100,8 +147,27 @@ async def main() -> int:
             payload["csv_count"] = exported_count
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     finally:
+        brand_resolver.close()
         await store.close()
     return 0
+
+
+async def _collect_queries(
+    args: argparse.Namespace,
+    settings: Settings,
+    store: SQLiteProductIndexStore,
+) -> list[str]:
+    queries = list(args.query)
+    if args.use_default_seeds:
+        queries.extend(settings.product_index_seed_queries)
+        queries.extend(settings.product_index_category_queries)
+        queries.extend(settings.product_index_brand_queries)
+    if args.coverage_pairs > 0:
+        queries.extend(_coverage_pair_queries(settings, args.coverage_pairs))
+    if args.include_gaps:
+        gaps = await store.recent_search_gaps(limit=max(args.gap_limit, 1))
+        queries.extend(str(gap["query"]) for gap in gaps if gap.get("query"))
+    return queries
 
 
 def _coverage_pair_queries(settings: Settings, limit: int) -> list[str]:

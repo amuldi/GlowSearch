@@ -99,6 +99,10 @@ async def diagnostics(
     payload = service.diagnostics()
     payload["index"] = await service.index_stats()
     payload["search_gaps"] = await service.recent_search_gaps(limit=20)
+    payload["catalog_jobs"] = {
+        "stats": await service.catalog_job_stats(),
+        "recent": await service.recent_catalog_jobs(limit=20),
+    }
     payload["config"] = {
         "product_index_enabled": settings.product_index_enabled,
         "warmup_on_startup": settings.product_index_warmup_on_startup,
@@ -117,6 +121,16 @@ async def diagnostics(
         "barcode_lookup_api_enabled": settings.barcode_lookup_api_enabled,
     }
     return payload
+
+
+@router.get("/index/catalog/status")
+async def catalog_status(
+    service: SearchService = Depends(get_search_service),
+) -> dict[str, object]:
+    return {
+        "stats": await service.catalog_job_stats(),
+        "recent": await service.recent_catalog_jobs(limit=20),
+    }
 
 
 @router.post("/index/warm")

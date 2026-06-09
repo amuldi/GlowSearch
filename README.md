@@ -37,6 +37,7 @@ GlowSearch는 화장품 상품을 빠르게 찾기 위한 Next.js + FastAPI 검�
 - SQLite index에 FTS5 검색 문서를 추가해 브랜드/상품명/카테고리/설명/옵션의 부분 키워드 검색을 강화했습니다.
 - `brand_aliases` 테이블을 추가해 `too cool`, `TOO COOL FOR SCHOOL`, `투쿨포스쿨` 같은 영문/한글 alias 검색을 같은 결과군으로 확장합니다.
 - `search_gaps` 테이블을 추가해 결과가 없거나 너무 적은 검색어를 기록하고, 다음 warmup/coverage job의 우선순위로 사용할 수 있게 했습니다.
+- `catalog_jobs` 큐를 추가해 Olive Young seed/brand/category/search gap 기반 수집을 사용자 검색 요청과 분리했습니다.
 
 ## 중요한 데이터 원칙
 
@@ -81,6 +82,7 @@ Next.js UI
   -> SearchResponse 반환
   -> live 결과와 관련 확장어 refresh는 ProductIngestionAgent가 SQLite index에 저장
   -> 결과가 없거나 부족한 검색어는 search_gaps에 기록
+  -> catalog_jobs 큐가 별도 ingestion job으로 DB snapshot을 확장
 ```
 
 ## 주요 모듈
@@ -175,10 +177,11 @@ curl 'http://localhost:8000/suggest?q=투&limit=10'
 
 ```bash
 curl https://glowsearch-backend.onrender.com/index/status
+curl https://glowsearch-backend.onrender.com/index/catalog/status
 curl https://glowsearch-backend.onrender.com/diagnostics
 ```
 
-`/diagnostics`에는 최근 검색 gap도 포함됩니다. 결과가 적은 검색어를 확인한 뒤 `/index/warm` 또는 ingestion CLI의 seed로 넣으면 다음 검색부터 더 빠르고 넓게 반환됩니다.
+`/diagnostics`에는 최근 검색 gap과 catalog job 상태도 포함됩니다. 결과가 적은 검색어를 확인한 뒤 `/index/warm` 또는 ingestion CLI의 seed로 넣으면 다음 검색부터 더 빠르고 넓게 반환됩니다.
 
 ## 로컬 실행
 
@@ -290,12 +293,54 @@ cd backend
 | `--max-queries` | 처리할 query 수 제한 |
 | `--limit` | query별 수집 개수 |
 | `--coverage-pairs` | 브랜드+카테고리 조합 query 수 제한. 누락 보강용 |
+| `--include-gaps` | `search_gaps`에 쌓인 부족 검색어를 수집 후보에 포함 |
+| `--enqueue-catalog` | 즉시 수집하지 않고 `catalog_jobs` 큐에 후보 등록 |
+| `--run-catalog-jobs` | `catalog_jobs` 큐에서 pending 작업을 가져와 수집 |
+| `--max-jobs` | 한 번에 처리할 catalog job 수 |
+| `--job-kind` | catalog job 종류. 기본값 `oliveyoung-search` |
 | `--db-path` | SQLite index 경로 |
 | `--csv` | CSV export 경로 |
 | `--rate-limit` | 공개 adapter 초당 요청 수 |
 | `--enrich-details` | 공식 상세 페이지 보강 opt-in |
 
 기본 수집은 query별 48개, 초당 1 요청입니다. 180개 seed를 한 페이지씩 수집하면 raw 후보는 최대 8,640개이고 dedupe 후 실제 상품 수는 더 작습니다. `limit=480`은 query별 최대 10페이지까지 수집하므로 coverage는 늘지만 수집 시간과 source 부하도 같이 늘어납니다.
+
+전체 카탈로그에 가깝게 DB snapshot을 키우는 운영 순서:
+
+```bash
+cd backend
+
+# 1. 기본 seed, 브랜드, 카테고리, 제한된 브랜드+카테고리 조합을 catalog job으로 등록
+.venv/bin/python scripts/ingest_oliveyoung.py \
+  --use-default-seeds \
+  --coverage-pairs 300 \
+  --enqueue-catalog \
+  --db-path data/product_index.sqlite3
+
+# 2. 검색에서 부족했던 query도 다음 수집 후보로 등록
+.venv/bin/python scripts/ingest_oliveyoung.py \
+  --include-gaps \
+  --enqueue-catalog \
+  --job-priority 20 \
+  --db-path data/product_index.sqlite3
+
+# 3. catalog job을 작은 batch로 실행. Cron/worker에서 반복 실행
+.venv/bin/python scripts/ingest_oliveyoung.py \
+  --run-catalog-jobs \
+  --max-jobs 50 \
+  --limit 240 \
+  --db-path data/product_index.sqlite3
+
+# 4. 개발용 CSV 확인
+.venv/bin/python scripts/ingest_oliveyoung.py \
+  --run-catalog-jobs \
+  --max-jobs 10 \
+  --limit 48 \
+  --csv data/oliveyoung_export.csv \
+  --db-path data/product_index.sqlite3
+```
+
+이 방식은 “한 번에 모든 페이지를 긁는” 방식이 아니라, 안전한 query 단위 작업을 큐에 넣고 rate limit 안에서 반복 실행하는 방식입니다. 실패한 작업은 `failed`로 남고, 재시도 가능 횟수 안에서는 다시 claim됩니다.
 
 ## 인덱스 운영
 
@@ -310,6 +355,7 @@ cd backend
 | `products_fts` | 브랜드/상품명/카테고리/설명/옵션/alias 기반 빠른 검색 |
 | `brand_aliases` | 브랜드 영문명, 한글명, 하위 브랜드, 별칭 연결 |
 | `search_gaps` | 결과 없음/부족 검색어를 다음 수집 대상으로 기록 |
+| `catalog_jobs` | seed/search gap 기반 background catalog ingestion queue |
 
 Render free plan의 일반 filesystem은 ephemeral입니다. 현재처럼 `/tmp`에 SQLite를 두면 재배포, 재시작, cold start 이후 인덱스가 비거나 작아질 수 있습니다. 이 경우 검색 요청이 매번 live source를 기다리므로 느리고, source timeout이 나면 결과가 적게 나옵니다.
 

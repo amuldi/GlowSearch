@@ -394,6 +394,57 @@ async def test_product_index_records_search_gaps(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_product_index_catalog_jobs_are_claimed_and_completed(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+
+    enqueued = await store.enqueue_catalog_jobs(
+        ["로션", "로션", "틴트"],
+        priority=20,
+        max_attempts=2,
+    )
+    claimed = await store.claim_catalog_jobs(limit=1)
+    await store.complete_catalog_job(
+        claimed[0].id,
+        status="completed",
+        product_count=12,
+    )
+    stats = await store.catalog_job_stats()
+    recent = await store.recent_catalog_jobs()
+    await store.close()
+
+    assert enqueued == 2
+    assert claimed[0].query == "로션"
+    assert claimed[0].status == "running"
+    assert claimed[0].attempt_count == 1
+    assert stats["completed"] == 1
+    assert stats["pending"] == 1
+    assert recent[0]["status"] == "completed"
+    assert recent[0]["product_count"] == 12
+
+
+@pytest.mark.asyncio
+async def test_ingestion_pipeline_runs_catalog_jobs(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.enqueue_catalog_jobs(["틴트"], priority=10)
+    pipeline = OliveYoungIngestionPipeline(
+        collector=FakeIngestionCollector(),
+        store=store,
+        ingestion_agent=ProductIngestionAgent(store),
+    )
+
+    summary = await pipeline.ingest_catalog_jobs(max_jobs=5, limit_per_query=10)
+    records = await store.search("로즈", 10)
+    stats = await store.catalog_job_stats()
+    await store.close()
+
+    assert summary.job_count == 1
+    assert summary.completed_jobs == 1
+    assert summary.failed_jobs == 0
+    assert records[0].product_name_ko == "뮤드 틴트 상품"
+    assert stats["completed"] == 1
+
+
+@pytest.mark.asyncio
 async def test_ingestion_pipeline_stores_records_and_csv_export(tmp_path) -> None:
     store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
     pipeline = OliveYoungIngestionPipeline(
