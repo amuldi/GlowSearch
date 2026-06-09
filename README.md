@@ -1,132 +1,165 @@
 # GlowSearch
 
-GlowSearch는 화장품 상품을 빠르게 찾기 위한 Next.js + FastAPI 검색 앱입니다. 현재는 Olive Young 상품 검색을 중심으로 동작하지만, Musinsa, 공식 브랜드몰, managed scraping API, barcode/GTIN API, global discovery API를 같은 검색 파이프라인에 붙일 수 있게 설계했습니다.
+Olive Young 중심의 화장품 상품 검색 엔진입니다.
 
-서비스는 “검색 요청마다 모든 상품을 실시간으로 긁는 방식”이 아니라, 검증 가능한 source에서 상품을 수집하고 인덱스에 저장한 뒤 검색은 캐시/인덱스에서 먼저 빠르게 반환하는 방식으로 갑니다.
+GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리 키워드로 화장품을 검색하고, 캐시/검색 인덱스/백그라운드 수집으로 검색 커버리지를 확장하는 Next.js + FastAPI 프로젝트입니다. 단순 검색 UI가 아니라, source 기반 상품 데이터를 정규화하고 색인하는 데이터 파이프라인까지 포함합니다.
 
-## 현재 배포
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)
+![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)
+![pytest](https://img.shields.io/badge/pytest-tested-0A9EDC)
+![Vercel](https://img.shields.io/badge/Vercel-Frontend-black?logo=vercel)
+![Render](https://img.shields.io/badge/Render-Backend-46E3B7?logo=render&logoColor=black)
 
-- Frontend: [https://glow-search.vercel.app/](https://glow-search.vercel.app/)
-- Backend health: [https://glowsearch-backend.onrender.com/health](https://glowsearch-backend.onrender.com/health)
-- Search API 예시: [https://glowsearch-backend.onrender.com/search?q=%EC%A0%A4&limit=2](https://glowsearch-backend.onrender.com/search?q=%EC%A0%A4&limit=2)
+## 배포 링크
 
-현재 배포 중인 백엔드 commit은 `/health`의 `release_sha`로 확인합니다.
+| 항목 | URL |
+| --- | --- |
+| Frontend | [https://glow-search.vercel.app/](https://glow-search.vercel.app/) |
+| Backend health | [https://glowsearch-backend.onrender.com/health](https://glowsearch-backend.onrender.com/health) |
+| Search API 예시 | [https://glowsearch-backend.onrender.com/search?q=%EB%A1%9C%EC%85%98&limit=4](https://glowsearch-backend.onrender.com/search?q=%EB%A1%9C%EC%85%98&limit=4) |
 
-## 지금까지 구현한 내용
+백엔드의 현재 배포 커밋은 `/health` 응답의 `release_sha`로 확인할 수 있습니다.
 
-- Next.js 검색 UI를 GlowSearch 브랜드에 맞게 정리했습니다.
-- 검색 입력 UX를 개선하고, Enter 검색/검색 버튼 loading 상태/결과 카드 source badge를 붙일 수 있는 구조를 유지했습니다.
-- FastAPI `/search` API 호환성을 유지했습니다.
-- Olive Young 공개 JSON adapter를 기본 빠른 source로 사용합니다.
-- 공식 Olive Young HTML collector와 browser collector는 준수/차단 리스크 때문에 기본 비활성화했습니다.
-- 캐시와 SQLite product index를 먼저 조회하고, 부족하면 live source를 병렬로 보강합니다.
-- `젤` 같은 넓은 단일 검색어는 verified-cache 1건에서 멈추지 않고 공개 adapter 결과를 기다리도록 보완했습니다.
-- 넓은 단일 검색어의 관련 확장어는 첫 응답을 늦추지 않도록 background refresh로 넘깁니다.
-- 단, `로션`처럼 1차 단어가 0개를 반환하는 경우에는 짧은 deadline 안에서 관련 확장어를 즉시 보강해 빈 화면을 줄입니다.
-- live 결과는 백그라운드에서 인덱스에 저장되어 다음 검색부터 빠르게 재사용됩니다.
-- 상품 record에 category, rating, review_count, description, options, sold_out, updated_at 필드를 추가했습니다.
-- 원가와 현재가가 같으면 `sale_price`와 `discount_rate`를 노출하지 않습니다.
-- source attribution, source label, source priority를 유지합니다.
-- 안전 수집 CLI와 CSV export를 추가했습니다.
-- diagnostics와 index status endpoint로 운영 상태를 확인할 수 있습니다.
-- 결과가 많으면 프론트에서 48개씩 페이지 번호로 나눠 표시합니다.
-- 영문 브랜드명 검색은 브랜드 registry의 한국어 alias로 확장해서 Olive Young 중심 검색 결과를 더 잘 찾도록 했습니다.
-- `/suggest` 자동완성 API를 추가해 브랜드/카테고리/관련 검색어 후보를 검색창 아래에 표시합니다.
-- 공개 JSON adapter는 `nextPage`뿐 아니라 `totalCount`/`totalPages`도 확인해 뒤쪽 상품을 덜 놓치도록 했습니다.
-- 검색 응답은 빠른 limit로 유지하고, 백그라운드 refresh는 더 큰 limit으로 인덱스를 채워 다음 검색 속도와 coverage를 개선합니다.
-- SQLite index에 FTS5 검색 문서를 추가해 브랜드/상품명/카테고리/설명/옵션의 부분 키워드 검색을 강화했습니다.
-- `brand_aliases` 테이블을 추가해 `too cool`, `TOO COOL FOR SCHOOL`, `투쿨포스쿨` 같은 영문/한글 alias 검색을 같은 결과군으로 확장합니다.
-- `search_gaps` 테이블을 추가해 결과가 없거나 너무 적은 검색어를 기록하고, 다음 warmup/coverage job의 우선순위로 사용할 수 있게 했습니다.
-- `catalog_jobs` 큐를 추가해 Olive Young seed/brand/category/search gap 기반 수집을 사용자 검색 요청과 분리했습니다.
+## 만들게 된 계기
 
-## 중요한 데이터 원칙
+화장품 검색은 한글 브랜드명, 영문 브랜드명, 하위 브랜드, 상품명, 성분명, 카테고리명이 섞여 있어 원하는 상품을 빠르게 찾기 어렵습니다. 예를 들어 `too cool`, `TOO COOL FOR SCHOOL`, `투쿨포스쿨`은 같은 브랜드를 가리키고, `정샘물` 검색에는 `비긴스 바이 정샘물` 같은 하위 브랜드도 함께 고려해야 합니다.
 
-- 상품 데이터는 원본 source가 제공한 값만 사용합니다.
-- 원본에서 확인하지 못한 상품명, 가격, 이미지, 링크, 리뷰 수, 옵션은 만들지 않고 `null`로 둡니다.
-- 같은 Olive Young `goodsNo`는 하나의 상품으로 dedupe합니다.
-- 브랜드 영문명은 `backend/data/brand_registry.json`의 alias registry로 정규화합니다.
-- source별 장애는 사용자에게 과하게 노출하지 않고 diagnostics에 남깁니다.
-- anti-bot, Cloudflare, captcha, login wall, 403, 429, 503이 보이면 우회하지 않고 backoff 또는 중단합니다.
+GlowSearch는 검색 요청마다 모든 상품을 실시간으로 수집하는 방식이 아니라, 실제 source가 제공한 상품 데이터를 수집/정규화/색인하고 캐시와 인덱스를 먼저 조회해 빠르게 결과를 보여주는 검색 엔진을 목표로 만들었습니다.
 
-## Olive Young 조사 결과
+## 핵심 기능
 
-- 공식 공개 Olive Young 상품 API나 공식 개발자 문서는 확인하지 못했습니다.
-- `https://www.oliveyoung.co.kr/store/search/getSearchMain.do?query=...`와 상품 상세 URL은 웹 화면에서 쓰는 HTML 경로입니다. 공개 API 계약이 아니므로 대량 호출 대상으로 보지 않습니다.
-- `https://www.oliveyoung.co.kr/robots.txt`는 named bot별 허용/지연 규칙이 있지만 `User-agent: *`는 전체 disallow입니다. 그래서 공식 HTML collector는 기본값에서 꺼져 있습니다.
-- `https://us.oliveyoung.com/robots.txt`는 `/search`를 disallow하므로 US 검색 페이지 수집은 피합니다.
-- 안전하게 접근 가능한 공개 GraphQL endpoint는 확인하지 못했습니다.
-- 현재 기본 adapter는 기존 프로젝트가 사용하던 `https://mcp.aka.page/api/oliveyoung/products` 형식의 공개 JSON adapter입니다. 운영에서는 장애와 데이터 지연 가능성을 감안해야 합니다.
+- 브랜드명, 영문명, 상품명, 카테고리 키워드 검색
+- `too cool`, `TOO COOL FOR SCHOOL`, `투쿨포스쿨` 같은 alias 검색
+- `정샘물`, `비긴스 바이 정샘물` 같은 하위 브랜드 검색 확장
+- SQLite FTS5 기반 빠른 인덱스 검색
+- TTL cache와 SQLite index 우선 반환
+- 인덱스 결과가 부족할 때 제한 시간 안에서 live source collector 보강
+- live 결과를 background ingestion으로 인덱스에 저장
+- `search_gaps`로 결과 없음/부족 검색어 기록
+- `catalog_jobs` queue로 seed, 브랜드, 카테고리, 검색 gap 기반 수집 작업 관리
+- Olive Young source attribution 유지
+- 원가, 할인가, 할인율 표시
+- 자동완성, 페이지네이션, source badge UI
+
+## 기술 스택
+
+| 영역 | 기술 | 사용 이유 |
+| --- | --- | --- |
+| Frontend | Next.js | 검색 UI, 배포, 정적/동적 화면 구성 |
+| Backend | FastAPI | 빠른 API 서버, 타입 기반 request/response 처리 |
+| Language | TypeScript, Python | UI 안정성, 데이터 수집/정규화 구현 |
+| Search Index | SQLite + FTS5 | 로컬/소규모 운영에서 빠른 전문 검색과 쉬운 배포 |
+| Data Collection | httpx | 비동기 HTTP 수집, timeout/retry/rate limit 제어 |
+| Parsing | BeautifulSoup4 | 보수적인 HTML parsing fallback |
+| Cache | In-memory TTL cache | 반복 검색의 time-to-first-result 단축 |
+| Deployment | Vercel, Render | 프론트/백엔드 분리 배포 |
+| Test | pytest | collector, normalizer, indexing, cache, orchestration 검증 |
+
+## 파일 구조
+
+```text
+GlowSearch/
+  frontend/
+    src/app/
+      page.tsx        # 검색 UI, 자동완성, 결과 카드, 페이지네이션
+      layout.tsx      # 메타데이터, favicon
+      globals.css     # 전역 스타일
+
+  backend/
+    app/
+      api/            # FastAPI routes, health, diagnostics, index status
+      cache/          # TTL cache
+      core/           # 환경 변수와 설정
+      data_collector/ # Olive Young, local catalog, optional provider adapters
+      indexing/       # SQLite product index, FTS, catalog job queue
+      ingestion/      # 안전 수집 pipeline, retry/backoff, CSV export
+      normalizer/     # 브랜드 alias, 상품 record 정규화
+      observability/  # latency, cache/index/source metrics
+      search/         # synonym, search key
+      service/        # SearchService orchestration
+    scripts/
+      ingest_oliveyoung.py
+      benchmark_search.py
+    tests/
+```
 
 ## 아키텍처
 
-```text
-Next.js UI
-  -> FastAPI /search
-  -> SearchService
-  -> TTL cache 조회
-  -> SQLiteProductIndexStore 조회
-       - query별 rank 유지
-       - brand_aliases 기반 한글/영문 브랜드 alias 확장
-       - FTS5 문서로 상품명/브랜드/카테고리/설명/옵션 부분 키워드 검색
-       - search_text LIKE fallback
-  -> 부족하면 primary query만 빠른 source로 병렬 실행
-       - OliveYoungPublicApiCollector
-       - LocalVerifiedCatalogCollector
-       - ApifyOliveYoungCollector, optional
-       - JsonApiProductCollector, optional managed/discovery/barcode adapter
-       - OliveYoungCollector, opt-in HTML fallback
-       - BrowserOliveYoungCollector, opt-in browser fallback
-  -> SourcePolicy 적용
-  -> ProductNormalizer 적용
-  -> dedupe, filter, ranking
-  -> SearchResponse 반환
-  -> live 결과와 관련 확장어 refresh는 ProductIngestionAgent가 SQLite index에 저장
-  -> 결과가 없거나 부족한 검색어는 search_gaps에 기록
-  -> catalog_jobs 큐가 별도 ingestion job으로 DB snapshot을 확장
+```mermaid
+flowchart LR
+  User["User"] --> Frontend["Next.js Frontend"]
+  Frontend --> SearchAPI["FastAPI /search"]
+  SearchAPI --> Cache["TTL Cache"]
+  Cache -->|hit| Response["SearchResponse"]
+  Cache -->|miss| Index["SQLite FTS Index"]
+  Index -->|hit| Response
+  Index -->|miss or low coverage| Collectors["Live Source Collectors"]
+  Collectors --> Normalizer["ProductNormalizer"]
+  Normalizer --> Response
+  Collectors --> Background["Background Ingestion"]
+  Background --> Index
+  SearchAPI --> Gaps["search_gaps"]
+  Gaps --> Jobs["catalog_jobs"]
+  Jobs --> Background
 ```
 
-## 주요 모듈
+## 검색 데이터 흐름
 
-```text
-backend/app/
-  api/              FastAPI route, health, diagnostics, index warmup
-  cache/            TTL response cache
-  core/             환경 설정
-  data_collector/   source adapter
-  indexing/         SQLite product index, ingestion agents
-  ingestion/        safe rate limit/retry/backoff, ingestion pipeline, CSV export
-  models/           ProductSourceRecord, ProductSearchResult
-  normalizer/       브랜드/상품 정규화
-  observability/    latency, cache/index/source metrics
-  parser/           conservative Olive Young HTML parser
-  search/           synonyms/search key
-  service/          SearchService orchestration
+```mermaid
+sequenceDiagram
+  participant User
+  participant FE as Next.js Frontend
+  participant API as FastAPI /search
+  participant Cache as TTL Cache
+  participant Index as SQLite FTS Index
+  participant Source as Live Source Collectors
+  participant BG as Background Ingestion
 
-backend/scripts/
-  benchmark_search.py
-  ingest_oliveyoung.py
-
-frontend/src/
-  app/              Next.js app UI
-  lib/              API client
-  types/            response types
+  User->>FE: 검색어 입력
+  FE->>API: GET /search
+  API->>Cache: cache 조회
+  alt cache hit
+    Cache-->>API: cached records
+    API-->>FE: 즉시 반환
+  else cache miss
+    API->>Index: index 조회
+    alt index hit
+      Index-->>API: indexed records
+      API-->>FE: 빠르게 반환
+      API->>BG: background refresh 예약
+    else index miss
+      API->>Source: 제한 시간 안에서 live 조회
+      Source-->>API: source records
+      API-->>FE: 결과 반환
+      API->>BG: 결과 저장
+      BG->>Index: upsert products/query mappings/FTS
+    end
+  end
 ```
 
-## API
+## DB/index 구조
 
-검색:
+| 테이블 | 역할 |
+| --- | --- |
+| `products` | source가 제공한 상품 record 저장 |
+| `query_products` | 검색어별 source rank 보존 |
+| `products_fts` | 브랜드, 상품명, 카테고리, 옵션, alias 기반 검색 |
+| `brand_aliases` | 한글/영문/하위 브랜드 alias 연결 |
+| `search_gaps` | 결과 없음/부족 검색어 기록 |
+| `catalog_jobs` | seed/search gap 기반 background catalog ingestion queue |
+
+## API 문서
+
+### `GET /search`
 
 ```bash
-curl 'http://localhost:8000/search?q=젤&limit=24'
+curl "https://glowsearch-backend.onrender.com/search?q=로션&limit=48"
 ```
 
-자동완성:
-
-```bash
-curl 'http://localhost:8000/suggest?q=투&limit=10'
-```
-
-지원 파라미터:
+주요 query parameter:
 
 | 파라미터 | 설명 |
 | --- | --- |
@@ -142,66 +175,48 @@ curl 'http://localhost:8000/suggest?q=투&limit=10'
 
 ```json
 {
-  "query": "젤",
-  "count": 2,
+  "query": "로션",
+  "count": 1,
   "results": [
     {
-      "brand_ko": "홀리카홀리카",
-      "brand_en": "HOLIKA HOLIKA",
-      "product_name_ko": "[NEW젤테일] 홀리카홀리카 마이페이브 피스 아이섀도우/젤테일/피스 빔/피스 밤",
-      "category": null,
-      "price": 4900,
-      "original_price": 6000,
-      "sale_price": 4900,
-      "discount_rate": 18,
-      "rating": null,
-      "review_count": null,
-      "currency": "KRW",
-      "shade": null,
-      "image_url": "https://...",
-      "description": null,
-      "options": null,
-      "sold_out": false,
-      "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000174309",
+      "brand_ko": "에스트라",
+      "brand_en": "AESTURA",
+      "product_name_ko": "에스트라 아토베리어365 로션 150ml",
+      "price": 29700,
+      "original_price": 33000,
+      "sale_price": 29700,
+      "discount_rate": 10,
       "source": "oliveyoung",
-      "source_label": "Olive Young",
-      "source_priority": 10,
-      "updated_at": null
+      "source_label": "Olive Young"
     }
   ],
   "source_errors": []
 }
 ```
 
-운영 상태:
+### 기타 endpoint
 
-```bash
-curl https://glowsearch-backend.onrender.com/index/status
-curl https://glowsearch-backend.onrender.com/index/catalog/status
-curl https://glowsearch-backend.onrender.com/diagnostics
-```
-
-`/diagnostics`에는 최근 검색 gap과 catalog job 상태도 포함됩니다. 결과가 적은 검색어를 확인한 뒤 `/index/warm` 또는 ingestion CLI의 seed로 넣으면 다음 검색부터 더 빠르고 넓게 반환됩니다.
+| Endpoint | 설명 |
+| --- | --- |
+| `GET /suggest?q=투&limit=10` | 자동완성 후보 |
+| `GET /index/status` | 상품 인덱스 상태 |
+| `GET /index/catalog/status` | catalog ingestion job 상태 |
+| `GET /diagnostics` | cache/index/source/gap/job 진단 정보 |
+| `GET /health` | backend 상태와 `release_sha` |
 
 ## 로컬 실행
 
-Backend:
+### Backend
 
 ```bash
 cd backend
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.api.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.api.main:app --reload --port 8000
 ```
 
-Playwright fallback을 명시적으로 켤 때만 browser 설치가 필요합니다.
-
-```bash
-playwright install chromium
-```
-
-Frontend:
+### Frontend
 
 ```bash
 cd frontend
@@ -215,240 +230,58 @@ npm run dev
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
 
-## 핵심 환경 변수
+## 환경 변수
 
-Backend:
-
-```bash
-GLOWSEARCH_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
-GLOWSEARCH_CACHE_TTL_SECONDS=180
-GLOWSEARCH_MAX_RESULTS=480
-GLOWSEARCH_SOURCE_TIME_BUDGET_SECONDS=2.5
-GLOWSEARCH_LIVE_COLLECT_DEADLINE_SECONDS=3.2
-GLOWSEARCH_LIVE_FIRST_RESULT_GRACE_SECONDS=0.8
-GLOWSEARCH_BACKGROUND_COLLECT_DEADLINE_SECONDS=18.0
-GLOWSEARCH_RESULT_SOURCE_PREFIXES=oliveyoung,official,musinsa,managed,barcode,discovery,external
-
-GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_ENABLED=true
-GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_BASE_URL=https://mcp.aka.page
-GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_TIMEOUT_SECONDS=6.0
-GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RETRY_ATTEMPTS=2
-GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RETRY_BASE_DELAY_SECONDS=0.5
-GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RETRY_MAX_DELAY_SECONDS=4.0
-GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RATE_LIMIT_PER_SECOND=1.0
-GLOWSEARCH_OLIVEYOUNG_HTML_COLLECTOR_ENABLED=false
-GLOWSEARCH_OLIVEYOUNG_OFFICIAL_ORDER_ENABLED=true
-GLOWSEARCH_OLIVEYOUNG_LIVE_SEARCH_REQUIRED=false
-
-GLOWSEARCH_BROWSER_COLLECTOR_ENABLED=false
-GLOWSEARCH_BROWSER_HEADLESS=true
-GLOWSEARCH_BROWSER_TIMEOUT_SECONDS=25
-
-GLOWSEARCH_PRODUCT_INDEX_ENABLED=true
-GLOWSEARCH_PRODUCT_INDEX_PATH=backend/data/product_index.sqlite3
-GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN=
-GLOWSEARCH_PRODUCT_INDEX_MIN_RESULTS=1
-GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_ENABLED=true
-GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_LIMIT=240
-GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP=false
-GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT=48
-GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY=2
-GLOWSEARCH_PRODUCT_INDEX_MAX_SEED_QUERIES=80
-GLOWSEARCH_PRODUCT_INDEX_DETAIL_ENRICHMENT_ENABLED=true
-GLOWSEARCH_PRODUCT_INDEX_DETAIL_ENRICHMENT_MAX_RECORDS=12
-
-GLOWSEARCH_APIFY_TOKEN=
-GLOWSEARCH_APIFY_ACTOR_ID=kitschy_marigold/oliveyoung-search-scraper
-
-GLOWSEARCH_MANAGED_SEARCH_API_ENABLED=false
-GLOWSEARCH_MANAGED_SEARCH_API_BASE_URL=
-GLOWSEARCH_GLOBAL_DISCOVERY_API_ENABLED=false
-GLOWSEARCH_GLOBAL_DISCOVERY_API_BASE_URL=
-GLOWSEARCH_BARCODE_LOOKUP_API_ENABLED=false
-GLOWSEARCH_BARCODE_LOOKUP_API_BASE_URL=
-```
-
-Frontend:
-
-```bash
-NEXT_PUBLIC_API_BASE_URL=https://glowsearch-backend.onrender.com
-```
-
-## 안전 수집 CLI
-
-로컬 개발이나 운영 job에서 공개 JSON adapter 기반으로 seed query를 수집하고 SQLite/CSV로 확인할 수 있습니다.
-
-```bash
-cd backend
-.venv/bin/python scripts/ingest_oliveyoung.py --query 젤 --limit 48 --db-path data/product_index.sqlite3 --csv data/oliveyoung_export.csv
-.venv/bin/python scripts/ingest_oliveyoung.py --use-default-seeds --max-queries 50 --limit 48 --db-path data/product_index.sqlite3
-```
-
-옵션:
-
-| 옵션 | 설명 |
+| 변수 | 설명 |
 | --- | --- |
-| `--query` | 수집할 검색어. 여러 번 지정 가능 |
-| `--use-default-seeds` | 설정의 seed/category/brand query 사용 |
-| `--max-queries` | 처리할 query 수 제한 |
-| `--limit` | query별 수집 개수 |
-| `--coverage-pairs` | 브랜드+카테고리 조합 query 수 제한. 누락 보강용 |
-| `--include-gaps` | `search_gaps`에 쌓인 부족 검색어를 수집 후보에 포함 |
-| `--enqueue-catalog` | 즉시 수집하지 않고 `catalog_jobs` 큐에 후보 등록 |
-| `--run-catalog-jobs` | `catalog_jobs` 큐에서 pending 작업을 가져와 수집 |
-| `--max-jobs` | 한 번에 처리할 catalog job 수 |
-| `--job-kind` | catalog job 종류. 기본값 `oliveyoung-search` |
-| `--db-path` | SQLite index 경로 |
-| `--csv` | CSV export 경로 |
-| `--rate-limit` | 공개 adapter 초당 요청 수 |
-| `--enrich-details` | 공식 상세 페이지 보강 opt-in |
+| `NEXT_PUBLIC_API_BASE_URL` | 프론트에서 호출할 백엔드 API base URL |
+| `GLOWSEARCH_PRODUCT_INDEX_PATH` | SQLite product index 경로 |
+| `GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_ENABLED` | Olive Young 공개 JSON adapter 사용 여부 |
+| `GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP` | 서버 시작 시 seed index warmup 실행 여부 |
+| `GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN` | 원격 `/index/warm` 보호 token |
+| `GLOWSEARCH_RESULT_SOURCE_PREFIXES` | 결과에 허용할 source prefix 목록 |
+| `GLOWSEARCH_BROWSER_COLLECTOR_ENABLED` | Playwright/browser fallback 사용 여부, 기본 비활성화 |
 
-기본 수집은 query별 48개, 초당 1 요청입니다. 180개 seed를 한 페이지씩 수집하면 raw 후보는 최대 8,640개이고 dedupe 후 실제 상품 수는 더 작습니다. `limit=480`은 query별 최대 10페이지까지 수집하므로 coverage는 늘지만 수집 시간과 source 부하도 같이 늘어납니다.
+## 데이터 수집 원칙
 
-전체 카탈로그에 가깝게 DB snapshot을 키우는 운영 순서:
+- 상품 데이터는 source가 제공한 값만 저장합니다.
+- 없는 가격, 브랜드명, 영문명, 상품명, 이미지, 리뷰 수, 옵션은 만들지 않습니다.
+- 같은 Olive Young `goodsNo`는 하나의 상품으로 dedupe합니다.
+- Cloudflare, captcha, login wall, 403, 429, 503, rate limit, terms 이슈가 보이면 우회하지 않습니다.
+- `robots.txt`와 서비스 약관을 확인하지 않은 대량 수집은 실행하지 않습니다.
+- HTML/browser collector는 기본 비활성화되어 있습니다.
+- 운영에서는 공식 API, 제휴 데이터, managed scraping provider를 우선 검토합니다.
+
+## 카탈로그 인덱싱 운영
+
+현재 구조는 검색 요청과 카탈로그 수집을 분리합니다. 검색은 cache/index를 우선 조회하고, 전체 카탈로그에 가까운 DB snapshot은 별도 ingestion job으로 확장합니다.
 
 ```bash
 cd backend
 
-# 1. 기본 seed, 브랜드, 카테고리, 제한된 브랜드+카테고리 조합을 catalog job으로 등록
+# seed, 브랜드, 카테고리, 브랜드+카테고리 조합을 catalog job으로 등록
 .venv/bin/python scripts/ingest_oliveyoung.py \
   --use-default-seeds \
   --coverage-pairs 300 \
   --enqueue-catalog \
   --db-path data/product_index.sqlite3
 
-# 2. 검색에서 부족했던 query도 다음 수집 후보로 등록
+# search_gaps에 쌓인 부족 검색어를 수집 후보로 등록
 .venv/bin/python scripts/ingest_oliveyoung.py \
   --include-gaps \
   --enqueue-catalog \
   --job-priority 20 \
   --db-path data/product_index.sqlite3
 
-# 3. catalog job을 작은 batch로 실행. Cron/worker에서 반복 실행
+# catalog job을 작은 batch로 실행
 .venv/bin/python scripts/ingest_oliveyoung.py \
   --run-catalog-jobs \
   --max-jobs 50 \
   --limit 240 \
   --db-path data/product_index.sqlite3
-
-# 4. 개발용 CSV 확인
-.venv/bin/python scripts/ingest_oliveyoung.py \
-  --run-catalog-jobs \
-  --max-jobs 10 \
-  --limit 48 \
-  --csv data/oliveyoung_export.csv \
-  --db-path data/product_index.sqlite3
 ```
 
-이 방식은 “한 번에 모든 페이지를 긁는” 방식이 아니라, 안전한 query 단위 작업을 큐에 넣고 rate limit 안에서 반복 실행하는 방식입니다. 실패한 작업은 `failed`로 남고, 재시도 가능 횟수 안에서는 다시 claim됩니다.
-
-## 인덱스 운영
-
-현재 SQLite는 로컬/소규모 운영용입니다.
-
-현재 SQLite index는 세 가지 테이블 축으로 동작합니다.
-
-| 테이블 | 역할 |
-| --- | --- |
-| `products` | 원본 source가 준 상품 record 저장 |
-| `query_products` | 특정 검색어에서 source가 반환한 공식 rank 보존 |
-| `products_fts` | 브랜드/상품명/카테고리/설명/옵션/alias 기반 빠른 검색 |
-| `brand_aliases` | 브랜드 영문명, 한글명, 하위 브랜드, 별칭 연결 |
-| `search_gaps` | 결과 없음/부족 검색어를 다음 수집 대상으로 기록 |
-| `catalog_jobs` | seed/search gap 기반 background catalog ingestion queue |
-
-Render free plan의 일반 filesystem은 ephemeral입니다. 현재처럼 `/tmp`에 SQLite를 두면 재배포, 재시작, cold start 이후 인덱스가 비거나 작아질 수 있습니다. 이 경우 검색 요청이 매번 live source를 기다리므로 느리고, source timeout이 나면 결과가 적게 나옵니다.
-
-권장 순서:
-
-1. Render paid service로 올리고 persistent disk를 `/var/data`에 연결
-2. 상품 수와 source가 늘면 Postgres full-text search로 이전
-3. prefix/typo search가 중요해지면 Meilisearch 또는 Typesense 검토
-4. 대규모 검색/분석이 필요해지면 OpenSearch 검토
-
-Persistent disk를 붙이면 backend 환경 변수는 다음처럼 바꿉니다.
-
-```bash
-GLOWSEARCH_PRODUCT_INDEX_PATH=/var/data/glowsearch/product_index.sqlite3
-```
-
-Render Dashboard 절차:
-
-1. Backend service를 paid plan으로 변경합니다.
-2. Disks에서 persistent disk를 추가합니다.
-3. Mount path를 `/var/data`로 설정합니다.
-4. `GLOWSEARCH_PRODUCT_INDEX_PATH`를 `/var/data/glowsearch/product_index.sqlite3`로 설정합니다.
-5. 배포 후 `/index/warm` 또는 startup warmup으로 seed index를 채웁니다.
-
-Render docs 기준 persistent disk는 유료 web service, private service, background worker에 붙일 수 있고, 지정한 mount path 아래 데이터만 재배포/재시작 후 보존됩니다.
-
-Render에서 `GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN`을 설정하면 warmup을 수동 또는 Cron으로 실행할 수 있습니다.
-
-```bash
-curl -X POST "https://glowsearch-backend.onrender.com/index/warm?token=$GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN&limit=48"
-curl -X POST "https://glowsearch-backend.onrender.com/index/warm?token=$GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN&q=뮤드&q=롬앤&limit=48&wait=true"
-```
-
-현재 `render.yaml`은 cold start 이후에도 최소 coverage를 만들기 위해 낮은 부하의 startup warmup을 켭니다.
-
-```bash
-GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP=true
-GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY=1
-GLOWSEARCH_PRODUCT_INDEX_MAX_SEED_QUERIES=80
-GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT=48
-GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_LIMIT=240
-```
-
-이 설정은 persistent disk를 붙이기 전 임시 보완입니다. 장기적으로는 persistent disk 또는 Postgres가 필요합니다.
-
-누락 보강을 더 촘촘하게 하고 싶으면 운영 Cron 또는 로컬 job에서 다음처럼 제한된 브랜드+카테고리 조합을 인덱싱합니다. 이 작업은 사용자 검색 요청과 분리되어야 합니다.
-
-```bash
-cd backend
-.venv/bin/python scripts/ingest_oliveyoung.py --use-default-seeds --coverage-pairs 200 --limit 240 --db-path data/product_index.sqlite3
-```
-
-`/diagnostics`의 `search_gaps`에 반복적으로 보이는 검색어는 다음 세 가지 중 하나로 처리합니다.
-
-1. 브랜드/하위 브랜드 문제면 `backend/data/brand_registry.json`에 alias를 추가합니다.
-2. 카테고리/성분/상품군 문제면 `GLOWSEARCH_PRODUCT_INDEX_CATEGORY_QUERIES` 또는 기본 seed에 추가합니다.
-3. 특정 상품군 coverage 문제면 ingestion CLI나 `/index/warm`으로 해당 검색어를 먼저 warmup합니다.
-
-## 운영/법무 주의
-
-- robots.txt, 약관, rate limit, 제휴/사용 권한을 확인하지 않은 대량 수집은 실행하지 않습니다.
-- 403, 429, 503, Cloudflare, captcha, login wall이 보이면 우회하지 않습니다.
-- Playwright/Selenium은 endpoint discovery 또는 보수적 fallback 용도만 허용합니다.
-- fingerprint 우회, captcha 우회, anti-bot 회피 코드는 넣지 않습니다.
-- production-grade 전체 Olive Young coverage는 공식/제휴 데이터, managed scraping API, 또는 명시적으로 허용된 데이터 공급자를 우선 검토합니다.
-
-## 배포
-
-- Frontend: Vercel
-- Backend: Render Docker web service
-
-프론트 배포 환경:
-
-```bash
-NEXT_PUBLIC_API_BASE_URL=https://glowsearch-backend.onrender.com
-```
-
-Render backend에는 Backend 환경 변수를 등록합니다.
-
-Render 자동 배포가 GitHub push를 바로 반영하지 않으면 deploy hook을 사용합니다.
-
-1. Render Dashboard에서 backend service를 엽니다.
-2. Settings의 Deploy Hook URL을 복사합니다.
-3. GitHub repository Settings > Secrets and variables > Actions에 `RENDER_DEPLOY_HOOK_URL` secret을 추가합니다.
-4. 이후 `main` push 후 deploy hook 또는 GitHub Action으로 Render 배포를 트리거합니다.
-
-배포 확인:
-
-```bash
-curl https://glowsearch-backend.onrender.com/health
-```
-
-## 검증
+## 테스트/검증
 
 Backend:
 
@@ -462,8 +295,15 @@ Frontend:
 
 ```bash
 cd frontend
-npm run typecheck
 npm run build
+```
+
+API smoke test:
+
+```bash
+curl https://glowsearch-backend.onrender.com/health
+curl "https://glowsearch-backend.onrender.com/search?q=too%20cool&limit=4"
+curl "https://glowsearch-backend.onrender.com/search?q=%EC%A0%95%EC%83%98%EB%AC%BC&limit=48"
 ```
 
 Benchmark:
@@ -474,11 +314,36 @@ cd backend
 .venv/bin/python scripts/benchmark_search.py --base-url https://glowsearch-backend.onrender.com --repeat 3
 ```
 
-최근 검증 결과:
+## 배포
 
-- backend ruff 통과
-- backend pytest 통과
-- frontend typecheck 통과
-- frontend build 통과
-- Render health의 `release_sha`로 현재 배포 commit 확인
-- `젤`, `로션` 검색에서 Olive Young source 결과 반환 확인
+| 영역 | 플랫폼 | 설명 |
+| --- | --- | --- |
+| Frontend | Vercel | Next.js app 배포 |
+| Backend | Render | FastAPI Docker web service 배포 |
+
+Render backend는 `/health`의 `release_sha`로 현재 배포 commit을 확인합니다.
+
+```bash
+curl https://glowsearch-backend.onrender.com/health
+```
+
+Render free filesystem은 SQLite index 보존에 적합하지 않습니다. 장기 운영에서는 persistent disk 또는 Postgres 전환이 필요합니다.
+
+## 한계와 개선 계획
+
+### 현재 한계
+
+- Olive Young 전체 상품 100% 보장은 아직 아닙니다.
+- Render free filesystem은 SQLite index 보존에 적합하지 않습니다.
+- 일부 브랜드 영문명은 source나 `brand_registry.json`에 없으면 `null`입니다.
+- 공식 API/제휴 데이터 없이 전체 카탈로그를 안정적으로 유지하는 데 한계가 있습니다.
+- 현재 Olive Young HTML/browser collector는 준수/차단 리스크 때문에 기본 비활성화되어 있습니다.
+
+### 개선 계획
+
+- Render persistent disk 또는 Postgres 도입
+- Meilisearch/Typesense 기반 typo/prefix search
+- 브랜드 alias 자동 보강 workflow
+- `search_gaps` 기반 자동 warmup
+- managed scraping/API provider 연동
+- 공식/제휴 데이터 소스 확보
