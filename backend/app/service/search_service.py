@@ -169,11 +169,6 @@ class SearchService:
             product_query,
             brand_match,
         )
-        has_related_expansions = bool(self._related_query_expansions(product_query or cleaned_query))
-        is_broad_single_query = brand_match is None and self._is_broad_related_query(
-            product_query or cleaned_query
-        )
-        is_brand_only_query = self._is_brand_only_query(brand_match, product_query)
         cache_keys = self._cache_keys(collect_queries, collect_limit)
         cache_key = cache_keys[0]
         fallback_results: list[ProductSearchResult] = []
@@ -194,22 +189,11 @@ class SearchService:
                     or self._prefer_live_official_results
                 ),
             )
-            if is_brand_only_query:
-                cached_has_enough_results = len(cached_results) >= self._brand_return_threshold(
-                    criteria.limit
-                )
-            elif has_related_expansions or is_broad_single_query:
-                cached_has_enough_results = (
-                    len(cached_results) >= self._broad_related_return_threshold(criteria.limit)
-                    or not cached_collected.records
-                )
-            else:
-                cached_has_enough_results = True
             if (
                 cached_top_score > 0
                 or cached_collected.has_official_records
                 or not cached_collected.records
-            ) and cached_has_enough_results:
+            ):
                 self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
                 return SearchResponse(
                     query=cleaned_query,
@@ -242,21 +226,10 @@ class SearchService:
             or (indexed_collected.has_official_records and indexed_results)
         ) and len(indexed_results) > len(fallback_results):
             fallback_results = indexed_results
-        index_threshold = min(criteria.limit, self._index_min_results)
-        if is_brand_only_query:
-            index_has_enough_results = len(indexed_results) >= self._brand_return_threshold(
-                criteria.limit
-            )
-        elif has_related_expansions or is_broad_single_query:
-            index_has_enough_results = len(indexed_results) >= self._broad_related_return_threshold(
-                criteria.limit
-            )
-        else:
-            index_has_enough_results = len(indexed_results) >= index_threshold or len(indexed_results) > 0
         if (
             not self._prefer_live_official_results
+            and bool(indexed_collected.records)
             and (indexed_top_score > 0 or indexed_collected.has_official_records)
-            and index_has_enough_results
             and not require_relevant
         ):
             await self._cache.set(cache_key, indexed_collected)
@@ -1151,10 +1124,25 @@ class SearchService:
             return
         try:
             await record_gap(query, result_count, reason)
+            enqueue_jobs = getattr(self._product_index, "enqueue_catalog_jobs", None)
+            if enqueue_jobs is not None:
+                await enqueue_jobs(
+                    self._gap_catalog_queries(query),
+                    priority=10 if reason == "empty_result" else 20,
+                    max_attempts=3,
+                )
             self._metrics.record_search_gap()
         except Exception as exc:
             self._last_index_error = f"{type(exc).__name__}: {exc}"
             self._metrics.record_background_index_error(self._last_index_error)
+
+    def _gap_catalog_queries(self, query: str) -> list[str]:
+        candidates = [
+            query,
+            *self._normalizer.query_aliases(query, limit=8),
+            *self._related_query_expansions(query),
+        ]
+        return SourceDiscoveryAgent._dedupe(candidates)
 
     def _brand_search_terms(
         self,

@@ -554,7 +554,7 @@ async def test_search_service_returns_partial_warm_index_before_network(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_search_service_does_not_stop_at_partial_index_for_broad_single_query(
+async def test_search_service_returns_partial_index_immediately_for_broad_single_query(
     tmp_path,
 ) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -590,8 +590,8 @@ async def test_search_service_does_not_stop_at_partial_index_for_broad_single_qu
     await service.close()
 
     assert response.count == 1
-    assert response.results[0].product_name_ko == "식물나라 수분 젤"
-    assert official.calls[0] == "젤"
+    assert response.results[0].product_name_ko == "식물나라 부분 인덱스 젤"
+    assert official.calls == []
 
 
 @pytest.mark.asyncio
@@ -738,7 +738,7 @@ async def test_search_service_skips_slow_index_read_before_network(tmp_path) -> 
 
 
 @pytest.mark.asyncio
-async def test_search_service_keeps_partial_cached_brand_records_as_fallback(tmp_path) -> None:
+async def test_search_service_returns_partial_cached_brand_records_immediately(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text(
         '{"entries":[{"official_en":"mude","aliases":["뮤드"],"sources":[]}]}',
@@ -778,7 +778,7 @@ async def test_search_service_keeps_partial_cached_brand_records_as_fallback(tmp
 
     assert response.count == 1
     assert response.results[0].product_name_ko == "뮤드 캐시 상품"
-    assert network.calls == ["뮤드"]
+    assert network.calls == []
 
 
 @pytest.mark.asyncio

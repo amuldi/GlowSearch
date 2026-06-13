@@ -235,9 +235,9 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | 변수 | 설명 |
 | --- | --- |
 | `NEXT_PUBLIC_API_BASE_URL` | 프론트에서 호출할 백엔드 API base URL |
-| `GLOWSEARCH_PRODUCT_INDEX_PATH` | SQLite product index 경로 |
+| `GLOWSEARCH_PRODUCT_INDEX_PATH` | SQLite product index 경로. Render persistent disk 사용 시 `/var/data/product_index.sqlite3` 권장 |
 | `GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_ENABLED` | Olive Young 공개 JSON adapter 사용 여부 |
-| `GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP` | 서버 시작 시 seed index warmup 실행 여부 |
+| `GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP` | 서버 시작 시 seed index warmup 실행 여부. 운영에서는 live 요청과 경쟁하지 않도록 `false` 권장 |
 | `GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN` | 원격 `/index/warm` 보호 token |
 | `GLOWSEARCH_RESULT_SOURCE_PREFIXES` | 결과에 허용할 source prefix 목록 |
 | `GLOWSEARCH_BROWSER_COLLECTOR_ENABLED` | Playwright/browser fallback 사용 여부, 기본 비활성화 |
@@ -327,7 +327,7 @@ Render backend는 `/health`의 `release_sha`로 현재 배포 commit을 확인�
 curl https://glowsearch-backend.onrender.com/health
 ```
 
-Render free filesystem은 SQLite index 보존에 적합하지 않습니다. 장기 운영에서는 persistent disk 또는 Postgres 전환이 필요합니다.
+Render free filesystem은 SQLite index 보존에 적합하지 않습니다. 운영에서는 Render persistent disk를 `/var/data`에 붙이고 `GLOWSEARCH_PRODUCT_INDEX_PATH=/var/data/product_index.sqlite3`로 지정하거나, Postgres/검색 엔진으로 전환해야 합니다.
 
 ## 한계와 개선 계획
 

@@ -54,7 +54,7 @@ services:
       - key: GLOWSEARCH_PRODUCT_INDEX_ENABLED
         value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_PATH
-        value: /tmp/glowsearch/product_index.sqlite3
+        value: /var/data/product_index.sqlite3
       - key: GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN
         sync: false
       - key: GLOWSEARCH_PRODUCT_INDEX_MIN_RESULTS
@@ -62,7 +62,7 @@ services:
       - key: GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_ENABLED
         value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP
-        value: true
+        value: false
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT
         value: 48
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY
