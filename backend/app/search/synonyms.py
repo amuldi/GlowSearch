@@ -100,6 +100,18 @@ RELATED_QUERY_EXPANSIONS: dict[str, tuple[str, ...]] = {
         "정샘물 립",
         "정샘물 브러쉬",
     ),
+    "클리오": (
+        "킬커버",
+        "클리오 쿠션",
+        "클리오 틴트",
+        "클리오 마스카라",
+    ),
+    "clio": (
+        "킬커버",
+        "클리오 쿠션",
+        "클리오 틴트",
+        "클리오 마스카라",
+    ),
     "비긴스": (
         "비긴스 바이 정샘물",
         "비긴스 바이 정샘물 세럼",
@@ -110,6 +122,9 @@ RELATED_QUERY_EXPANSIONS: dict[str, tuple[str, ...]] = {
 SUGGESTION_TERMS: tuple[str, ...] = (
     "투쿨포스쿨",
     "TOO COOL FOR SCHOOL",
+    "클리오",
+    "CLIO",
+    "킬커버",
     "투크",
     "투에이엔",
     "투슬래시포",

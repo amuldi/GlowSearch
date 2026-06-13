@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 
 from app.cache.ttl import AsyncTTLCache
 from app.data_collector.base import ProductCollector, SearchCriteria, SourceUnavailableError
+from app.ingestion.oliveyoung_pipeline import IngestionSummary, OliveYoungIngestionPipeline
 from app.indexing.agents import ProductIngestionAgent, SourceDiscoveryAgent
 from app.indexing.store import ProductIndexStore
 from app.models.product import ProductSearchResult, ProductSourceRecord, SearchResponse
@@ -1013,6 +1014,49 @@ class SearchService:
         if recent is None:
             return []
         return await recent(limit)
+
+    async def run_catalog_jobs(
+        self,
+        *,
+        max_jobs: int,
+        limit_per_query: int,
+        kind: str | None = "oliveyoung-search",
+    ) -> IngestionSummary:
+        if self._product_index is None or self._ingestion_agent is None:
+            return IngestionSummary(
+                query_count=0,
+                product_count=0,
+                stored_count=0,
+                failures=["product index is disabled"],
+            )
+        collector = self._catalog_ingestion_collector()
+        if collector is None:
+            return IngestionSummary(
+                query_count=0,
+                product_count=0,
+                stored_count=0,
+                failures=["no non-browser Olive Young collector is configured"],
+            )
+        pipeline = OliveYoungIngestionPipeline(
+            collector=collector,
+            store=self._product_index,
+            ingestion_agent=self._ingestion_agent,
+        )
+        return await pipeline.ingest_catalog_jobs(
+            max_jobs=max(max_jobs, 1),
+            limit_per_query=max(limit_per_query, 1),
+            kind=kind,
+        )
+
+    def _catalog_ingestion_collector(self) -> ProductCollector | None:
+        for name in ("oliveyoung:public-api", "oliveyoung"):
+            for collector in self._collectors:
+                if collector.name == name:
+                    return collector
+        for collector in self._collectors:
+            if self._is_oliveyoung_collector(collector) and collector.name != "oliveyoung:browser":
+                return collector
+        return None
 
     def suggest(self, query: str, limit: int = 10) -> list[str]:
         cleaned_query = clean_text(query)

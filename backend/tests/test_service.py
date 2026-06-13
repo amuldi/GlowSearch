@@ -5,6 +5,7 @@ import pytest
 
 from app.cache.ttl import AsyncTTLCache
 from app.data_collector.base import SearchCriteria, SourceUnavailableError
+from app.indexing.agents import ProductIngestionAgent
 from app.indexing.store import SQLiteProductIndexStore
 from app.models.product import ProductSourceRecord
 from app.normalizer.brand import BrandResolver
@@ -247,6 +248,55 @@ class TooCoolAliasCollector:
             )
             for index in range(min(limit, 4))
         ]
+
+
+class ClioBrandFallbackCollector:
+    name = "oliveyoung:public-api"
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        self.calls.append(keyword)
+        records_by_keyword = {
+            "킬커버": ProductSourceRecord(
+                source_brand_name="클리오",
+                product_name_ko="클리오 킬커버 하이 글로우 쿠션",
+                regular_price=27000,
+                source="oliveyoung",
+                source_product_id="clio-kill-cover-1",
+            ),
+            "클리오 쿠션": ProductSourceRecord(
+                source_brand_name="클리오",
+                product_name_ko="클리오 쿠션 기획세트",
+                regular_price=30000,
+                source="oliveyoung",
+                source_product_id="clio-cushion-1",
+            ),
+        }
+        record = records_by_keyword.get(keyword)
+        return [record] if record and limit > 0 else []
+
+
+class CatalogJobCollector:
+    name = "oliveyoung:public-api"
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        self.calls.append(keyword)
+        if keyword != "클리오":
+            return []
+        return [
+            ProductSourceRecord(
+                source_brand_name="클리오",
+                product_name_ko="클리오 인덱스 보강 상품",
+                regular_price=18000,
+                source="oliveyoung",
+                source_product_id="clio-catalog-1",
+            )
+        ][:limit]
 
 
 class PartialTooCoolIndexStore:
@@ -1310,6 +1360,37 @@ async def test_search_service_expands_partial_english_brand_alias_query(tmp_path
     assert response.results[0].brand_en == "TOO COOL FOR SCHOOL"
 
 
+@pytest.mark.parametrize("query", ["클리오", "clio"])
+@pytest.mark.asyncio
+async def test_search_service_rescues_clio_brand_query_with_related_terms(
+    tmp_path,
+    query: str,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"CLIO","aliases":["클리오","CLIO"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    collector = ClioBrandFallbackCollector()
+    service = SearchService(
+        collectors=[collector],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        preserve_official_order=True,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search(query, SearchCriteria(limit=4))
+
+    assert "킬커버" in collector.calls
+    assert response.count == 2
+    assert [result.brand_en for result in response.results] == ["CLIO", "CLIO"]
+    assert response.results[0].brand_ko == "클리오"
+
+
 @pytest.mark.asyncio
 async def test_search_service_returns_partial_brand_index_immediately(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -1417,6 +1498,41 @@ async def test_search_service_enqueues_low_result_index_gap(tmp_path) -> None:
     assert gaps[0]["last_reason"] == "low_result_count"
     assert any(job["query"] == "투쿨포스쿨" for job in jobs)
     assert all(job["priority"] == 20 for job in jobs)
+
+
+@pytest.mark.asyncio
+async def test_search_service_runs_catalog_jobs_into_index(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"CLIO","aliases":["클리오","CLIO"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.enqueue_catalog_jobs(["클리오"], priority=10)
+    collector = CatalogJobCollector()
+    service = SearchService(
+        collectors=[collector],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        ingestion_agent=ProductIngestionAgent(store),
+        index_background_refresh_enabled=False,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    summary = await service.run_catalog_jobs(max_jobs=1, limit_per_query=10)
+    indexed = await store.search("클리오", 10)
+    stats = await service.catalog_job_stats()
+    await service.close()
+
+    assert collector.calls == ["클리오"]
+    assert summary.completed_jobs == 1
+    assert summary.stored_count == 1
+    assert indexed[0].product_name_ko == "클리오 인덱스 보강 상품"
+    assert stats["completed"] == 1
 
 
 def test_search_service_suggests_brand_aliases_and_related_terms(tmp_path) -> None:

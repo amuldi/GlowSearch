@@ -201,6 +201,7 @@ curl "https://glowsearch-backend.onrender.com/search?q=로션&limit=48"
 | `GET /suggest?q=투&limit=10` | 자동완성 후보 |
 | `GET /index/status` | 상품 인덱스 상태 |
 | `GET /index/catalog/status` | catalog ingestion job 상태 |
+| `POST /index/catalog/run` | 보호 token으로 pending catalog job을 작은 batch로 실행 |
 | `GET /diagnostics` | cache/index/source/gap/job 진단 정보 |
 | `GET /health` | backend 상태와 `release_sha` |
 
@@ -238,7 +239,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | `GLOWSEARCH_PRODUCT_INDEX_PATH` | SQLite product index 경로. Render persistent disk 사용 시 `/var/data/product_index.sqlite3` 권장 |
 | `GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_ENABLED` | Olive Young 공개 JSON adapter 사용 여부 |
 | `GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP` | 서버 시작 시 seed index warmup 실행 여부. 운영에서는 live 요청과 경쟁하지 않도록 `false` 권장 |
-| `GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN` | 원격 `/index/warm` 보호 token |
+| `GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN` | 원격 `/index/warm`, `/index/catalog/run` 보호 token |
 | `GLOWSEARCH_RESULT_SOURCE_PREFIXES` | 결과에 허용할 source prefix 목록 |
 | `GLOWSEARCH_BROWSER_COLLECTOR_ENABLED` | Playwright/browser fallback 사용 여부, 기본 비활성화 |
 
@@ -279,6 +280,10 @@ cd backend
   --max-jobs 50 \
   --limit 240 \
   --db-path data/product_index.sqlite3
+
+# 운영 백엔드에서 pending job을 처리할 때는 admin token을 사용
+curl -X POST \
+  "https://glowsearch-backend.onrender.com/index/catalog/run?max_jobs=20&limit=120&token=$GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN"
 ```
 
 ## 테스트/검증

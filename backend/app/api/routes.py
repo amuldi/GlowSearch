@@ -1,4 +1,5 @@
 import os
+from dataclasses import asdict
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -131,6 +132,24 @@ async def catalog_status(
         "stats": await service.catalog_job_stats(),
         "recent": await service.recent_catalog_jobs(limit=20),
     }
+
+
+@router.post("/index/catalog/run")
+async def run_catalog_jobs(
+    request: Request,
+    max_jobs: Annotated[int, Query(ge=1, le=100, description="처리할 catalog job 수")] = 20,
+    limit: Annotated[int, Query(ge=1, le=480, description="검색어별 수집 개수")] = 48,
+    kind: Annotated[str, Query(description="catalog job kind")] = "oliveyoung-search",
+    token: Annotated[str | None, Query(description="GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN")] = None,
+    service: SearchService = Depends(get_search_service),
+) -> dict[str, object]:
+    _require_index_admin(request, token)
+    summary = await service.run_catalog_jobs(
+        max_jobs=max_jobs,
+        limit_per_query=limit,
+        kind=kind,
+    )
+    return asdict(summary)
 
 
 @router.post("/index/warm")
