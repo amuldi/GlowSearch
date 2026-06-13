@@ -208,7 +208,11 @@ class SearchService:
 
         try:
             indexed_collected = await asyncio.wait_for(
-                self._collect_index([cleaned_query, *collect_queries], collect_limit),
+                self._collect_index(
+                    [cleaned_query, *collect_queries],
+                    collect_limit,
+                    mapped_only=True,
+                ),
                 timeout=self._INDEX_READ_TIMEOUT_SECONDS,
             )
         except TimeoutError:
@@ -316,6 +320,20 @@ class SearchService:
                 or self._prefer_live_official_results
             ),
         )
+        if (top_score <= 0 or not results) and not fallback_results:
+            full_index_collected = await self._collect_index(
+                [cleaned_query, *collect_queries],
+                collect_limit,
+            )
+            full_index_results, full_index_top_score = self._build_results(
+                full_index_collected.records,
+                cleaned_query,
+                effective_criteria,
+                brand_match,
+                preserve_order=True,
+            )
+            if full_index_top_score > 0:
+                fallback_results = full_index_results
         if (top_score <= 0 or not results) and fallback_results and not require_relevant:
             return SearchResponse(
                 query=cleaned_query,
@@ -348,10 +366,19 @@ class SearchService:
             source_errors=collected.errors,
         )
 
-    async def _collect_index(self, queries: list[str], limit: int) -> _CollectedResult:
+    async def _collect_index(
+        self,
+        queries: list[str],
+        limit: int,
+        *,
+        mapped_only: bool = False,
+    ) -> _CollectedResult:
         if self._product_index is None:
             return _CollectedResult(records=[], errors=[])
         records: list[ProductSourceRecord] = []
+        search_index = self._product_index.search
+        if mapped_only:
+            search_index = getattr(self._product_index, "search_mapped", search_index)
         seen_queries: set[str] = set()
         for query in queries:
             text = clean_text(query)
@@ -359,7 +386,7 @@ class SearchService:
             if not text or not key or key in seen_queries:
                 continue
             seen_queries.add(key)
-            index_records = await self._product_index.search(text, limit)
+            index_records = await search_index(text, limit)
             if index_records:
                 records = self._dedupe_records([*records, *index_records])
             if len(records) >= limit:

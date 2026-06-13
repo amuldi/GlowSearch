@@ -31,6 +31,8 @@ class CatalogIngestionJob:
 class ProductIndexStore(Protocol):
     async def search(self, query: str, limit: int) -> list[ProductSourceRecord]: ...
 
+    async def search_mapped(self, query: str, limit: int) -> list[ProductSourceRecord]: ...
+
     async def upsert_brand_aliases(self, aliases: list[BrandAlias]) -> None: ...
 
     async def upsert_search_results(
@@ -94,17 +96,7 @@ class SQLiteProductIndexStore:
         if not query_key or limit <= 0:
             return []
         async with self._lock:
-            mapped_rows = self._connection.execute(
-                """
-                SELECT p.*
-                FROM query_products qp
-                JOIN products p ON p.id = qp.product_id
-                WHERE qp.query_key = ?
-                ORDER BY qp.rank ASC, p.last_seen_at DESC
-                LIMIT ?
-                """,
-                (query_key, limit),
-            ).fetchall()
+            mapped_rows = self._search_mapped_rows_locked(query_key, limit)
             records = [_row_to_record(row) for row in mapped_rows]
             if len(records) >= limit:
                 return records
@@ -115,6 +107,27 @@ class SQLiteProductIndexStore:
                 if len(records) >= limit:
                     break
             return records
+
+    async def search_mapped(self, query: str, limit: int) -> list[ProductSourceRecord]:
+        query_key = _key(query)
+        if not query_key or limit <= 0:
+            return []
+        async with self._lock:
+            rows = self._search_mapped_rows_locked(query_key, limit)
+        return [_row_to_record(row) for row in rows]
+
+    def _search_mapped_rows_locked(self, query_key: str, limit: int) -> list[sqlite3.Row]:
+        return self._connection.execute(
+            """
+            SELECT p.*
+            FROM query_products qp
+            JOIN products p ON p.id = qp.product_id
+            WHERE qp.query_key = ?
+            ORDER BY qp.rank ASC, p.last_seen_at DESC
+            LIMIT ?
+            """,
+            (query_key, limit),
+        ).fetchall()
 
     async def upsert_brand_aliases(self, aliases: list[BrandAlias]) -> None:
         if not aliases:

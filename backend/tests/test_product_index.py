@@ -470,7 +470,7 @@ async def test_ingestion_pipeline_stores_records_and_csv_export(tmp_path) -> Non
 
 
 @pytest.mark.asyncio
-async def test_search_service_returns_warm_index_before_network(tmp_path) -> None:
+async def test_search_service_uses_fts_index_after_empty_network(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text(
         '{"entries":[{"official_en":"mude","aliases":["뮤드"],"sources":[]}]}',
@@ -508,7 +508,7 @@ async def test_search_service_returns_warm_index_before_network(tmp_path) -> Non
 
     assert response.count == 1
     assert response.results[0].product_name_ko == "뮤드 인덱스 상품"
-    assert network.calls == []
+    assert network.calls == ["뮤드"]
 
 
 @pytest.mark.asyncio
