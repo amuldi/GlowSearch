@@ -4,7 +4,9 @@ from pydantic import BaseModel, Field
 class ProductSourceRecord(BaseModel):
     category: str | None = None
     source_brand_name: str | None = None
+    source_brand_name_en: str | None = None
     product_name_ko: str | None = None
+    product_name_en: str | None = None
     regular_price: int | None = None
     original_price: int | None = None
     sale_price: int | None = None
@@ -27,6 +29,7 @@ class ProductSearchResult(BaseModel):
     brand_ko: str | None = Field(default=None)
     brand_en: str | None = Field(default=None)
     product_name_ko: str | None = Field(default=None)
+    product_name_en: str | None = Field(default=None)
     category: str | None = Field(default=None)
     price: int | None = Field(default=None)
     original_price: int | None = Field(default=None)
@@ -41,9 +44,12 @@ class ProductSearchResult(BaseModel):
     options: list[str] | None = Field(default=None)
     sold_out: bool | None = Field(default=None)
     source_url: str | None = Field(default=None)
+    source_product_id: str | None = Field(default=None)
     source: str
     source_label: str | None = Field(default=None)
     source_priority: int | None = Field(default=None)
+    quality_score: int = Field(default=0)
+    enrichment_missing_fields: list[str] = Field(default_factory=list)
     updated_at: str | None = Field(default=None)
 
 

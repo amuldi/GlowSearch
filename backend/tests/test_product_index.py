@@ -40,6 +40,9 @@ class SlowProductIndexStore:
         await asyncio.sleep(1)
         return []
 
+    async def search_mapped(self, query: str, limit: int) -> list[ProductSourceRecord]:
+        return []
+
     async def upsert_search_results(
         self,
         query: str,
@@ -509,6 +512,30 @@ async def test_search_service_uses_fts_index_after_empty_network(tmp_path) -> No
     assert response.count == 1
     assert response.results[0].product_name_ko == "뮤드 인덱스 상품"
     assert network.calls == ["뮤드"]
+
+
+@pytest.mark.asyncio
+async def test_search_service_bounds_slow_full_index_fallback(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    service = SearchService(
+        collectors=[],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=SlowProductIndexStore(),
+        index_background_refresh_enabled=False,
+    )
+
+    started_at = time.monotonic()
+    response = await service.search("없는 상품", SearchCriteria(limit=24))
+    elapsed = time.monotonic() - started_at
+    await service.close()
+
+    assert response.count == 0
+    assert elapsed < 0.8
 
 
 @pytest.mark.asyncio

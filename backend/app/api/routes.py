@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from app.core.config import get_settings
 from app.data_collector.base import SearchCriteria
 from app.models.product import SearchResponse, SuggestionResponse
-from app.service.factory import get_search_service
+from app.search_engine.analytics import InMemorySearchAnalytics
+from app.service.factory import get_search_analytics, get_search_service
 from app.service.search_service import SearchService
 
 
@@ -41,10 +42,12 @@ async def search(
     has_shade: Annotated[bool | None, Query(description="색상/호수 존재 여부")] = None,
     limit: Annotated[int, Query(ge=1, le=480, description="반환 개수")] = 48,
     service: SearchService = Depends(get_search_service),
+    analytics: InMemorySearchAnalytics = Depends(get_search_analytics),
 ) -> SearchResponse:
     term = (q or keyword or "").strip()
     if not term:
         raise HTTPException(status_code=422, detail="q 또는 keyword가 필요합니다.")
+    analytics.record(term)
 
     settings = get_settings()
     criteria = SearchCriteria(

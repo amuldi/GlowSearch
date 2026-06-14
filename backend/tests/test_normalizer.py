@@ -70,10 +70,41 @@ def test_project_registry_maps_oliveyoung_korean_brand_names() -> None:
         == "BEGINS BY JUNGSAEMMOOL"
     )
     assert resolver.match_text("투쿨포스쿨 스킨틴트").official_en == "TOO COOL FOR SCHOOL"
+    assert resolver.match_text("더마 토너 패드 비타") is None
+    assert resolver.match_text("프로 아이 팔레트 에어") is None
     etude_match = resolver.match_text("에뛰ㄷ")
     assert etude_match.official_en == "ETUDE"
     assert etude_match.matched_alias == "에뛰드"
     assert etude_match.matched_text == "에뛰ㄷ"
+
+
+def test_brand_resolver_expands_korean_ampersand_typo_variants(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "official_en": "rom&nd",
+                        "aliases": ["롬앤", "romand", "rom&nd"],
+                        "sources": [],
+                    },
+                    {
+                        "official_en": "Centellian24",
+                        "aliases": ["센텔리안24"],
+                        "sources": [],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    resolver = BrandResolver(registry_path)
+
+    assert resolver.resolve("롬엔") == "rom&nd"
+    assert resolver.match_text("롬엔 글래스팅 틴트").official_en == "rom&nd"
+    assert resolver.resolve("샌텔리안24") is None
 
 
 def test_product_normalizer_preserves_nulls(tmp_path) -> None:
@@ -99,6 +130,7 @@ def test_product_normalizer_preserves_nulls(tmp_path) -> None:
         "brand_ko": "한글브랜드",
         "brand_en": None,
         "product_name_ko": "제품",
+        "product_name_en": None,
         "category": None,
         "price": None,
         "original_price": None,
@@ -113,11 +145,75 @@ def test_product_normalizer_preserves_nulls(tmp_path) -> None:
         "options": None,
         "sold_out": None,
         "source_url": None,
+        "source_product_id": None,
         "source": "oliveyoung",
         "source_label": None,
         "source_priority": None,
+        "quality_score": 60,
+        "enrichment_missing_fields": [
+            "brand_en",
+            "product_name_en",
+            "price",
+            "image_url",
+        ],
         "updated_at": None,
     }
+
+
+def test_product_normalizer_uses_source_english_fields_without_fallback_text(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"Registry Brand","aliases":["브랜드"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    normalizer = ProductNormalizer(
+        BrandResolver(registry_path),
+        base_url="https://www.oliveyoung.co.kr",
+    )
+
+    result = normalizer.normalize(
+        ProductSourceRecord(
+            source_brand_name="브랜드",
+            source_brand_name_en="Source Brand",
+            product_name_ko="제품명",
+            product_name_en="Source Product Name",
+            regular_price=12000,
+            image_url="https://example.test/item.jpg",
+            rating=4.8,
+            source="official",
+            source_url="https://example.test/product",
+        )
+    )
+
+    assert result.brand_en == "Source Brand"
+    assert result.product_name_en == "Source Product Name"
+    assert result.quality_score == 110
+    assert result.enrichment_missing_fields == []
+    assert "미확인" not in json.dumps(result.model_dump(), ensure_ascii=False)
+
+
+def test_product_normalizer_maps_english_brand_from_registry_only(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"Anua","aliases":["아누아"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    normalizer = ProductNormalizer(
+        BrandResolver(registry_path),
+        base_url="https://www.oliveyoung.co.kr",
+    )
+
+    result = normalizer.normalize(
+        ProductSourceRecord(
+            source_brand_name="아누아",
+            product_name_ko="어성초 77 수딩 토너",
+            source="oliveyoung",
+            source_product_id="A1",
+        )
+    )
+
+    assert result.brand_en == "Anua"
+    assert result.product_name_en is None
 
 
 def test_product_normalizer_expands_short_korean_subbrand_alias(tmp_path) -> None:

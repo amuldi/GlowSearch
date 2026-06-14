@@ -70,7 +70,16 @@ class JsonApiProductCollector:
         if not isinstance(item, dict):
             return None
         brand = _first_value(item, "brand_ko", "brandKo", "brand", "brandName", "brand_name")
+        brand_en = _first_value(item, "brand_en", "brandEn", "brandNameEn", "brand_name_en")
         name = _first_value(item, "product_name_ko", "productNameKo", "productName", "name", "title")
+        name_en = _first_value(
+            item,
+            "product_name_en",
+            "productNameEn",
+            "englishProductName",
+            "nameEn",
+            "titleEn",
+        )
         category = _first_value(item, "category", "categoryName", "category_name", "categories")
         image = _first_value(item, "image_url", "imageUrl", "image", "thumbnail")
         source_url = _first_value(item, "source_url", "sourceUrl", "url", "productUrl", "link")
@@ -88,7 +97,9 @@ class JsonApiProductCollector:
             return None
         return ProductSourceRecord(
             source_brand_name=clean_text(brand),
+            source_brand_name_en=clean_text(brand_en),
             product_name_ko=clean_text(name),
+            product_name_en=clean_text(name_en),
             category=_clean_category(category),
             regular_price=price or sale_price or original_price,
             original_price=original_price,

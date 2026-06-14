@@ -2,6 +2,7 @@ export type Product = {
   brand_ko: string | null;
   brand_en: string | null;
   product_name_ko: string | null;
+  product_name_en: string | null;
   category?: string | null;
   price: number | null;
   original_price?: number | null;
@@ -16,9 +17,12 @@ export type Product = {
   options?: string[] | null;
   sold_out?: boolean | null;
   source_url: string | null;
+  source_product_id?: string | null;
   source: string;
   source_label?: string | null;
   source_priority?: number | null;
+  quality_score?: number;
+  enrichment_missing_fields?: string[];
   updated_at?: string | null;
 };
 

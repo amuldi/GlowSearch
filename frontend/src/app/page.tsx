@@ -30,6 +30,7 @@ const DEFAULT_RESULT_LIMIT = RESULT_PAGE_SIZE;
 const MAX_RESULT_LIMIT = 480;
 const MAX_PAGE_COUNT = MAX_RESULT_LIMIT / RESULT_PAGE_SIZE;
 const MIN_LOADING_MS = 180;
+const EMPTY_SEARCH_SUGGESTIONS = ["선크림", "틴트", "쿠션", "롬앤", "too cool", "정샘물"];
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -246,6 +247,9 @@ export default function Home() {
   };
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
     if (canShowSuggestions && event.key === "ArrowDown") {
       event.preventDefault();
       setActiveSuggestionIndex((current) => (current + 1) % suggestions.length);
@@ -294,6 +298,13 @@ export default function Home() {
               placeholder="브랜드, 제품명, 성분 검색"
               className="min-h-10 min-w-0 flex-1 resize-y border-0 bg-transparent py-2 text-lg font-medium leading-6 text-ink outline-none placeholder:text-neutral-400 sm:text-xl"
               aria-label="브랜드, 제품명, 성분 검색"
+              aria-expanded={canShowSuggestions}
+              aria-controls={canShowSuggestions ? "search-suggestions" : undefined}
+              aria-activedescendant={
+                canShowSuggestions && activeSuggestionIndex >= 0
+                  ? `search-suggestion-${activeSuggestionIndex}`
+                  : undefined
+              }
             />
             {query ? (
               <button
@@ -341,6 +352,12 @@ export default function Home() {
           ) : null}
         </div>
 
+        {isInputBatchQuery ? (
+          <div className="text-xs font-semibold text-neutral-500">
+            {queryCount.toLocaleString("ko-KR")}개 검색어 배치 검색
+          </div>
+        ) : null}
+
         {isLoading ? (
           <div className="inline-flex items-center gap-2 rounded-full bg-white/85 px-4 py-2 text-sm font-semibold text-rosewood shadow-[0_10px_26px_rgba(159,63,85,0.10)]">
             <Loader2 className="h-4 w-4 animate-spin text-rose" aria-hidden="true" />
@@ -374,12 +391,7 @@ export default function Home() {
         ) : null}
 
         {response && response.results.length === 0 && !isLoading ? (
-          <div className="rounded-lg border border-blush/55 bg-white/88 px-5 py-8 text-center shadow-soft">
-            <p className="text-base font-bold text-rosewood">검색 결과가 없습니다.</p>
-            <p className="mt-2 text-sm text-neutral-600">
-              브랜드명, 제품명, 성분명 또는 영문 표기로 다시 검색해 보세요.
-            </p>
-          </div>
+          <EmptySearchState onChoose={submitSearch} />
         ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -401,6 +413,29 @@ export default function Home() {
   );
 }
 
+function EmptySearchState({ onChoose }: { onChoose: (query: string) => void }) {
+  return (
+    <div className="rounded-lg border border-blush/55 bg-white/88 px-5 py-8 text-center shadow-soft">
+      <p className="text-base font-bold text-rosewood">검색 결과가 없습니다.</p>
+      <p className="mt-2 text-sm text-neutral-600">
+        다른 표기나 대표 카테고리로 다시 검색해 보세요.
+      </p>
+      <div className="mt-5 flex flex-wrap justify-center gap-2">
+        {EMPTY_SEARCH_SUGGESTIONS.map((suggestion) => (
+          <button
+            key={suggestion}
+            type="button"
+            onClick={() => onChoose(suggestion)}
+            className="rounded-full border border-blush/70 bg-blush-soft px-3 py-1.5 text-sm font-semibold text-rosewood transition hover:border-rose hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose"
+          >
+            {suggestion}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SuggestionDropdown({
   suggestions,
   query,
@@ -413,8 +448,8 @@ function SuggestionDropdown({
   onChoose: (suggestion: string) => void;
 }) {
   return (
-    <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-[22px] border border-blush/55 bg-white/96 py-3 shadow-[0_24px_70px_rgba(74,54,63,0.13)] ring-1 ring-white/80 backdrop-blur">
-      <ul role="listbox" aria-label="관련 검색어">
+    <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 max-h-[min(420px,60vh)] overflow-y-auto rounded-[22px] border border-blush/55 bg-white/96 py-3 shadow-[0_24px_70px_rgba(74,54,63,0.13)] ring-1 ring-white/80 backdrop-blur">
+      <ul id="search-suggestions" role="listbox" aria-label="관련 검색어">
         {suggestions.map((suggestion, index) => {
           const isActive = index === activeIndex;
           return (
@@ -424,11 +459,12 @@ function SuggestionDropdown({
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => onChoose(suggestion)}
                 className={[
-                  "flex w-full items-center px-6 py-3 text-left text-base font-semibold transition sm:px-8 sm:text-lg",
+                  "flex w-full items-center break-words px-6 py-3 text-left text-base font-semibold transition sm:px-8 sm:text-lg",
                   isActive
                     ? "bg-blush-soft text-rosewood"
                     : "text-ink hover:bg-blush-soft/70 hover:text-rosewood",
                 ].join(" ")}
+                id={`search-suggestion-${index}`}
                 role="option"
                 aria-selected={isActive}
               >
@@ -525,10 +561,11 @@ function ProductCard({ product }: { product: Product }) {
     ? formatPrice(product.sale_price, product.currency)
     : null;
   const copyText = [
-    `브랜드명: ${product.brand_ko ?? ""}`,
-    `영문명: ${product.brand_en ?? ""}`,
-    `제품명: ${product.product_name_ko ?? ""}`,
-    `원가: ${originalPriceText}`,
+    product.brand_ko ? `브랜드명: ${product.brand_ko}` : null,
+    product.brand_en ? `영문 브랜드명: ${product.brand_en}` : null,
+    product.product_name_ko ? `제품명: ${product.product_name_ko}` : null,
+    product.product_name_en ? `영문 제품명: ${product.product_name_en}` : null,
+    originalPriceText ? `원가: ${originalPriceText}` : null,
     hasDiscount ? `할인가: ${salePriceText}` : null,
     product.shade ? `호수: ${product.shade}` : null,
     `출처: ${sourceLabel(product)}`,
@@ -572,7 +609,7 @@ function ProductCard({ product }: { product: Product }) {
 
   const name = (
     <h2 className="line-clamp-2 text-sm font-semibold leading-5 text-ink">
-      {product.product_name_ko ?? "상품명 미확인"}
+      {product.product_name_ko}
     </h2>
   );
 
@@ -608,15 +645,20 @@ function ProductCard({ product }: { product: Product }) {
         </div>
         <div>
           <dl className="min-w-0 space-y-1">
-            <div>
-              <dt className="text-[11px] font-medium text-neutral-500">브랜드명</dt>
-              <dd className="whitespace-normal break-words text-sm font-bold leading-5 text-rosewood">{product.brand_ko ?? "브랜드 미확인"}</dd>
-            </div>
-            <div>
-              <dt className="text-[11px] font-medium text-neutral-500">영문명</dt>
-              <dd className="whitespace-normal break-words text-xs font-medium leading-4 text-neutral-700">{product.brand_en ?? "영문명 미확인"}</dd>
-            </div>
-            <div>
+            {product.brand_ko ? (
+              <div>
+                <dt className="text-[11px] font-medium text-neutral-500">브랜드명</dt>
+                <dd className="whitespace-normal break-words text-sm font-bold leading-5 text-rosewood">{product.brand_ko}</dd>
+              </div>
+            ) : null}
+            {product.brand_en ? (
+              <div>
+                <dt className="text-[11px] font-medium text-neutral-500">영문 브랜드명</dt>
+                <dd className="whitespace-normal break-words text-xs font-medium leading-4 text-neutral-700">{product.brand_en}</dd>
+              </div>
+            ) : null}
+            {product.product_name_ko ? (
+              <div>
               <dt className="text-[11px] font-medium text-neutral-500">제품명</dt>
               <dd>
                 {product.source_url ? (
@@ -633,13 +675,22 @@ function ProductCard({ product }: { product: Product }) {
                   name
                 )}
               </dd>
-            </div>
-            <div>
-              <dt className="text-[11px] font-medium text-neutral-500">원가</dt>
-              <dd className={hasDiscount ? "text-xs text-neutral-500 line-through" : "text-sm font-semibold"}>
-                {originalPriceText}
-              </dd>
-            </div>
+              </div>
+            ) : null}
+            {product.product_name_en ? (
+              <div>
+                <dt className="text-[11px] font-medium text-neutral-500">영문 제품명</dt>
+                <dd className="whitespace-normal break-words text-xs font-medium leading-4 text-neutral-700">{product.product_name_en}</dd>
+              </div>
+            ) : null}
+            {originalPriceText ? (
+              <div>
+                <dt className="text-[11px] font-medium text-neutral-500">원가</dt>
+                <dd className={hasDiscount ? "text-xs text-neutral-500 line-through" : "text-sm font-semibold"}>
+                  {originalPriceText}
+                </dd>
+              </div>
+            ) : null}
             {hasDiscount ? (
               <div>
                 <dt className="text-[11px] font-medium text-neutral-500">할인가</dt>
@@ -700,7 +751,7 @@ function ProductSkeleton() {
 }
 
 function formatPrice(price: number | null, currency?: string | null) {
-  if (price === null) return "가격 미확인";
+  if (price === null) return null;
   if (currency === "USD") return usdFormatter.format(price);
   if (currency === "JPY") return jpyFormatter.format(price);
   return currencyFormatter.format(price);

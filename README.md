@@ -240,7 +240,8 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | `GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_ENABLED` | Olive Young 공개 JSON adapter 사용 여부 |
 | `GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP` | 서버 시작 시 seed index warmup 실행 여부. 운영에서는 live 요청과 경쟁하지 않도록 `false` 권장 |
 | `GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN` | 원격 `/index/warm`, `/index/catalog/run` 보호 token |
-| `GLOWSEARCH_RESULT_SOURCE_PREFIXES` | 결과에 허용할 source prefix 목록 |
+| `GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_LIMIT` | 검색 후 백그라운드 refresh 수집 개수. 운영 초기에는 `48~120` 권장 |
+| `GLOWSEARCH_RESULT_SOURCE_PREFIXES` | 결과에 허용할 source prefix 목록. 기본값: `oliveyoung,official,musinsa,coupang,hwahae,glowpick,fudejapan,managed,barcode,discovery,external` |
 | `GLOWSEARCH_BROWSER_COLLECTOR_ENABLED` | Playwright/browser fallback 사용 여부, 기본 비활성화 |
 
 ## 데이터 수집 원칙
@@ -260,30 +261,45 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```bash
 cd backend
 
-# seed, 브랜드, 카테고리, 브랜드+카테고리 조합을 catalog job으로 등록
-.venv/bin/python scripts/ingest_oliveyoung.py \
-  --use-default-seeds \
+# seed, 브랜드, 카테고리, 브랜드+카테고리 조합, search_gaps를 큐에 넣고
+# 작은 batch만 처리합니다. 반복 실행해도 query/job은 dedupe됩니다.
+.venv/bin/python scripts/refresh_coverage.py \
   --coverage-pairs 300 \
-  --enqueue-catalog \
-  --db-path data/product_index.sqlite3
-
-# search_gaps에 쌓인 부족 검색어를 수집 후보로 등록
-.venv/bin/python scripts/ingest_oliveyoung.py \
-  --include-gaps \
-  --enqueue-catalog \
-  --job-priority 20 \
-  --db-path data/product_index.sqlite3
-
-# catalog job을 작은 batch로 실행
-.venv/bin/python scripts/ingest_oliveyoung.py \
-  --run-catalog-jobs \
   --max-jobs 50 \
-  --limit 240 \
+  --limit 120 \
+  --db-path data/product_index.sqlite3
+
+# 특정 누락 브랜드/상품을 우선 보강할 때
+.venv/bin/python scripts/refresh_coverage.py \
+  --query "비긴스 바이 정샘물" \
+  --no-default-seeds \
+  --no-gaps \
+  --coverage-pairs 0 \
+  --max-queries 1 \
+  --job-priority 0 \
+  --max-jobs 1 \
+  --limit 48 \
+  --db-path data/product_index.sqlite3
+
+# 전체 index를 CSV로 확인할 때
+.venv/bin/python scripts/refresh_coverage.py \
+  --export-only \
+  --csv data/products_export.csv \
   --db-path data/product_index.sqlite3
 
 # 운영 백엔드에서 pending job을 처리할 때는 admin token을 사용
 curl -X POST \
   "https://glowsearch-backend.onrender.com/index/catalog/run?max_jobs=20&limit=120&token=$GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN"
+```
+
+권장 운영 루프는 10~30분마다 `scripts/refresh_coverage.py --max-jobs 20~50 --limit 48~120`을 실행하는 방식입니다. Render web process 안에서 큰 batch를 돌리기보다, 별도 cron/worker에서 같은 persistent index path를 바라보게 하는 것이 안전합니다. 실패한 job은 `catalog_jobs`에 남아 재시도할 수 있고, 누락 검색어는 `search_gaps`를 통해 다음 refresh 후보가 됩니다.
+
+인덱스 상태 확인:
+
+```bash
+curl "https://glowsearch-backend.onrender.com/index/status"
+curl "https://glowsearch-backend.onrender.com/index/catalog/status"
+curl "https://glowsearch-backend.onrender.com/diagnostics"
 ```
 
 ## 테스트/검증
@@ -309,6 +325,10 @@ API smoke test:
 curl https://glowsearch-backend.onrender.com/health
 curl "https://glowsearch-backend.onrender.com/search?q=too%20cool&limit=4"
 curl "https://glowsearch-backend.onrender.com/search?q=%EC%A0%95%EC%83%98%EB%AC%BC&limit=48"
+
+cd backend
+.venv/bin/python scripts/smoke_search.py --base-url http://localhost:8000 --limit 4
+.venv/bin/python scripts/smoke_search.py --base-url https://glowsearch-backend.onrender.com --limit 4
 ```
 
 Benchmark:
@@ -332,7 +352,17 @@ Render backend는 `/health`의 `release_sha`로 현재 배포 commit을 확인�
 curl https://glowsearch-backend.onrender.com/health
 ```
 
-Render free filesystem은 SQLite index 보존에 적합하지 않습니다. 운영에서는 Render persistent disk를 `/var/data`에 붙이고 `GLOWSEARCH_PRODUCT_INDEX_PATH=/var/data/product_index.sqlite3`로 지정하거나, Postgres/검색 엔진으로 전환해야 합니다.
+Render free filesystem은 SQLite index 보존에 적합하지 않습니다. 운영에서는 Render persistent disk를 `/var/data`에 붙이고 `GLOWSEARCH_PRODUCT_INDEX_PATH=/var/data/product_index.sqlite3`로 지정하거나, Postgres/검색 엔진으로 전환해야 합니다. persistent disk 없이 운영하면 deploy/restart 때 coverage refresh로 쌓은 index가 사라질 수 있습니다.
+
+배포 후 체크리스트:
+
+```bash
+curl https://glowsearch-backend.onrender.com/health
+curl https://glowsearch-backend.onrender.com/index/status
+curl https://glowsearch-backend.onrender.com/index/catalog/status
+curl "https://glowsearch-backend.onrender.com/search?q=%EB%A1%AC%EC%95%A4&limit=4"
+curl "https://glowsearch-backend.onrender.com/search?q=too%20cool&limit=4"
+```
 
 ## 한계와 개선 계획
 

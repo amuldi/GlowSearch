@@ -25,6 +25,7 @@ class FakeCollector:
                 shade=None,
                 image_url=None,
                 source="oliveyoung",
+                source_product_id="fake-1",
             )
         ]
 
@@ -54,6 +55,7 @@ class SlowCollector:
                 product_name_ko="느린 제품",
                 regular_price=24000,
                 source="oliveyoung",
+                source_product_id="slow-1",
             )
         ]
 
@@ -69,6 +71,7 @@ class VerySlowCollector:
                 product_name_ko="매우 느린 제품",
                 regular_price=24000,
                 source="external",
+                source_product_id="very-slow-1",
             )
         ]
 
@@ -85,6 +88,7 @@ class IncompleteCollector:
                 shade=None,
                 image_url=None,
                 source="oliveyoung",
+                source_product_id="incomplete-1",
             )
         ]
 
@@ -101,6 +105,40 @@ class MissingNameCollector:
                 shade=None,
                 image_url=None,
                 source="oliveyoung",
+                source_product_id="missing-name-1",
+            )
+        ]
+
+
+class MissingSourceReferenceCollector:
+    name = "missing-source-reference"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        return [
+            ProductSourceRecord(
+                source_brand_name="아누아",
+                product_name_ko="어성초 77 수딩 토너",
+                regular_price=22000,
+                source="oliveyoung",
+            )
+        ]
+
+
+class EnglishProductNameCollector:
+    name = "english-product-name"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        return [
+            ProductSourceRecord(
+                source_brand_name="아누아",
+                product_name_ko="어성초 77 수딩 토너",
+                product_name_en="Heartleaf 77% Soothing Toner",
+                regular_price=22000,
+                image_url="https://example.test/anua.jpg",
+                rating=4.7,
+                review_count=1200,
+                source="oliveyoung",
+                source_product_id="anua-toner-1",
             )
         ]
 
@@ -134,6 +172,7 @@ class SecondFakeCollector:
                 shade=None,
                 image_url=None,
                 source="external",
+                source_product_id="second-1",
             )
         ]
 
@@ -150,6 +189,7 @@ class DuplicateFakeCollector:
                 shade=None,
                 image_url=None,
                 source="external",
+                source_product_id="duplicate-1",
             )
         ]
 
@@ -166,6 +206,7 @@ class LimitAwareCollector:
                 shade=None,
                 image_url=None,
                 source="oliveyoung",
+                source_product_id="limited-low-1",
             ),
             ProductSourceRecord(
                 source_brand_name="BRTC",
@@ -174,6 +215,7 @@ class LimitAwareCollector:
                 shade=None,
                 image_url=None,
                 source="oliveyoung",
+                source_product_id="limited-high-1",
             ),
         ]
         return records[:limit]
@@ -193,6 +235,7 @@ class RelatedKeywordCollector:
                 shade=None,
                 image_url=None,
                 source="external",
+                source_product_id="related-dashu-1",
             )
         ]
 
@@ -224,6 +267,7 @@ class ImplicitBrandKeywordCollector:
                 shade=None,
                 image_url=None,
                 source="external",
+                source_product_id="implicit-other-1",
             ),
         ]
 
@@ -343,6 +387,7 @@ class BatchKeywordCollector:
                     shade=None,
                     image_url=None,
                     source="oliveyoung",
+                    source_product_id="batch-mediheal-1",
                 )
             ]
         if keyword == "더샘 컨실러 클리어 베이지":
@@ -354,6 +399,7 @@ class BatchKeywordCollector:
                     shade="클리어 베이지",
                     image_url=None,
                     source="external",
+                    source_product_id="batch-thesaem-1",
                 )
             ]
         return []
@@ -373,6 +419,7 @@ class VerifiedCacheCollector:
                 shade=None,
                 image_url=None,
                 source="external",
+                source_product_id="verified-mediheal-1",
             )
         ]
 
@@ -402,6 +449,7 @@ class PartialExternalBrandCollector:
                 shade=None,
                 image_url=None,
                 source="external",
+                source_product_id="partial-external-etude-1",
             )
         ]
 
@@ -424,6 +472,7 @@ class BrowserOliveYoungBrandCollector:
                 shade=None,
                 image_url=None,
                 source="oliveyoung",
+                source_product_id="browser-etude-1",
             ),
             ProductSourceRecord(
                 source_brand_name="에뛰드",
@@ -432,6 +481,7 @@ class BrowserOliveYoungBrandCollector:
                 shade=None,
                 image_url=None,
                 source="oliveyoung",
+                source_product_id="browser-etude-2",
             ),
         ]
 
@@ -446,6 +496,7 @@ class BrandCollisionCollector:
                 product_name_ko="[NEW 컬러] 뮤드 글라세 립 틴트 3종 택1",
                 regular_price=17000,
                 source="oliveyoung",
+                source_product_id="collision-colorgram-1",
             ),
             ProductSourceRecord(
                 source_brand_name="뮤드",
@@ -455,6 +506,7 @@ class BrandCollisionCollector:
                 original_price=17000,
                 discount_rate=25,
                 source="oliveyoung",
+                source_product_id="collision-mude-1",
             ),
         ]
 
@@ -791,12 +843,14 @@ async def test_search_service_uses_source_priority_for_tied_matches(tmp_path) ->
                     product_name_ko="제품 공식몰",
                     regular_price=24000,
                     source="official",
+                    source_product_id="official-priority-1",
                 ),
                 ProductSourceRecord(
                     source_brand_name="BRTC",
                     product_name_ko="제품 올리브영",
                     regular_price=24000,
                     source="oliveyoung",
+                    source_product_id="oliveyoung-priority-1",
                 ),
             ]
 
@@ -1454,6 +1508,43 @@ async def test_search_service_records_empty_and_low_result_gaps(tmp_path) -> Non
 
 
 @pytest.mark.asyncio
+async def test_search_service_does_not_let_empty_cache_hide_new_index_results(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    service = SearchService(
+        collectors=[],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        index_background_refresh_enabled=False,
+    )
+
+    empty_response = await service.search("새 브랜드", SearchCriteria(limit=24))
+    await store.upsert_search_results(
+        "새 브랜드",
+        [
+            ProductSourceRecord(
+                source_brand_name="새브랜드",
+                product_name_ko="새브랜드 보습 로션",
+                regular_price=12000,
+                source="oliveyoung",
+                source_product_id="new-brand-1",
+            )
+        ],
+    )
+    indexed_response = await service.search("새 브랜드", SearchCriteria(limit=24))
+    await service.close()
+
+    assert empty_response.count == 0
+    assert indexed_response.count == 1
+    assert indexed_response.results[0].product_name_ko == "새브랜드 보습 로션"
+
+
+@pytest.mark.asyncio
 async def test_search_service_enqueues_low_result_index_gap(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text(
@@ -1769,6 +1860,54 @@ async def test_search_service_filters_results_missing_product_name(tmp_path) -> 
 
     assert response.count == 0
     assert response.results == []
+
+
+@pytest.mark.asyncio
+async def test_search_service_filters_results_missing_source_reference(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"Anua","aliases":["아누아"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    service = SearchService(
+        collectors=[MissingSourceReferenceCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search("어성초 토너", SearchCriteria(limit=24))
+
+    assert response.count == 0
+    assert response.results == []
+
+
+@pytest.mark.asyncio
+async def test_search_service_includes_verified_english_product_name(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"Anua","aliases":["아누아"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    service = SearchService(
+        collectors=[EnglishProductNameCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search("아누아 어성초 토너", SearchCriteria(limit=24))
+
+    assert response.count == 1
+    assert response.results[0].brand_ko == "아누아"
+    assert response.results[0].brand_en == "Anua"
+    assert response.results[0].product_name_ko == "어성초 77 수딩 토너"
+    assert response.results[0].product_name_en == "Heartleaf 77% Soothing Toner"
+    assert response.results[0].quality_score > 0
 
 
 @pytest.mark.asyncio

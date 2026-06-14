@@ -9,3 +9,6 @@ node_modules/
 dist/
 build/
 *.tsbuildinfo
+backend/data/*.sqlite3
+backend/data/*.sqlite3-*
+backend/data/*_export.csv

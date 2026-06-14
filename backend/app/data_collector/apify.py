@@ -41,7 +41,9 @@ class ApifyOliveYoungCollector:
             return None
 
         brand = _first_value(item, "brand", "brandName", "brand_name")
+        brand_en = _first_value(item, "brandEn", "brandNameEn", "brand_en", "brand_name_en")
         name = _first_value(item, "productName", "product_name", "name", "title")
+        name_en = _first_value(item, "productNameEn", "product_name_en", "nameEn", "titleEn")
         category = _first_value(item, "category", "categoryName", "category_name")
         image = _first_value(item, "imageUrl", "image_url", "image", "thumbnail")
         price = parse_krw_price(_first_value(item, "price", "officialPrice", "regularPrice"))
@@ -58,7 +60,9 @@ class ApifyOliveYoungCollector:
 
         return ProductSourceRecord(
             source_brand_name=clean_text(brand),
+            source_brand_name_en=clean_text(brand_en),
             product_name_ko=clean_text(name),
+            product_name_en=clean_text(name_en),
             category=clean_text(category),
             regular_price=price or sale_price or original_price,
             original_price=original_price,

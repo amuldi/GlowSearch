@@ -236,6 +236,28 @@ async def test_oliveyoung_public_api_collector_retries_transient_errors() -> Non
 
 
 @pytest.mark.asyncio
+async def test_oliveyoung_public_api_collector_reports_http_error_type_when_message_is_empty() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("", request=request)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://mcp.aka.page",
+    ) as client:
+        collector = OliveYoungPublicApiCollector(
+            Settings(
+                oliveyoung_public_api_rate_limit_per_second=0,
+                oliveyoung_public_api_retry_attempts=1,
+            ),
+            client=client,
+        )
+        with pytest.raises(SourceUnavailableError) as exc_info:
+            await collector.search("선세럼", limit=1)
+
+    assert "ConnectError" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
 async def test_oliveyoung_public_api_collector_backs_off_on_bot_detection() -> None:
     async def fake_sleep(_seconds: float) -> None:
         return None

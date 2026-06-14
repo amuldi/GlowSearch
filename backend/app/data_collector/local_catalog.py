@@ -30,6 +30,7 @@ class LocalVerifiedCatalogCollector:
                         item.get("brand_ko"),
                         item.get("brand_en"),
                         item.get("product_name_ko"),
+                        item.get("product_name_en"),
                         item.get("category"),
                         item.get("description"),
                         " ".join(item.get("options", [])),
@@ -44,7 +45,9 @@ class LocalVerifiedCatalogCollector:
             records.append(
                 ProductSourceRecord(
                     source_brand_name=clean_text(item.get("brand_ko") or item.get("brand_en")),
+                    source_brand_name_en=clean_text(item.get("brand_en")),
                     product_name_ko=clean_text(item.get("product_name_ko")),
+                    product_name_en=clean_text(item.get("product_name_en")),
                     category=clean_text(item.get("category")),
                     regular_price=item.get("price"),
                     original_price=item.get("original_price"),

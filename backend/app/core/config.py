@@ -47,6 +47,10 @@ class Settings(BaseSettings):
             "oliveyoung",
             "official",
             "musinsa",
+            "coupang",
+            "hwahae",
+            "glowpick",
+            "fudejapan",
             "managed",
             "barcode",
             "discovery",
@@ -81,6 +85,8 @@ class Settings(BaseSettings):
 
     brand_registry_path: Path = BACKEND_DIR / "data" / "brand_registry.json"
     verified_catalog_path: Path = BACKEND_DIR / "data" / "verified_products.json"
+    search_synonyms_path: Path = BACKEND_DIR / "data" / "search_synonyms.json"
+    search_intents_path: Path = BACKEND_DIR / "data" / "search_intents.json"
 
     product_index_enabled: bool = True
     product_index_path: Path = BACKEND_DIR / "data" / "product_index.sqlite3"

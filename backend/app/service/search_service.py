@@ -193,7 +193,6 @@ class SearchService:
             if (
                 cached_top_score > 0
                 or cached_collected.has_official_records
-                or not cached_collected.records
             ):
                 self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
                 return SearchResponse(
@@ -322,10 +321,16 @@ class SearchService:
             ),
         )
         if (top_score <= 0 or not results) and not fallback_results:
-            full_index_collected = await self._collect_index(
-                [cleaned_query, *collect_queries],
-                collect_limit,
-            )
+            try:
+                full_index_collected = await asyncio.wait_for(
+                    self._collect_index(
+                        [cleaned_query, *collect_queries],
+                        collect_limit,
+                    ),
+                    timeout=self._INDEX_READ_TIMEOUT_SECONDS,
+                )
+            except TimeoutError:
+                full_index_collected = _CollectedResult(records=[], errors=[])
             full_index_results, full_index_top_score = self._build_results(
                 full_index_collected.records,
                 cleaned_query,
@@ -1325,7 +1330,11 @@ class SearchService:
             update={
                 "category": incoming.category or existing.category,
                 "source_brand_name": incoming.source_brand_name or existing.source_brand_name,
+                "source_brand_name_en": (
+                    incoming.source_brand_name_en or existing.source_brand_name_en
+                ),
                 "product_name_ko": existing.product_name_ko or incoming.product_name_ko,
+                "product_name_en": existing.product_name_en or incoming.product_name_en,
                 "regular_price": (
                     incoming.regular_price
                     if incoming.regular_price is not None
@@ -1390,7 +1399,9 @@ class SearchService:
         return [
             product
             for product in results
-            if product.product_name_ko and (product.brand_ko or product.brand_en)
+            if product.product_name_ko
+            and product.source
+            and (product.source_url or product.source_product_id)
         ]
 
     @classmethod
@@ -1456,13 +1467,15 @@ class SearchService:
         if not query_key:
             return results, 1
         scored = [
-            (cls._match_score(product, product_query, index)[0], product)
+            (cls._match_score(product, product_query, index), product)
             for index, product in enumerate(results)
         ]
-        top_score = max((score for score, _product in scored), default=0)
+        top_score = max((score[0] for score, _product in scored), default=0)
         if top_score <= 0:
             return results, 0
-        return [product for score, product in scored if score > 0], top_score
+        relevant = [(score, product) for score, product in scored if score[0] > 0]
+        relevant.sort(key=lambda item: (item[0][1], item[0][3]), reverse=True)
+        return [product for _score, product in relevant], top_score
 
     @classmethod
     def _match_score(
@@ -1470,7 +1483,7 @@ class SearchService:
         product: ProductSearchResult,
         product_query: str,
         index: int,
-    ) -> tuple[int, int, int]:
+    ) -> tuple[int, int, int, int]:
         query_key = cls._key(product_query)
         haystack_key = cls._key(
             " ".join(
@@ -1479,6 +1492,7 @@ class SearchService:
                     product.brand_ko,
                     product.brand_en,
                     product.product_name_ko,
+                    product.product_name_en,
                     product.category,
                     product.shade,
                     product.description,
@@ -1488,14 +1502,14 @@ class SearchService:
             )
         )
         if not query_key or not haystack_key:
-            return (0, 0, -index)
+            return (0, 0, 0, -index)
 
         category_tokens = cls._category_tokens(product_query)
         if category_tokens and not all(token in haystack_key for token in category_tokens):
-            return (0, 0, -index)
+            return (0, 0, 0, -index)
         distinctive_tokens = cls._distinctive_tokens(product_query)
         if distinctive_tokens and not any(token in haystack_key for token in distinctive_tokens):
-            return (0, 0, -index)
+            return (0, 0, 0, -index)
 
         score = 100 if query_key in haystack_key else 0
         for token in cls._tokens(product_query):
@@ -1503,7 +1517,7 @@ class SearchService:
             if len(token_key) >= 2 and token_key in haystack_key:
                 score += 10
         source_priority = product.source_priority if product.source_priority is not None else 1000
-        return (score, -source_priority, -index)
+        return (score, product.quality_score, -source_priority, -index)
 
     @staticmethod
     def _tokens(value: str) -> list[str]:

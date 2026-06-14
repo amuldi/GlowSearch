@@ -181,7 +181,7 @@ class BrandResolver:
             official = self._clean_latin_brand(entry.official_en)
             if official is None:
                 continue
-            values = [entry.official_en, *entry.aliases]
+            values = self._expand_alias_variants([entry.official_en, *entry.aliases])
             official_aliases = self._ordered_aliases(values)
             if official_aliases:
                 self._official_aliases[official] = official_aliases
@@ -217,6 +217,29 @@ class BrandResolver:
             *[alias for alias in aliases if has_hangul(alias)],
             *[alias for alias in aliases if not has_hangul(alias)],
         ]
+
+    @classmethod
+    def _expand_alias_variants(cls, values: list[str]) -> list[str]:
+        expanded: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            for variant in cls._alias_variants(value):
+                key = cls._key(variant)
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                expanded.append(variant)
+        return expanded
+
+    @staticmethod
+    def _alias_variants(value: str) -> list[str]:
+        variants = [value]
+        text = clean_text(value)
+        if not text:
+            return variants
+        if "앤" in text:
+            variants.append(text.replace("앤", "엔"))
+        return variants
 
     @staticmethod
     def _key(value: str | None) -> str:
@@ -261,7 +284,7 @@ class BrandResolver:
                 continue
             return False
 
-        return query_index == len(query_key) or alias_index == len(alias_key)
+        return query_index == len(query_key) and alias_index == len(alias_key)
 
     @staticmethod
     def _is_compat_initial(char: str) -> bool:

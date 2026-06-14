@@ -107,7 +107,7 @@ class OliveYoungPublicApiCollector:
                 )
             except httpx.HTTPError as exc:
                 last_error = SourceUnavailableError(
-                    f"Olive Young public API request failed: {exc}"
+                    f"Olive Young public API request failed: {_http_error_message(exc)}"
                 )
                 if attempt_index + 1 >= self._retry_config.attempts:
                     raise last_error from exc
@@ -151,6 +151,8 @@ class OliveYoungPublicApiCollector:
 
         goods_no = clean_text(item.get("goodsNumber") or item.get("goodsNo"))
         name = clean_text(item.get("goodsName") or item.get("productName"))
+        name_en = clean_text(_first_value(item, "goodsNameEn", "productNameEn", "nameEn"))
+        brand_en = clean_text(_first_value(item, "brandNameEn", "brand_en", "brandEn"))
         image_url = clean_text(item.get("imageUrl"))
         category = clean_text(
             _first_value(
@@ -184,7 +186,9 @@ class OliveYoungPublicApiCollector:
         )
         return ProductSourceRecord(
             source_brand_name=_infer_brand_from_name(name),
+            source_brand_name_en=brand_en,
             product_name_ko=name,
+            product_name_en=name_en,
             category=category,
             regular_price=sale_price if sale_price is not None else price_to_pay or original_price,
             original_price=original_price,
@@ -221,6 +225,13 @@ def _parse_int(value: Any) -> int | None:
         digits = "".join(char for char in value if char.isdigit())
         return int(digits) if digits else None
     return None
+
+
+def _http_error_message(exc: httpx.HTTPError) -> str:
+    message = str(exc).strip()
+    if message:
+        return message
+    return type(exc).__name__
 
 
 def _has_next_page(

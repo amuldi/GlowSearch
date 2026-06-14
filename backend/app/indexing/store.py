@@ -497,7 +497,9 @@ class SQLiteProductIndexStore:
                 source_product_id TEXT,
                 category TEXT,
                 source_brand_name TEXT,
+                source_brand_name_en TEXT,
                 product_name_ko TEXT,
+                product_name_en TEXT,
                 regular_price INTEGER,
                 original_price INTEGER,
                 sale_price INTEGER,
@@ -523,6 +525,8 @@ class SQLiteProductIndexStore:
             "products",
             {
                 "category": "TEXT",
+                "source_brand_name_en": "TEXT",
+                "product_name_en": "TEXT",
                 "rating": "REAL",
                 "review_count": "INTEGER",
                 "description": "TEXT",
@@ -673,7 +677,9 @@ class SQLiteProductIndexStore:
                 source_product_id,
                 category,
                 source_brand_name,
+                source_brand_name_en,
                 product_name_ko,
+                product_name_en,
                 regular_price,
                 original_price,
                 sale_price,
@@ -693,13 +699,15 @@ class SQLiteProductIndexStore:
                 last_refreshed_at,
                 source_updated_at
             )
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(record_key) DO UPDATE SET
                 source = excluded.source,
                 source_product_id = COALESCE(excluded.source_product_id, products.source_product_id),
                 category = COALESCE(excluded.category, products.category),
                 source_brand_name = COALESCE(excluded.source_brand_name, products.source_brand_name),
+                source_brand_name_en = COALESCE(excluded.source_brand_name_en, products.source_brand_name_en),
                 product_name_ko = COALESCE(excluded.product_name_ko, products.product_name_ko),
+                product_name_en = COALESCE(excluded.product_name_en, products.product_name_en),
                 regular_price = COALESCE(excluded.regular_price, products.regular_price),
                 original_price = COALESCE(excluded.original_price, products.original_price),
                 sale_price = excluded.sale_price,
@@ -724,7 +732,9 @@ class SQLiteProductIndexStore:
                 record.source_product_id,
                 record.category,
                 record.source_brand_name,
+                record.source_brand_name_en,
                 record.product_name_ko,
+                record.product_name_en,
                 record.regular_price,
                 record.original_price,
                 record.sale_price,
@@ -777,8 +787,16 @@ class SQLiteProductIndexStore:
                 """,
                 (
                     record_key,
-                    record.source_brand_name,
-                    record.product_name_ko,
+                    " ".join(
+                        value
+                        for value in [record.source_brand_name, record.source_brand_name_en]
+                        if value
+                    ),
+                    " ".join(
+                        value
+                        for value in [record.product_name_ko, record.product_name_en]
+                        if value
+                    ),
                     record.category,
                     record.description,
                     record.shade,
@@ -899,9 +917,14 @@ class SQLiteProductIndexStore:
     def _alias_terms_for_record(self, record: ProductSourceRecord) -> list[str]:
         keys = {
             _key(record.source_brand_name),
+            _key(record.source_brand_name_en),
             *[
                 alias_key
                 for alias_key in self._record_brand_alias_keys(record.product_name_ko)
+            ],
+            *[
+                alias_key
+                for alias_key in self._record_brand_alias_keys(record.product_name_en)
             ],
         }
         aliases: list[str] = []
@@ -955,7 +978,9 @@ def _row_to_record(row: sqlite3.Row) -> ProductSourceRecord:
     return ProductSourceRecord(
         category=row["category"],
         source_brand_name=row["source_brand_name"],
+        source_brand_name_en=row["source_brand_name_en"],
         product_name_ko=row["product_name_ko"],
+        product_name_en=row["product_name_en"],
         regular_price=row["regular_price"],
         original_price=row["original_price"],
         sale_price=row["sale_price"],
@@ -996,7 +1021,9 @@ def _search_text(record: ProductSourceRecord) -> str:
             value
             for value in [
                 record.source_brand_name,
+                record.source_brand_name_en,
                 record.product_name_ko,
+                record.product_name_en,
                 record.category,
                 record.description,
                 record.shade,
@@ -1011,7 +1038,9 @@ def _search_text(record: ProductSourceRecord) -> str:
 def _search_terms(record: ProductSourceRecord) -> str:
     values = [
         record.source_brand_name,
+        record.source_brand_name_en,
         record.product_name_ko,
+        record.product_name_en,
         record.category,
         record.description,
         record.shade,

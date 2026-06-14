@@ -17,6 +17,10 @@ class SourceProfile:
 DEFAULT_SOURCE_PROFILES: tuple[SourceProfile, ...] = (
     SourceProfile("oliveyoung", "Olive Young", 10, "retailer"),
     SourceProfile("musinsa", "Musinsa", 30, "retailer"),
+    SourceProfile("coupang", "Coupang", 35, "retailer"),
+    SourceProfile("hwahae", "Hwahae", 45, "catalog"),
+    SourceProfile("glowpick", "Glowpick", 46, "catalog"),
+    SourceProfile("fudejapan", "Fude Japan", 47, "catalog"),
     SourceProfile("official", "Official brand", 20, "brand"),
     SourceProfile("managed", "Managed scraper", 40, "managed"),
     SourceProfile("barcode", "Barcode/GTIN", 50, "catalog"),
@@ -45,11 +49,11 @@ class SourcePolicy:
             return True
         return any(self._matches_prefix(source, prefix) for prefix in self._allowed_prefixes)
 
-    def label(self, source: str | None) -> str:
+    def label(self, source: str | None) -> str | None:
         profile = self.profile_for(source)
         if profile is not None:
             return profile.label
-        return clean_text(source) or "Unknown source"
+        return clean_text(source)
 
     def priority(self, source: str | None) -> int:
         profile = self.profile_for(source)

@@ -16,11 +16,11 @@ services:
       - key: GLOWSEARCH_LIVE_FIRST_RESULT_GRACE_SECONDS
         value: 0.8
       - key: GLOWSEARCH_BACKGROUND_COLLECT_DEADLINE_SECONDS
-        value: 18.0
+        value: 12.0
       - key: GLOWSEARCH_MANAGED_SCRAPING_TIME_BUDGET_SECONDS
         value: 4.0
       - key: GLOWSEARCH_RESULT_SOURCE_PREFIXES
-        value: oliveyoung,official,musinsa,managed,barcode,discovery,external
+        value: oliveyoung,official,musinsa,coupang,hwahae,glowpick,fudejapan,managed,barcode,discovery,external
       - key: GLOWSEARCH_DETAIL_ENRICHMENT_ENABLED
         value: false
       - key: GLOWSEARCH_MAX_RESULTS
@@ -34,7 +34,7 @@ services:
       - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_BASE_URL
         value: https://mcp.aka.page
       - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_TIMEOUT_SECONDS
-        value: 6.0
+        value: 3.5
       - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RETRY_ATTEMPTS
         value: 2
       - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RETRY_BASE_DELAY_SECONDS
@@ -50,7 +50,7 @@ services:
       - key: GLOWSEARCH_BROWSER_HEADLESS
         value: true
       - key: GLOWSEARCH_BROWSER_TIMEOUT_SECONDS
-        value: 25
+        value: 8
       - key: GLOWSEARCH_PRODUCT_INDEX_ENABLED
         value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_PATH
@@ -61,6 +61,8 @@ services:
         value: 1
       - key: GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_ENABLED
         value: true
+      - key: GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_LIMIT
+        value: 120
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP
         value: false
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT

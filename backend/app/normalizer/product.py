@@ -12,16 +12,36 @@ class ProductNormalizer:
 
     def normalize(self, record: ProductSourceRecord) -> ProductSearchResult:
         brand_ko = self._brand_ko(record)
+        brand_en = self._brand_en(record)
+        product_name_ko = clean_text(record.product_name_ko)
+        product_name_en = clean_text(record.product_name_en)
         original_price = record.original_price or record.regular_price
         sale_price = record.sale_price
         display_price = sale_price if sale_price is not None else original_price
+        quality_score = self._quality_score(
+            brand_ko=brand_ko,
+            brand_en=brand_en,
+            product_name_ko=product_name_ko,
+            product_name_en=product_name_en,
+            price=display_price,
+            image_url=record.image_url,
+            rating=record.rating,
+            review_count=record.review_count,
+            source=record.source,
+            source_url=record.source_url,
+            source_product_id=record.source_product_id,
+        )
+        enrichment_missing_fields = self._enrichment_missing_fields(
+            brand_en=brand_en,
+            product_name_en=product_name_en,
+            price=display_price,
+            image_url=record.image_url,
+        )
         return ProductSearchResult(
             brand_ko=brand_ko,
-            brand_en=self._brand_resolver.resolve(
-                record.source_brand_name,
-                record.product_name_ko,
-            ),
-            product_name_ko=clean_text(record.product_name_ko),
+            brand_en=brand_en,
+            product_name_ko=product_name_ko,
+            product_name_en=product_name_en,
             category=clean_text(record.category),
             price=display_price,
             original_price=original_price,
@@ -36,7 +56,10 @@ class ProductNormalizer:
             options=_clean_options(record.options),
             sold_out=record.sold_out,
             source_url=normalize_image_url(record.source_url, self._base_url),
+            source_product_id=clean_text(record.source_product_id),
             source=record.source,
+            quality_score=quality_score,
+            enrichment_missing_fields=enrichment_missing_fields,
             updated_at=record.updated_at,
         )
 
@@ -78,6 +101,70 @@ class ProductNormalizer:
         if product_brand_match and has_hangul(product_brand_match.matched_alias):
             return product_brand_match.matched_alias
         return None
+
+    def _brand_en(self, record: ProductSourceRecord) -> str | None:
+        source_brand_en = clean_text(record.source_brand_name_en)
+        if source_brand_en:
+            return source_brand_en
+        return self._brand_resolver.resolve(
+            record.source_brand_name,
+            record.product_name_ko,
+        )
+
+    @staticmethod
+    def _quality_score(
+        *,
+        brand_ko: str | None,
+        brand_en: str | None,
+        product_name_ko: str | None,
+        product_name_en: str | None,
+        price: int | None,
+        image_url: str | None,
+        rating: float | None,
+        review_count: int | None,
+        source: str | None,
+        source_url: str | None,
+        source_product_id: str | None,
+    ) -> int:
+        score = 0
+        if product_name_ko:
+            score += 30
+        if source:
+            score += 20
+        if source_url or source_product_id:
+            score += 20
+        if brand_ko:
+            score += 10
+        if brand_en:
+            score += 8
+        if product_name_en:
+            score += 8
+        if price is not None:
+            score += 5
+        if image_url:
+            score += 5
+        if rating is not None or review_count is not None:
+            score += 4
+        return score
+
+    @staticmethod
+    def _enrichment_missing_fields(
+        *,
+        brand_en: str | None,
+        product_name_en: str | None,
+        price: int | None,
+        image_url: str | None,
+    ) -> list[str]:
+        missing: list[str] = []
+        if not brand_en:
+            missing.append("brand_en")
+        if not product_name_en:
+            missing.append("product_name_en")
+        if price is None:
+            missing.append("price")
+        if not image_url:
+            missing.append("image_url")
+        return missing
 
     @classmethod
     def _should_use_matched_brand_alias(cls, source_brand: str, matched_alias: str) -> bool:

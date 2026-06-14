@@ -17,6 +17,11 @@ from app.indexing.agents import (
 from app.indexing.store import SQLiteProductIndexStore
 from app.normalizer.brand import BrandResolver
 from app.normalizer.product import ProductNormalizer
+from app.search_engine.analytics import InMemorySearchAnalytics
+from app.search_engine.intent import SearchIntentExpander
+from app.search_engine.related import RelatedKeywordService
+from app.search_engine.sqlite_provider import SQLiteSearchProvider
+from app.search_engine.synonyms import SearchSynonymExpander
 from app.service.search_service import SearchService
 from app.service.source_policy import SourcePolicy
 
@@ -85,6 +90,34 @@ def get_search_service() -> SearchService:
         },
         source_policy=SourcePolicy(allowed_prefixes=settings.result_source_prefixes),
     )
+
+
+@lru_cache
+def get_search_provider() -> SQLiteSearchProvider:
+    settings = get_settings()
+    brand_resolver = BrandResolver(settings.brand_registry_path)
+    normalizer = ProductNormalizer(brand_resolver, settings.oliveyoung_base_url)
+    index_store = SQLiteProductIndexStore(settings.product_index_path)
+    index_store.seed_brand_aliases(normalizer.index_aliases())
+    return SQLiteSearchProvider(
+        index_store,
+        normalizer,
+        source_policy=SourcePolicy(allowed_prefixes=settings.result_source_prefixes),
+    )
+
+
+@lru_cache
+def get_related_keyword_service() -> RelatedKeywordService:
+    settings = get_settings()
+    return RelatedKeywordService(
+        SearchSynonymExpander(settings.search_synonyms_path),
+        SearchIntentExpander(settings.search_intents_path),
+    )
+
+
+@lru_cache
+def get_search_analytics() -> InMemorySearchAnalytics:
+    return InMemorySearchAnalytics()
 
 
 def _build_collectors(settings: Settings) -> list[ProductCollector]:
