@@ -19,6 +19,24 @@ services:
         value: 12.0
       - key: GLOWSEARCH_MANAGED_SCRAPING_TIME_BUDGET_SECONDS
         value: 4.0
+      - key: GLOWSEARCH_MUSINSA_API_ENABLED
+        value: false
+      - key: GLOWSEARCH_MUSINSA_API_BASE_URL
+        sync: false
+      - key: GLOWSEARCH_MUSINSA_API_TIMEOUT_SECONDS
+        value: 3.0
+      - key: GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED
+        value: false
+      - key: GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_BASE_URL
+        sync: false
+      - key: GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_TIMEOUT_SECONDS
+        value: 3.0
+      - key: GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED
+        value: false
+      - key: GLOWSEARCH_OFFICIAL_BRAND_API_BASE_URL
+        sync: false
+      - key: GLOWSEARCH_OFFICIAL_BRAND_API_TIMEOUT_SECONDS
+        value: 3.0
       - key: GLOWSEARCH_RESULT_SOURCE_PREFIXES
         value: oliveyoung,oliveyoung-global,official,musinsa,coupang,hwahae,glowpick,fudejapan,managed,barcode,discovery,external
       - key: GLOWSEARCH_DETAIL_ENRICHMENT_ENABLED
@@ -80,4 +98,4 @@ services:
       - key: GLOWSEARCH_PRODUCT_INDEX_DETAIL_ENRICHMENT_MAX_RECORDS
         value: 12
       - key: GLOWSEARCH_CORS_ORIGINS
-        value: http://localhost:3000,https://glow-search.vercel.app
+        value: http://localhost:3000,https://frontend-plum-six-32.vercel.app

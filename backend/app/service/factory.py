@@ -85,6 +85,9 @@ def get_search_service() -> SearchService:
             "oliveyoung:apify": settings.managed_scraping_time_budget_seconds,
             "oliveyoung:browser": settings.browser_timeout_seconds,
             settings.managed_search_api_source: settings.managed_search_api_timeout_seconds,
+            settings.musinsa_api_source: settings.musinsa_api_timeout_seconds,
+            settings.oliveyoung_global_api_source: settings.oliveyoung_global_api_timeout_seconds,
+            settings.official_brand_api_source: settings.official_brand_api_timeout_seconds,
             settings.global_discovery_api_source: settings.global_discovery_api_timeout_seconds,
             settings.barcode_lookup_api_source: settings.barcode_lookup_api_timeout_seconds,
         },
@@ -135,6 +138,30 @@ def _build_collectors(settings: Settings) -> list[ProductCollector]:
                 name=settings.managed_search_api_source,
                 base_url=settings.managed_search_api_base_url,
                 timeout_seconds=settings.managed_search_api_timeout_seconds,
+            )
+        )
+    if settings.musinsa_api_enabled and settings.musinsa_api_base_url:
+        collectors.append(
+            JsonApiProductCollector(
+                name=settings.musinsa_api_source,
+                base_url=settings.musinsa_api_base_url,
+                timeout_seconds=settings.musinsa_api_timeout_seconds,
+            )
+        )
+    if settings.oliveyoung_global_api_enabled and settings.oliveyoung_global_api_base_url:
+        collectors.append(
+            JsonApiProductCollector(
+                name=settings.oliveyoung_global_api_source,
+                base_url=settings.oliveyoung_global_api_base_url,
+                timeout_seconds=settings.oliveyoung_global_api_timeout_seconds,
+            )
+        )
+    if settings.official_brand_api_enabled and settings.official_brand_api_base_url:
+        collectors.append(
+            JsonApiProductCollector(
+                name=settings.official_brand_api_source,
+                base_url=settings.official_brand_api_base_url,
+                timeout_seconds=settings.official_brand_api_timeout_seconds,
             )
         )
     if settings.global_discovery_api_enabled and settings.global_discovery_api_base_url:

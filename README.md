@@ -17,7 +17,7 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 
 | 항목 | URL |
 | --- | --- |
-| Frontend | [https://glow-search.vercel.app/](https://glow-search.vercel.app/) |
+| Frontend | [https://frontend-plum-six-32.vercel.app/](https://frontend-plum-six-32.vercel.app/) |
 | Backend health | [https://glowsearch-backend.onrender.com/health](https://glowsearch-backend.onrender.com/health) |
 | Search API 예시 | [https://glowsearch-backend.onrender.com/search?q=%EB%A1%9C%EC%85%98&limit=4](https://glowsearch-backend.onrender.com/search?q=%EB%A1%9C%EC%85%98&limit=4) |
 
@@ -376,6 +376,9 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | `NEXT_PUBLIC_API_BASE_URL` | 프론트에서 호출할 백엔드 API base URL |
 | `GLOWSEARCH_PRODUCT_INDEX_PATH` | SQLite product index 경로. Render persistent disk 사용 시 `/var/data/product_index.sqlite3` 권장 |
 | `GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_ENABLED` | Olive Young 공개 JSON adapter 사용 여부 |
+| `GLOWSEARCH_MUSINSA_API_ENABLED` / `GLOWSEARCH_MUSINSA_API_BASE_URL` | 검증된 Musinsa Beauty JSON provider 연결. 기본 비활성화 |
+| `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED` / `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_BASE_URL` | 검증된 Olive Young Global JSON provider 연결. 기본 비활성화 |
+| `GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED` / `GLOWSEARCH_OFFICIAL_BRAND_API_BASE_URL` | 브랜드 공식몰/공식 catalog JSON provider 연결. 기본 비활성화 |
 | `GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP` | 서버 시작 시 seed index warmup 실행 여부. 운영에서는 live 요청과 경쟁하지 않도록 `false` 권장 |
 | `GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN` | 원격 `/index/warm`, `/index/catalog/run` 보호 token |
 | `GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_LIMIT` | 검색 후 백그라운드 refresh 수집 개수. 운영 초기에는 `48~120` 권장 |
@@ -391,6 +394,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - `robots.txt`와 서비스 약관을 확인하지 않은 대량 수집은 실행하지 않습니다.
 - HTML/browser collector는 기본 비활성화되어 있습니다.
 - 운영에서는 공식 API, 제휴 데이터, managed scraping provider를 우선 검토합니다.
+- Musinsa Beauty, Olive Young Global, 브랜드 공식몰은 검증된 JSON/API provider URL이 설정된 경우에만 live collector로 연결합니다.
 
 ## 카탈로그 인덱싱 운영
 

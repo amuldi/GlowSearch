@@ -550,6 +550,7 @@ function Pagination({
 function ProductCard({ product }: { product: Product }) {
   const [copied, setCopied] = useState(false);
   const sourceLinks = sourceLinksForProduct(product);
+  const productNameEn = distinctText(product.product_name_en, product.product_name_ko);
   const originalPriceText = formatPrice(product.original_price ?? product.price, product.currency);
   const hasDiscount = Boolean(
     product.sale_price !== null
@@ -565,7 +566,7 @@ function ProductCard({ product }: { product: Product }) {
     product.brand_ko ? `브랜드명: ${product.brand_ko}` : null,
     product.brand_en ? `영문 브랜드명: ${product.brand_en}` : null,
     product.product_name_ko ? `제품명: ${product.product_name_ko}` : null,
-    product.product_name_en ? `영문 제품명: ${product.product_name_en}` : null,
+    productNameEn ? `영문 제품명: ${productNameEn}` : null,
     originalPriceText ? `원가: ${originalPriceText}` : null,
     hasDiscount ? `할인가: ${salePriceText}` : null,
     product.shade ? `호수: ${product.shade}` : null,
@@ -683,10 +684,10 @@ function ProductCard({ product }: { product: Product }) {
               </dd>
               </div>
             ) : null}
-            {product.product_name_en ? (
+            {productNameEn ? (
               <div>
                 <dt className="text-[11px] font-medium text-neutral-500">영문 제품명</dt>
-                <dd className="whitespace-normal break-words text-xs font-medium leading-4 text-neutral-700">{product.product_name_en}</dd>
+                <dd className="whitespace-normal break-words text-xs font-medium leading-4 text-neutral-700">{productNameEn}</dd>
               </div>
             ) : null}
             {originalPriceText ? (
@@ -742,6 +743,12 @@ function ProductCard({ product }: { product: Product }) {
       </div>
     </article>
   );
+}
+
+function distinctText(value?: string | null, compareTo?: string | null) {
+  if (!value) return null;
+  if (!compareTo) return value;
+  return value.trim().toLocaleLowerCase() === compareTo.trim().toLocaleLowerCase() ? null : value;
 }
 
 function SourceBadge({ product }: { product: Product }) {

@@ -25,6 +25,7 @@
       "keywords": ["romand", "rom&nd", "롬앤", "글로스", "립"]
     },
     {
+      "canonical_product_id": "verified:forbeaut-texture-shake-spray-100ml",
       "brand_en": "FOR BEAUT",
       "brand_ko": "포뷰트",
       "product_name_ko": "포뷰트 텍스처 쉐이크 스프레이 100ml",
@@ -36,6 +37,7 @@
       "keywords": ["FOR BEAUT", "포뷰트", "헤어", "스프레이"]
     },
     {
+      "canonical_product_id": "verified:forbeaut-scalp-tattoo-15g",
       "brand_en": "FOR BEAUT",
       "brand_ko": "포뷰트",
       "product_name_ko": "포뷰트 두피 타투15g 블랙/브라운 단품/기획",
@@ -47,6 +49,7 @@
       "keywords": ["FOR BEAUT", "포뷰트", "두피", "헤어"]
     },
     {
+      "canonical_product_id": "verified:shingmulnara-light-moisture-sun-gel-60ml",
       "brand_en": "SHINGMULNARA",
       "brand_ko": "식물나라",
       "product_name_ko": "식물나라 가벼운 수분 선 젤 60ml 단품/2입 기획",
@@ -71,6 +74,7 @@
       "keywords": ["MEDIHEAL", "메디힐", "비타민씨 브라이트닝 패드", "비타 브라이트닝 패드", "더마 토너 패드 비타", "패드"]
     },
     {
+      "canonical_product_id": "verified:hourglass-vanish-airbrush-concealer-stone",
       "brand_en": "HOURGLASS",
       "brand_ko": "아워글래스",
       "product_name_ko": "배니쉬 에어브러쉬 컨실러 6ml (17colors)",
@@ -83,6 +87,7 @@
       "keywords": ["HOURGLASS", "아워글래스", "배니쉬 에어브러쉬 컨실러", "컨실러 스톤", "스톤"]
     },
     {
+      "canonical_product_id": "verified:ameli-yeoback-macaron-shading-1319",
       "brand_en": "AMELI",
       "brand_ko": "아멜리",
       "product_name_ko": "여백카롱 섀딩",
@@ -95,6 +100,7 @@
       "keywords": ["AMELI", "아멜리", "여백살롱 쉐딩 1319", "여백카롱 섀딩 1319", "여백카롱 쉐딩", "No.1319"]
     },
     {
+      "canonical_product_id": "verified:wakemake-mix-blurring-volume-shading-neutral-cool",
       "brand_en": "WAKEMAKE",
       "brand_ko": "웨이크메이크",
       "product_name_ko": "믹스 블러링 볼륨 쉐딩",
@@ -107,6 +113,7 @@
       "keywords": ["WAKEMAKE", "웨이크메이크", "쉐딩 뉴트럴쿨", "셰딩 뉴트럴쿨", "믹스 블러링 볼륨 쉐딩", "02 뉴트럴쿨"]
     },
     {
+      "canonical_product_id": "verified:aou-dense-eyebrow-balm-milk-choco",
       "brand_en": "AOU",
       "brand_ko": "에이오유",
       "product_name_ko": "에이오유 촘촘 아이브로우밤",
@@ -119,6 +126,7 @@
       "keywords": ["AOU", "에이오유", "아이브로우밤 밀크초코", "촘촘 아이브로우밤", "밀크초코"]
     },
     {
+      "canonical_product_id": "verified:olens-glowy-tear-one-day-gray",
       "brand_en": "OLENS",
       "brand_ko": "오렌즈",
       "product_name_ko": "글로이 티어 원데이 그레이",
@@ -144,6 +152,7 @@
       "keywords": ["the SAEM", "더샘", "컨실러 클리어 베이지", "커버 퍼펙션 팁 컨실러", "1.0 클리어 베이지"]
     },
     {
+      "canonical_product_id": "verified:achi-aegyosal-step-palette-peach-step",
       "brand_en": "A.chi",
       "brand_ko": "에이치",
       "product_name_ko": "애교살 스텝 팔레트",
@@ -156,6 +165,7 @@
       "keywords": ["A.chi", "에이치", "애교살스텝 팔레트 피치스텝", "애교살 스텝 팔레트", "피치 스텝", "피치스텝"]
     },
     {
+      "canonical_product_id": "verified:hwahongm-258-concealer-brush",
       "brand_en": "HWAHONG M",
       "brand_ko": "화홍엠",
       "product_name_ko": "258 컨실러 브러쉬",
@@ -168,6 +178,7 @@
       "keywords": ["HWAHONG M", "화홍", "화홍M 258", "화홍엠 258", "브러쉬 258", "브러시 258"]
     },
     {
+      "canonical_product_id": "verified:hwahongm-255-eyeliner-multi-brush",
       "brand_en": "HWAHONG M",
       "brand_ko": "화홍엠",
       "product_name_ko": "255 아이라이너 멀티 브러쉬",
@@ -184,6 +195,7 @@
       "brand_en": "HAKUHODO",
       "brand_ko": "하쿠호도",
       "product_name_ko": "G5513 Eye Shadow Brush Round & Flat",
+      "product_name_en": "G5513 Eye Shadow Brush Round & Flat",
       "price": 2530,
       "currency": "JPY",
       "shade": null,
@@ -198,6 +210,7 @@
       "brand_en": "HAKUHODO",
       "brand_ko": "하쿠호도",
       "product_name_ko": "G5512 Eye Shadow Brush Round & Flat Short",
+      "product_name_en": "G5512 Eye Shadow Brush Round & Flat Short",
       "price": 2530,
       "currency": "JPY",
       "shade": null,
@@ -212,6 +225,7 @@
       "brand_en": "HAKUHODO",
       "brand_ko": "하쿠호도",
       "product_name_ko": "S191 Eyeliner Brush Round",
+      "product_name_en": "S191 Eyeliner Brush Round",
       "price": 7128,
       "currency": "JPY",
       "shade": null,
@@ -222,9 +236,11 @@
       "keywords": ["HAKUHODO", "하쿠호도", "브러쉬 S191", "브러시 S191", "S191"]
     },
     {
+      "canonical_product_id": "verified:ancci-ebony-42",
       "brand_en": "ANCCI",
       "brand_ko": "안씨",
       "product_name_ko": "ebony 42",
+      "product_name_en": "ebony 42",
       "price": 2280,
       "currency": "JPY",
       "shade": null,
@@ -248,6 +264,7 @@
       "keywords": ["JUNGSAEMMOOL", "정샘물", "콜펜라이너 콜브라운", "콜 펜 라이너", "콜 브라운"]
     },
     {
+      "canonical_product_id": "verified:clio-pro-eye-palette-air-mogamju-library",
       "brand_en": "CLIO",
       "brand_ko": "클리오",
       "product_name_ko": "(클리오X국가유산청) 프로 아이 팔레트 에어",
@@ -260,6 +277,7 @@
       "keywords": ["CLIO", "클리오", "모감주및서재 팔레트", "모감주 밑 서재", "모감주 도서관", "프로 아이 팔레트 에어"]
     },
     {
+      "canonical_product_id": "verified:moumou-aegyo-flirting-easy-fit-flat-duo-yoyeom-ping",
       "brand_en": "moumou",
       "brand_ko": "모우모우",
       "product_name_ko": "애교 플러팅 이지 핏 플랫 듀오",
@@ -272,6 +290,7 @@
       "keywords": ["moumou", "모우모우", "플로팅 이즈핏 플랫 땡큐요엠핑크", "애교 플러팅 이지 핏 플랫 듀오", "플러팅 이지핏 플랫", "02 요염핑", "요염핑크", "요염핑"]
     },
     {
+      "canonical_product_id": "verified:eitherand-dewy-syrup-tint-either-way",
       "brand_en": "EITHER&",
       "brand_ko": "이더앤",
       "product_name_ko": "듀이 시럽 틴트",

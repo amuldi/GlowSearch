@@ -121,6 +121,9 @@ async def diagnostics(
         "live_search_required": settings.oliveyoung_live_search_required,
         "result_source_prefixes": settings.result_source_prefixes,
         "managed_search_api_enabled": settings.managed_search_api_enabled,
+        "musinsa_api_enabled": settings.musinsa_api_enabled,
+        "oliveyoung_global_api_enabled": settings.oliveyoung_global_api_enabled,
+        "official_brand_api_enabled": settings.official_brand_api_enabled,
         "global_discovery_api_enabled": settings.global_discovery_api_enabled,
         "barcode_lookup_api_enabled": settings.barcode_lookup_api_enabled,
     }
