@@ -24,6 +24,33 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 
 백엔드의 현재 배포 커밋은 `/health` 응답의 `release_sha`로 확인할 수 있습니다.
 
+## 최근 업데이트
+
+### 2026-06-15
+
+이번 업데이트는 검색 결과의 데이터 품질, 멀티소스 확장 기반, 배포 문서를 정리한 변경입니다.
+
+- 프론트 공식 운영 주소를 `https://glow-search.vercel.app`로 정리했습니다.
+- 이전에 쓰던 `https://frontend-plum-six-32.vercel.app`는 과거 Vercel 배포 주소로 남을 수 있지만, 현재 확인 기준은 공식 운영 주소입니다.
+- 최신 Vercel 고유 배포 URL은 `https://glow-search-gn3izzytz-amuldis-projects.vercel.app`입니다.
+- 백엔드 Render 배포는 `/health`의 `release_sha`가 `1e4579c81a10dda4951b4d591568b60eb46459d8`로 반영된 것을 확인했습니다.
+- Musinsa Beauty, Olive Young Global, 브랜드 공식몰을 source-specific JSON provider로 연결할 수 있는 설정을 추가했습니다.
+- `GLOWSEARCH_MUSINSA_API_ENABLED`, `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED`, `GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED`가 켜지고 각 provider base URL이 설정되면 해당 source가 live collector에 포함됩니다.
+- 현재 운영 환경에서는 위 provider URL이 아직 설정되지 않아 세 provider는 기본 비활성화 상태입니다. 무단 scraping이나 추측 URL 생성은 사용하지 않습니다.
+- verified catalog 항목에 내부 `canonical_product_id`를 보강해 같은 상품의 여러 source offer를 한 카드로 병합할 수 있는 기반을 넓혔습니다.
+- 검색 결과 카드는 `offers` 배열을 통해 Olive Young, Musinsa, Olive Young Global, Official 등 여러 source link를 표시할 수 있습니다.
+- 영문 제품명은 source, verified catalog, 공식/공개 API 등에서 확인된 경우에만 표시합니다. 자동 번역이나 추측 매핑은 하지 않습니다.
+- 프론트 카드에서 한글 제품명과 영문 제품명이 동일한 경우 중복 표시하지 않도록 처리했습니다.
+- `미확인`, `Unknown`, `N/A` 같은 대체 텍스트는 상품 필드 값으로 표시하지 않고, 값이 없으면 해당 줄을 숨기는 원칙을 유지합니다.
+
+검증 결과:
+
+- 백엔드 전체 테스트: `124 passed`
+- 백엔드 source/factory/search 집중 테스트: `54 passed`
+- Ruff: 통과
+- 프론트 production build: 통과
+- 검색 백테스트: `383/391`, `98.0%`
+
 ## 프로젝트 목표
 
 GlowSearch의 목표는 사용자가 화장품명, 브랜드명, 제품 키워드, 카테고리, 색상/호수 등을 검색했을 때 신뢰 가능한 출처 기반으로 화장품 정보를 찾아 보여주는 것입니다. 검색 결과는 정확성, source 신뢰도, 데이터 완성도, 가격 정보, 영문명 제공 여부를 기준으로 정렬됩니다.
