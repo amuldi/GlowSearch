@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, Copy, ExternalLink, Loader2, Search, X } from "lucide-react";
+import { Check, ChevronRight, Copy, Loader2, Search, X } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -549,7 +549,6 @@ function Pagination({
 
 function ProductCard({ product }: { product: Product }) {
   const [copied, setCopied] = useState(false);
-  const sourceLinks = sourceLinksForProduct(product);
   const productNameEn = distinctText(product.product_name_en, product.product_name_ko);
   const originalPriceText = formatPrice(product.original_price ?? product.price, product.currency);
   const hasDiscount = Boolean(
@@ -570,7 +569,7 @@ function ProductCard({ product }: { product: Product }) {
     originalPriceText ? `원가: ${originalPriceText}` : null,
     hasDiscount ? `할인가: ${salePriceText}` : null,
     product.shade ? `호수: ${product.shade}` : null,
-    sourceLinks.length ? `출처: ${sourceLinks.map((offer) => sourceLabel(offer)).join(", ")}` : `출처: ${sourceLabel(product)}`,
+    `출처: ${sourceLabel(product)}`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -718,27 +717,6 @@ function ProductCard({ product }: { product: Product }) {
               </div>
             ) : null}
           </dl>
-          {sourceLinks.length ? (
-            <div className="mt-3 min-w-0">
-              <div className="mb-1 text-[11px] font-medium text-neutral-500">출처 링크</div>
-              <div className="flex min-w-0 flex-wrap gap-1.5">
-                {sourceLinks.map((offer) => (
-                  <a
-                    key={`${offer.source}-${offer.source_product_id ?? offer.source_url}`}
-                    href={offer.source_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex max-w-full items-center gap-1 rounded-full border border-line bg-white px-2.5 py-1 text-xs font-semibold text-neutral-700 transition hover:border-rose hover:bg-blush-soft hover:text-rosewood"
-                    aria-label={`${sourceLabel(offer)} 상품 페이지 열기`}
-                    title={sourceLabel(offer)}
-                  >
-                    <span className="truncate">{sourceLabel(offer)}</span>
-                    <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
-                  </a>
-                ))}
-              </div>
-            </div>
-          ) : null}
         </div>
       </div>
     </article>
@@ -757,28 +735,6 @@ function SourceBadge({ product }: { product: Product }) {
       <span className="truncate">{sourceLabel(product)}</span>
     </span>
   );
-}
-
-function sourceLinksForProduct(product: Product) {
-  const offers = (product.offers ?? []).filter((offer) => offer.source_url);
-  if (offers.length) return offers;
-  if (!product.source_url) return [];
-  return [
-    {
-      source: product.source,
-      source_label: product.source_label,
-      source_priority: product.source_priority,
-      source_url: product.source_url,
-      source_product_id: product.source_product_id,
-      price: product.price,
-      original_price: product.original_price,
-      sale_price: product.sale_price,
-      currency: product.currency,
-      image_url: product.image_url,
-      sold_out: product.sold_out,
-      updated_at: product.updated_at,
-    },
-  ];
 }
 
 function sourceLabel(sourceInfo: { source: string; source_label?: string | null }) {

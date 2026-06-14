@@ -38,7 +38,7 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 - `GLOWSEARCH_MUSINSA_API_ENABLED`, `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED`, `GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED`가 켜지고 각 provider base URL이 설정되면 해당 source가 live collector에 포함됩니다.
 - 현재 운영 환경에서는 위 provider URL이 아직 설정되지 않아 세 provider는 기본 비활성화 상태입니다. 무단 scraping이나 추측 URL 생성은 사용하지 않습니다.
 - verified catalog 항목에 내부 `canonical_product_id`를 보강해 같은 상품의 여러 source offer를 한 카드로 병합할 수 있는 기반을 넓혔습니다.
-- 검색 결과 카드는 `offers` 배열을 통해 Olive Young, Musinsa, Olive Young Global, Official 등 여러 source link를 표시할 수 있습니다.
+- 검색 결과 카드는 `offers` 배열을 통해 Olive Young, Musinsa, Olive Young Global, Official 등 여러 source offer를 병합할 수 있습니다. 현재 UI에서는 별도 출처 링크 버튼을 표시하지 않고 source badge만 표시합니다.
 - 영문 제품명은 source, verified catalog, 공식/공개 API 등에서 확인된 경우에만 표시합니다. 자동 번역이나 추측 매핑은 하지 않습니다.
 - 프론트 카드에서 한글 제품명과 영문 제품명이 동일한 경우 중복 표시하지 않도록 처리했습니다.
 - `미확인`, `Unknown`, `N/A` 같은 대체 텍스트는 상품 필드 값으로 표시하지 않고, 값이 없으면 해당 줄을 숨기는 원칙을 유지합니다.
@@ -64,7 +64,7 @@ GlowSearch의 목표는 사용자가 화장품명, 브랜드명, 제품 키워�
 - 가격
 - 할인 중인 경우 할인가
 - 상품 이미지
-- 구매 또는 확인 가능한 source 링크
+- source badge
 
 데이터 source 연결 우선순위:
 
@@ -106,9 +106,9 @@ GlowSearch는 검색 요청마다 모든 상품을 실시간으로 수집하는 
 - live 결과를 background ingestion으로 인덱스에 저장
 - `search_gaps`로 결과 없음/부족 검색어 기록
 - `catalog_jobs` queue로 seed, 브랜드, 카테고리, 검색 gap 기반 수집 작업 관리
-- source별 가격/링크를 `offers`로 묶어 하나의 상품 카드에 표시
+- source별 가격과 offer 정보를 `offers`로 묶어 하나의 상품 카드에 반영
 - 원가, 할인가, 할인율 표시
-- 자동완성, 페이지네이션, source badge, source link buttons UI
+- 자동완성, 페이지네이션, source badge UI
 
 ## 추진 기능
 
@@ -186,7 +186,7 @@ product_offers
 
 ### 9. 검색 결과 카드
 
-카드는 브랜드명, 영문 브랜드명, 제품명, 영문 제품명, 가격, 할인가, 상품 이미지, source 링크를 가능한 경우 표시합니다. 여러 source 링크가 있으면 `Olive Young`, `Musinsa Beauty`, `Olive Young Global`, `Official` 버튼을 함께 표시하고, `source_url`이 있는 경우에만 렌더링합니다.
+카드는 브랜드명, 영문 브랜드명, 제품명, 영문 제품명, 가격, 할인가, 상품 이미지, source badge를 가능한 경우 표시합니다. `offers`에는 여러 source의 URL과 가격 정보가 유지되지만, 현재 카드 UI에서는 별도 출처 링크 버튼을 렌더링하지 않습니다.
 
 ### 10. 운영/데이터 갱신
 
