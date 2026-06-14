@@ -1,8 +1,8 @@
 # GlowSearch
 
-Olive Young 중심의 화장품 상품 검색 엔진입니다.
+멀티 소스 기반 화장품 상품 검색 엔진입니다.
 
-GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리 키워드로 화장품을 검색하고, 캐시/검색 인덱스/백그라운드 수집으로 검색 커버리지를 확장하는 Next.js + FastAPI 프로젝트입니다. 단순 검색 UI가 아니라, source 기반 상품 데이터를 정규화하고 색인하는 데이터 파이프라인까지 포함합니다.
+GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리 키워드, 색상/호수로 화장품을 검색하고, 캐시/검색 인덱스/백그라운드 수집으로 검색 커버리지를 확장하는 Next.js + FastAPI 프로젝트입니다. 단순 검색 UI가 아니라, 여러 신뢰 가능한 source의 상품 데이터를 정규화하고 색인해 사용자가 원하는 화장품 정보를 정확하고 완성도 높게 보여주는 검색 서비스입니다.
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)
@@ -23,6 +23,42 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 
 백엔드의 현재 배포 커밋은 `/health` 응답의 `release_sha`로 확인할 수 있습니다.
 
+## 프로젝트 목표
+
+GlowSearch의 목표는 사용자가 화장품명, 브랜드명, 제품 키워드, 카테고리, 색상/호수 등을 검색했을 때 신뢰 가능한 출처 기반으로 화장품 정보를 찾아 보여주는 것입니다. 검색 결과는 정확성, source 신뢰도, 데이터 완성도, 가격 정보, 영문명 제공 여부를 기준으로 정렬됩니다.
+
+검색 결과 카드가 가능한 경우 표시해야 하는 핵심 정보:
+
+- 브랜드명
+- 영문 브랜드명
+- 제품명
+- 영문 제품명
+- 가격
+- 할인 중인 경우 할인가
+- 상품 이미지
+- 구매 또는 확인 가능한 source 링크
+
+데이터 source 연결 우선순위:
+
+1. Olive Young
+2. Musinsa Beauty
+3. Olive Young Global
+4. 브랜드 공식 홈페이지
+5. verified catalog
+6. 공식/공개 API
+7. 공개 JSON / JSON-LD Product schema
+8. 관리형 provider
+
+핵심 원칙:
+
+- source가 제공하지 않은 브랜드명, 영문 브랜드명, 제품명, 영문 제품명, 가격, 할인가, 이미지는 임의로 만들지 않습니다.
+- 영문 제품명은 자동 번역하거나 추측하지 않습니다.
+- `brand_registry`, verified catalog, 공식 API, 공개 JSON, 공식 홈페이지 등에서 확인된 값만 사용합니다.
+- 없는 값은 `미확인`, `Unknown`, `N/A` 같은 텍스트로 대체하지 않고 UI에서 숨깁니다.
+- `source_url` 또는 `source_product_id`가 없는 불완전한 상품은 검색 결과에서 제외합니다.
+- 차단 우회, captcha 회피, 약관 위반성 scraping은 하지 않습니다.
+- 공식 API, 공개 JSON, JSON-LD, verified catalog, managed provider 순서로 안전한 데이터 확보를 우선합니다.
+
 ## 만들게 된 계기
 
 화장품 검색은 한글 브랜드명, 영문 브랜드명, 하위 브랜드, 상품명, 성분명, 카테고리명이 섞여 있어 원하는 상품을 빠르게 찾기 어렵습니다. 예를 들어 `too cool`, `TOO COOL FOR SCHOOL`, `투쿨포스쿨`은 같은 브랜드를 가리키고, `정샘물` 검색에는 `비긴스 바이 정샘물` 같은 하위 브랜드도 함께 고려해야 합니다.
@@ -37,12 +73,96 @@ GlowSearch는 검색 요청마다 모든 상품을 실시간으로 수집하는 
 - SQLite FTS5 기반 빠른 인덱스 검색
 - TTL cache와 SQLite index 우선 반환
 - 인덱스 결과가 부족할 때 제한 시간 안에서 live source collector 보강
+- Olive Young, Musinsa Beauty, Olive Young Global, 브랜드 공식 홈페이지, verified catalog, 공개 API, JSON/JSON-LD, managed provider를 연결할 수 있는 collector/adapter 구조
+- source별 timeout, retry, rate limit, graceful fallback
 - live 결과를 background ingestion으로 인덱스에 저장
 - `search_gaps`로 결과 없음/부족 검색어 기록
 - `catalog_jobs` queue로 seed, 브랜드, 카테고리, 검색 gap 기반 수집 작업 관리
-- Olive Young source attribution 유지
+- source별 가격/링크를 `offers`로 묶어 하나의 상품 카드에 표시
 - 원가, 할인가, 할인율 표시
-- 자동완성, 페이지네이션, source badge UI
+- 자동완성, 페이지네이션, source badge, source link buttons UI
+
+## 추진 기능
+
+### 1. 멀티 소스 데이터 수집 구조
+
+각 source는 독립 collector 또는 adapter로 구성합니다. 한 source의 실패가 전체 검색 실패로 이어지지 않도록 graceful fallback을 적용하고, source별 timeout, retry, rate limit을 설정합니다.
+
+### 2. 데이터 정규화
+
+source마다 다른 필드명을 공통 모델로 정규화합니다. 주요 필드는 `brand_ko`, `brand_en`, `product_name_ko`, `product_name_en`, `price`, `original_price`, `sale_price`, `discount_rate`, `currency`, `image_url`, `source`, `source_url`, `source_product_id`, `updated_at`입니다.
+
+### 3. 브랜드/상품 영문 데이터 처리
+
+`brand_en`은 source 제공 영문 브랜드명, `brand_registry.json`의 `official_en`, `null` 순서로 결정합니다. `product_name_en`은 source 제공 영문 제품명, verified catalog의 영문 제품명, 공식 홈페이지 또는 Olive Young Global이 제공한 영문 제품명, `null` 순서로 결정합니다. 자동 번역은 사용하지 않습니다.
+
+### 4. DB/index 저장 구조
+
+현재 SQLite index는 source record를 `products`에 저장하고, 검색 응답 단계에서 같은 상품의 source link를 `offers`로 병합합니다. 장기 목표 구조는 상품 identity와 source offer를 분리하는 것입니다.
+
+```text
+products
+  normalized_product_id
+  brand_ko
+  brand_en
+  product_name_ko
+  product_name_en
+  category
+  image_url
+  quality_score
+  updated_at
+
+product_offers
+  normalized_product_id
+  source
+  source_label
+  source_url
+  source_product_id
+  price
+  original_price
+  sale_price
+  discount_rate
+  currency
+  sold_out
+  updated_at
+```
+
+### 5. 멀티 소스 병합
+
+같은 상품 판단은 barcode/GTIN 또는 verified cross-source mapping, source_product_id cross mapping, normalized brand 일치, normalized product name 강한 유사도 순서로 적용합니다. 유사도가 낮으면 병합하지 않습니다.
+
+### 6. 검색 fallback 흐름
+
+검색은 DB/index를 먼저 조회하고, 결과가 부족하거나 필수 정보가 부족하면 source collector를 제한 시간 안에서 사용합니다.
+
+```text
+검색어 입력
+→ DB/index 검색
+→ Olive Young 검색
+→ 결과 부족 시 Musinsa Beauty 검색
+→ 결과 부족 시 Olive Young Global 검색
+→ 결과 부족 시 브랜드 공식 홈페이지 또는 verified catalog 검색
+→ 수집 결과 정규화
+→ DB/index 저장
+→ quality_score 계산
+→ 검색 결과 반환
+```
+
+### 7. 품질 점수
+
+`quality_score`는 상품 정보 완성도를 기준으로 계산합니다. `product_name_ko`, `brand_ko`, `brand_en`, `product_name_en`, `price`, `sale_price`, `image_url`, `source_url`, `source_product_id`, 신뢰도 높은 source 여부를 반영합니다. 필수 필드는 `product_name_ko` 또는 `product_name_en`, `source`, `source_url` 또는 `source_product_id`입니다.
+
+### 8. 백그라운드 enrichment
+
+검색 응답은 빠르게 반환하고, 부족한 데이터는 background task로 보강합니다. enrichment 대상은 `brand_en`, `product_name_en`, `price`, `sale_price`, `image_url`, Musinsa Beauty source, Olive Young Global source, official source가 없는 상품입니다.
+
+### 9. 검색 결과 카드
+
+카드는 브랜드명, 영문 브랜드명, 제품명, 영문 제품명, 가격, 할인가, 상품 이미지, source 링크를 가능한 경우 표시합니다. 여러 source 링크가 있으면 `Olive Young`, `Musinsa Beauty`, `Olive Young Global`, `Official` 버튼을 함께 표시하고, `source_url`이 있는 경우에만 렌더링합니다.
+
+### 10. 운영/데이터 갱신
+
+데이터 수집은 작은 batch로 반복 가능해야 합니다. `catalog_jobs`와 `search_gaps`를 활용해 실패 source 재시도, 누락 검색어 수집, index 상태 확인, source별 성공/실패 확인, 최근 업데이트 시간, 품질 점수 낮은 상품, enrichment 대기 목록을 운영자가 추적할 수 있게 합니다.
 
 ## 기술 스택
 
@@ -151,6 +271,8 @@ sequenceDiagram
 | `search_gaps` | 결과 없음/부족 검색어 기록 |
 | `catalog_jobs` | seed/search gap 기반 background catalog ingestion queue |
 
+현재 검색 응답의 `offers`는 `products`에 저장된 source별 record를 검색 응답 단계에서 병합해 만듭니다. 장기적으로는 상품 identity와 offer를 물리적으로 분리한 `product_offers` 테이블 또는 외부 검색 엔진 schema로 확장할 수 있습니다.
+
 ## API 문서
 
 ### `GET /search`
@@ -179,15 +301,31 @@ curl "https://glowsearch-backend.onrender.com/search?q=로션&limit=48"
   "count": 1,
   "results": [
     {
+      "canonical_product_id": null,
       "brand_ko": "에스트라",
       "brand_en": "AESTURA",
       "product_name_ko": "에스트라 아토베리어365 로션 150ml",
+      "product_name_en": null,
       "price": 29700,
       "original_price": 33000,
       "sale_price": 29700,
       "discount_rate": 10,
       "source": "oliveyoung",
-      "source_label": "Olive Young"
+      "source_label": "Olive Young",
+      "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000000000",
+      "source_product_id": "A000000000000",
+      "offers": [
+        {
+          "source": "oliveyoung",
+          "source_label": "Olive Young",
+          "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000000000",
+          "source_product_id": "A000000000000",
+          "price": 29700,
+          "original_price": 33000,
+          "sale_price": 29700,
+          "currency": "KRW"
+        }
+      ]
     }
   ],
   "source_errors": []
