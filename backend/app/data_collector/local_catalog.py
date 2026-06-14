@@ -21,58 +21,59 @@ class LocalVerifiedCatalogCollector:
             return []
 
         payload = json.loads(self._catalog_path.read_text(encoding="utf-8"))
+        products = payload.get("products", [])
+        canonical_groups = _canonical_groups(products)
         records: list[ProductSourceRecord] = []
-        for item in payload.get("products", []):
-            haystack = self._key(
-                " ".join(
-                    str(value)
-                    for value in [
-                        item.get("brand_ko"),
-                        item.get("brand_en"),
-                        item.get("product_name_ko"),
-                        item.get("product_name_en"),
-                        item.get("category"),
-                        item.get("description"),
-                        " ".join(item.get("options", [])),
-                        " ".join(item.get("keywords", [])),
-                    ]
-                    if value
-                )
-            )
+        seen: set[str] = set()
+        for item in products:
+            haystack = self._item_haystack_key(item)
             keyword_tokens = self._tokens(keyword)
             if keyword_key not in haystack and not all(token in haystack for token in keyword_tokens):
                 continue
-            records.append(
-                ProductSourceRecord(
-                    canonical_product_id=clean_text(
-                        item.get("canonical_product_id") or item.get("canonical_id")
-                    ),
-                    source_brand_name=clean_text(item.get("brand_ko") or item.get("brand_en")),
-                    source_brand_name_en=clean_text(item.get("brand_en")),
-                    product_name_ko=clean_text(item.get("product_name_ko")),
-                    product_name_en=clean_text(item.get("product_name_en")),
-                    category=clean_text(item.get("category")),
-                    regular_price=item.get("price"),
-                    original_price=item.get("original_price"),
-                    sale_price=item.get("sale_price"),
-                    discount_rate=item.get("discount_rate"),
-                    rating=item.get("rating"),
-                    review_count=item.get("review_count"),
-                    currency=clean_text(item.get("currency")) or "KRW",
-                    shade=clean_text(item.get("shade")),
-                    description=clean_text(item.get("description")),
-                    options=_clean_options(item.get("options")),
-                    sold_out=item.get("sold_out"),
-                    image_url=clean_text(item.get("image_url")),
-                    source=clean_text(item.get("source")) or "oliveyoung",
-                    source_url=clean_text(item.get("source_url")),
-                    source_product_id=clean_text(item.get("goods_no")),
-                    updated_at=clean_text(item.get("updated_at")),
-                )
-            )
+            for grouped_item in self._expand_canonical_group(item, canonical_groups):
+                record = _record_from_item(grouped_item)
+                key = _record_key(record)
+                if key in seen:
+                    continue
+                seen.add(key)
+                records.append(record)
+                if len(records) >= limit:
+                    break
             if len(records) >= limit:
                 break
         return records
+
+    def _item_haystack_key(self, item: object) -> str:
+        if not isinstance(item, dict):
+            return ""
+        return self._key(
+            " ".join(
+                str(value)
+                for value in [
+                    item.get("brand_ko"),
+                    item.get("brand_en"),
+                    item.get("product_name_ko"),
+                    item.get("product_name_en"),
+                    item.get("category"),
+                    item.get("description"),
+                    _join_texts(item.get("options")),
+                    _join_texts(item.get("keywords")),
+                ]
+                if value
+            )
+        )
+
+    @staticmethod
+    def _expand_canonical_group(
+        item: object,
+        canonical_groups: dict[str, list[object]],
+    ) -> list[object]:
+        if not isinstance(item, dict):
+            return [item]
+        canonical_id = clean_text(item.get("canonical_product_id") or item.get("canonical_id"))
+        if not canonical_id:
+            return [item]
+        return canonical_groups.get(canonical_id, [item])
 
     @staticmethod
     def _key(value: str | None) -> str:
@@ -101,3 +102,69 @@ def _clean_options(value: object) -> list[str] | None:
         return None
     options = [text for item in value if (text := clean_text(item))]
     return options or None
+
+
+def _join_texts(value: object) -> str:
+    if not isinstance(value, list):
+        return ""
+    return " ".join(text for item in value if (text := clean_text(item)))
+
+
+def _canonical_groups(products: object) -> dict[str, list[object]]:
+    groups: dict[str, list[object]] = {}
+    if not isinstance(products, list):
+        return groups
+    for item in products:
+        if not isinstance(item, dict):
+            continue
+        canonical_id = clean_text(item.get("canonical_product_id") or item.get("canonical_id"))
+        if not canonical_id:
+            continue
+        groups.setdefault(canonical_id, []).append(item)
+    return groups
+
+
+def _record_from_item(item: object) -> ProductSourceRecord:
+    if not isinstance(item, dict):
+        return ProductSourceRecord(source="oliveyoung")
+    return ProductSourceRecord(
+        canonical_product_id=clean_text(item.get("canonical_product_id") or item.get("canonical_id")),
+        source_brand_name=clean_text(item.get("brand_ko") or item.get("brand_en")),
+        source_brand_name_en=clean_text(item.get("brand_en")),
+        product_name_ko=clean_text(item.get("product_name_ko")),
+        product_name_en=clean_text(item.get("product_name_en")),
+        category=clean_text(item.get("category")),
+        regular_price=item.get("price"),
+        original_price=item.get("original_price"),
+        sale_price=item.get("sale_price"),
+        discount_rate=item.get("discount_rate"),
+        rating=item.get("rating"),
+        review_count=item.get("review_count"),
+        currency=clean_text(item.get("currency")) or "KRW",
+        shade=clean_text(item.get("shade")),
+        description=clean_text(item.get("description")),
+        options=_clean_options(item.get("options")),
+        sold_out=item.get("sold_out"),
+        image_url=clean_text(item.get("image_url")),
+        source=clean_text(item.get("source")) or "oliveyoung",
+        source_url=clean_text(item.get("source_url")),
+        source_product_id=clean_text(item.get("goods_no")),
+        updated_at=clean_text(item.get("updated_at")),
+    )
+
+
+def _record_key(record: ProductSourceRecord) -> str:
+    if record.source_product_id:
+        return f"{record.source}:{record.source_product_id}"
+    if record.source_url:
+        return f"{record.source}:{record.source_url}"
+    return ":".join(
+        value
+        for value in [
+            record.source,
+            record.canonical_product_id,
+            record.source_brand_name,
+            record.product_name_ko,
+        ]
+        if value
+    )

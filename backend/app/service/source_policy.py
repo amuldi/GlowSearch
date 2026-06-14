@@ -16,6 +16,7 @@ class SourceProfile:
 
 DEFAULT_SOURCE_PROFILES: tuple[SourceProfile, ...] = (
     SourceProfile("oliveyoung", "Olive Young", 10, "retailer"),
+    SourceProfile("oliveyoung-global", "Olive Young Global", 15, "retailer"),
     SourceProfile("musinsa", "Musinsa", 30, "retailer"),
     SourceProfile("coupang", "Coupang", 35, "retailer"),
     SourceProfile("hwahae", "Hwahae", 45, "catalog"),

@@ -1,6 +1,7 @@
 {
   "products": [
     {
+      "canonical_product_id": "verified:romand-miffy-juicy-lasting-tint",
       "brand_en": "rom&nd",
       "brand_ko": "롬앤",
       "product_name_ko": "[1등틴트/NEW컬러] 롬앤 | 미피 더 쥬시 래스팅 틴트 기획/단품",
@@ -12,6 +13,7 @@
       "keywords": ["romand", "rom&nd", "롬앤", "틴트", "립"]
     },
     {
+      "canonical_product_id": "verified:romand-miffy-glasting-color-gloss",
       "brand_en": "rom&nd",
       "brand_ko": "롬앤",
       "product_name_ko": "[아일릿 원희 PICK] 롬앤 | 미피 글래스팅 컬러 글로스",
@@ -56,6 +58,7 @@
       "keywords": ["SHINGMULNARA", "식물나라", "선크림", "선 젤", "수분 선 젤"]
     },
     {
+      "canonical_product_id": "verified:mediheal-derma-toner-pad-vita",
       "brand_en": "MEDIHEAL",
       "brand_ko": "메디힐",
       "product_name_ko": "더마 토너 패드 100매 8종 (티트리/마데카소사이드/피디알엔/콜라겐/워터마이드/비타/피토엔자임/레티놀)",
@@ -128,6 +131,7 @@
       "keywords": ["OLENS", "오렌즈", "글로이 티어 렌즈 그레이", "글로이 티어 그레이", "Glowy Tear Gray", "글로이티어 원데이 그레이"]
     },
     {
+      "canonical_product_id": "verified:the-saem-cover-perfection-tip-concealer-clear-beige",
       "brand_en": "the SAEM",
       "brand_ko": "더샘",
       "product_name_ko": "커버 퍼펙션 팁 컨실러",
@@ -176,6 +180,7 @@
       "keywords": ["HWAHONG M", "화홍", "화홍 브러쉬 255", "화홍 브러시 255", "화홍엠 255"]
     },
     {
+      "canonical_product_id": "verified:hakuhodo-g5513-eye-shadow-brush",
       "brand_en": "HAKUHODO",
       "brand_ko": "하쿠호도",
       "product_name_ko": "G5513 Eye Shadow Brush Round & Flat",
@@ -189,6 +194,7 @@
       "keywords": ["HAKUHODO", "하쿠호도", "브러쉬 G5513", "브러시 G5513", "G5513"]
     },
     {
+      "canonical_product_id": "verified:hakuhodo-g5512-eye-shadow-brush-short",
       "brand_en": "HAKUHODO",
       "brand_ko": "하쿠호도",
       "product_name_ko": "G5512 Eye Shadow Brush Round & Flat Short",
@@ -202,6 +208,7 @@
       "keywords": ["HAKUHODO", "하쿠호도", "브러쉬 G5512", "브러시 G5512", "G5512"]
     },
     {
+      "canonical_product_id": "verified:hakuhodo-s191-eyeliner-brush-round",
       "brand_en": "HAKUHODO",
       "brand_ko": "하쿠호도",
       "product_name_ko": "S191 Eyeliner Brush Round",
@@ -228,6 +235,7 @@
       "keywords": ["ANCCI", "안씨", "안씨에보니 42", "에보니 42", "ebony 42"]
     },
     {
+      "canonical_product_id": "verified:jungsaemmool-artist-kohl-pen-liner",
       "brand_en": "JUNGSAEMMOOL",
       "brand_ko": "정샘물",
       "product_name_ko": "정샘물 아티스트 콜 펜 라이너",
@@ -276,6 +284,7 @@
       "keywords": ["EITHER&", "이더앤", "듀이시럽틴트 5번", "듀이 시럽 틴트 5번", "05 이더웨이", "이더웨이"]
     },
     {
+      "canonical_product_id": "verified:mixsoon-hyalraebae-pore-blurring-cream-50ml",
       "brand_en": "mixsoon",
       "brand_ko": "믹순",
       "product_name_ko": "믹순 히알레배 포어 블러링 크림 50ml",

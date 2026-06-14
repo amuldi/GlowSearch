@@ -777,6 +777,7 @@ function sourceLinksForProduct(product: Product) {
 function sourceLabel(sourceInfo: { source: string; source_label?: string | null }) {
   if (sourceInfo.source_label) return sourceInfo.source_label;
   if (sourceInfo.source === "oliveyoung" || sourceInfo.source.startsWith("oliveyoung:")) return "Olive Young";
+  if (sourceInfo.source === "oliveyoung-global" || sourceInfo.source.startsWith("oliveyoung-global:")) return "Olive Young Global";
   if (sourceInfo.source === "musinsa" || sourceInfo.source.startsWith("musinsa:")) return "Musinsa";
   if (sourceInfo.source === "official" || sourceInfo.source.startsWith("official:")) return "Official brand";
   if (sourceInfo.source === "barcode" || sourceInfo.source.startsWith("barcode:")) return "Barcode/GTIN";

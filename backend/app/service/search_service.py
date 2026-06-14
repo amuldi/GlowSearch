@@ -1476,7 +1476,7 @@ class SearchService:
     ) -> tuple[ProductSearchResult, ProductSearchResult]:
         def sort_key(product: ProductSearchResult) -> tuple[int, int]:
             source_priority = product.source_priority if product.source_priority is not None else 1000
-            return (product.quality_score, -source_priority)
+            return (-source_priority, product.quality_score)
 
         if sort_key(right) > sort_key(left):
             return right, left
@@ -1537,6 +1537,8 @@ class SearchService:
         sources = {product.source, *(offer.source for offer in product.offers)}
         if not any(cls._source_matches(source, "musinsa") for source in sources):
             missing.append("musinsa_source")
+        if not any(cls._source_matches(source, "oliveyoung-global") for source in sources):
+            missing.append("oliveyoung_global_source")
         if not any(cls._source_matches(source, "official") for source in sources):
             missing.append("official_source")
         return list(dict.fromkeys(missing))

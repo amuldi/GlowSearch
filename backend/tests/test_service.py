@@ -210,6 +210,15 @@ class MultiSourceSameProductCollector:
             ProductSourceRecord(
                 source_brand_name="BRTC",
                 product_name_ko="제품",
+                product_name_en="Product",
+                regular_price=22,
+                source="oliveyoung-global",
+                source_url="https://global.oliveyoung.example/products/1",
+                source_product_id="global-1",
+            ),
+            ProductSourceRecord(
+                source_brand_name="BRTC",
+                product_name_ko="제품",
                 regular_price=23000,
                 source="musinsa",
                 source_url="https://musinsa.example/products/1",
@@ -1387,14 +1396,21 @@ async def test_search_service_merges_verified_source_offers_for_same_product(tmp
     assert response.count == 1
     result = response.results[0]
     assert result.source == "oliveyoung"
-    assert [offer.source for offer in result.offers] == ["oliveyoung", "official", "musinsa"]
+    assert [offer.source for offer in result.offers] == [
+        "oliveyoung",
+        "oliveyoung-global",
+        "official",
+        "musinsa",
+    ]
     assert [offer.source_label for offer in result.offers] == [
         "Olive Young",
+        "Olive Young Global",
         "Official brand",
         "Musinsa",
     ]
     assert all(offer.source_url for offer in result.offers)
     assert "external" not in [offer.source for offer in result.offers]
+    assert "oliveyoung_global_source" not in result.enrichment_missing_fields
     assert "미확인" not in result.model_dump_json()
     assert "Unknown" not in result.model_dump_json()
     assert "N/A" not in result.model_dump_json()

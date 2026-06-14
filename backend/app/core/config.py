@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     result_source_prefixes: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "oliveyoung",
+            "oliveyoung-global",
             "official",
             "musinsa",
             "coupang",

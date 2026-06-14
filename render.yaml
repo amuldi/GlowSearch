@@ -20,7 +20,7 @@ services:
       - key: GLOWSEARCH_MANAGED_SCRAPING_TIME_BUDGET_SECONDS
         value: 4.0
       - key: GLOWSEARCH_RESULT_SOURCE_PREFIXES
-        value: oliveyoung,official,musinsa,coupang,hwahae,glowpick,fudejapan,managed,barcode,discovery,external
+        value: oliveyoung,oliveyoung-global,official,musinsa,coupang,hwahae,glowpick,fudejapan,managed,barcode,discovery,external
       - key: GLOWSEARCH_DETAIL_ENRICHMENT_ENABLED
         value: false
       - key: GLOWSEARCH_MAX_RESULTS
