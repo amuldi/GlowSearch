@@ -17,7 +17,8 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 
 | 항목 | URL |
 | --- | --- |
-| Frontend | [https://frontend-plum-six-32.vercel.app/](https://frontend-plum-six-32.vercel.app/) |
+| Frontend | [https://glow-search.vercel.app/](https://glow-search.vercel.app/) |
+| Latest Vercel deployment | [https://glow-search-gn3izzytz-amuldis-projects.vercel.app/](https://glow-search-gn3izzytz-amuldis-projects.vercel.app/) |
 | Backend health | [https://glowsearch-backend.onrender.com/health](https://glowsearch-backend.onrender.com/health) |
 | Search API 예시 | [https://glowsearch-backend.onrender.com/search?q=%EB%A1%9C%EC%85%98&limit=4](https://glowsearch-backend.onrender.com/search?q=%EB%A1%9C%EC%85%98&limit=4) |
 

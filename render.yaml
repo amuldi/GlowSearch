@@ -98,4 +98,4 @@ services:
       - key: GLOWSEARCH_PRODUCT_INDEX_DETAIL_ENRICHMENT_MAX_RECORDS
         value: 12
       - key: GLOWSEARCH_CORS_ORIGINS
-        value: http://localhost:3000,https://frontend-plum-six-32.vercel.app
+        value: http://localhost:3000,https://glow-search.vercel.app,https://frontend-plum-six-32.vercel.app
