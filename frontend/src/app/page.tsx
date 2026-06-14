@@ -644,19 +644,24 @@ function ProductCard({ product }: { product: Product }) {
           </button>
         </div>
         <div>
+          {(product.brand_ko || product.brand_en) ? (
+            <div className="mb-2 min-w-0">
+              <div className="text-[11px] font-medium text-neutral-500">브랜드</div>
+              <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                {product.brand_ko ? (
+                  <span className="whitespace-normal break-words text-sm font-bold leading-5 text-rosewood">
+                    {product.brand_ko}
+                  </span>
+                ) : null}
+                {product.brand_en ? (
+                  <span className="whitespace-normal break-words text-xs font-semibold leading-4 text-neutral-700">
+                    EN {product.brand_en}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <dl className="min-w-0 space-y-1">
-            {product.brand_ko ? (
-              <div>
-                <dt className="text-[11px] font-medium text-neutral-500">브랜드명</dt>
-                <dd className="whitespace-normal break-words text-sm font-bold leading-5 text-rosewood">{product.brand_ko}</dd>
-              </div>
-            ) : null}
-            {product.brand_en ? (
-              <div>
-                <dt className="text-[11px] font-medium text-neutral-500">영문 브랜드명</dt>
-                <dd className="whitespace-normal break-words text-xs font-medium leading-4 text-neutral-700">{product.brand_en}</dd>
-              </div>
-            ) : null}
             {product.product_name_ko ? (
               <div>
               <dt className="text-[11px] font-medium text-neutral-500">제품명</dt>

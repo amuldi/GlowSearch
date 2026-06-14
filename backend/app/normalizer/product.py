@@ -2,7 +2,7 @@ import re
 
 from app.models.product import ProductSearchResult, ProductSourceRecord
 from app.normalizer.brand import BrandAlias, BrandMatch, BrandResolver
-from app.normalizer.text import clean_text, has_hangul, normalize_image_url
+from app.normalizer.text import clean_text, has_hangul, has_latin, normalize_image_url
 
 
 class ProductNormalizer:
@@ -14,7 +14,7 @@ class ProductNormalizer:
         brand_ko = self._brand_ko(record)
         brand_en = self._brand_en(record)
         product_name_ko = clean_text(record.product_name_ko)
-        product_name_en = clean_text(record.product_name_en)
+        product_name_en = self._product_name_en(record)
         original_price = record.original_price or record.regular_price
         sale_price = record.sale_price
         display_price = sale_price if sale_price is not None else original_price
@@ -110,6 +110,16 @@ class ProductNormalizer:
             record.source_brand_name,
             record.product_name_ko,
         )
+
+    @staticmethod
+    def _product_name_en(record: ProductSourceRecord) -> str | None:
+        source_product_name_en = clean_text(record.product_name_en)
+        if source_product_name_en:
+            return source_product_name_en
+        product_name = clean_text(record.product_name_ko)
+        if product_name and has_latin(product_name) and not has_hangul(product_name):
+            return product_name
+        return None
 
     @staticmethod
     def _quality_score(

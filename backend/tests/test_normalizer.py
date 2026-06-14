@@ -216,6 +216,29 @@ def test_product_normalizer_maps_english_brand_from_registry_only(tmp_path) -> N
     assert result.product_name_en is None
 
 
+def test_product_normalizer_keeps_latin_only_source_name_as_english_product_name(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"HAKUHODO","aliases":["하쿠호도"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    normalizer = ProductNormalizer(
+        BrandResolver(registry_path),
+        base_url="https://www.oliveyoung.co.kr",
+    )
+
+    result = normalizer.normalize(
+        ProductSourceRecord(
+            source_brand_name="하쿠호도",
+            product_name_ko="S191 Eyeliner Brush Round",
+            source="official",
+            source_url="https://example.test/s191",
+        )
+    )
+
+    assert result.product_name_en == "S191 Eyeliner Brush Round"
+
+
 def test_product_normalizer_expands_short_korean_subbrand_alias(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text(
