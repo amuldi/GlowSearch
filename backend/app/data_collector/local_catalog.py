@@ -44,6 +44,9 @@ class LocalVerifiedCatalogCollector:
                 continue
             records.append(
                 ProductSourceRecord(
+                    canonical_product_id=clean_text(
+                        item.get("canonical_product_id") or item.get("canonical_id")
+                    ),
                     source_brand_name=clean_text(item.get("brand_ko") or item.get("brand_en")),
                     source_brand_name_en=clean_text(item.get("brand_en")),
                     product_name_ko=clean_text(item.get("product_name_ko")),

@@ -493,6 +493,7 @@ class SQLiteProductIndexStore:
             CREATE TABLE IF NOT EXISTS products (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 record_key TEXT NOT NULL UNIQUE,
+                canonical_product_id TEXT,
                 source TEXT NOT NULL,
                 source_product_id TEXT,
                 category TEXT,
@@ -524,6 +525,7 @@ class SQLiteProductIndexStore:
         self._ensure_columns(
             "products",
             {
+                "canonical_product_id": "TEXT",
                 "category": "TEXT",
                 "source_brand_name_en": "TEXT",
                 "product_name_en": "TEXT",
@@ -673,6 +675,7 @@ class SQLiteProductIndexStore:
             """
             INSERT INTO products(
                 record_key,
+                canonical_product_id,
                 source,
                 source_product_id,
                 category,
@@ -699,8 +702,9 @@ class SQLiteProductIndexStore:
                 last_refreshed_at,
                 source_updated_at
             )
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(record_key) DO UPDATE SET
+                canonical_product_id = COALESCE(excluded.canonical_product_id, products.canonical_product_id),
                 source = excluded.source,
                 source_product_id = COALESCE(excluded.source_product_id, products.source_product_id),
                 category = COALESCE(excluded.category, products.category),
@@ -728,6 +732,7 @@ class SQLiteProductIndexStore:
             """,
             (
                 record_key,
+                record.canonical_product_id,
                 record.source,
                 record.source_product_id,
                 record.category,
@@ -976,6 +981,7 @@ class SQLiteProductIndexStore:
 
 def _row_to_record(row: sqlite3.Row) -> ProductSourceRecord:
     return ProductSourceRecord(
+        canonical_product_id=row["canonical_product_id"],
         category=row["category"],
         source_brand_name=row["source_brand_name"],
         source_brand_name_en=row["source_brand_name_en"],
@@ -1022,6 +1028,7 @@ def _search_text(record: ProductSourceRecord) -> str:
             for value in [
                 record.source_brand_name,
                 record.source_brand_name_en,
+                record.canonical_product_id,
                 record.product_name_ko,
                 record.product_name_en,
                 record.category,

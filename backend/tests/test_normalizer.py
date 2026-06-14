@@ -127,6 +127,7 @@ def test_product_normalizer_preserves_nulls(tmp_path) -> None:
     )
 
     assert result.model_dump() == {
+        "canonical_product_id": None,
         "brand_ko": "한글브랜드",
         "brand_en": None,
         "product_name_ko": "제품",
@@ -156,6 +157,7 @@ def test_product_normalizer_preserves_nulls(tmp_path) -> None:
             "price",
             "image_url",
         ],
+        "offers": [],
         "updated_at": None,
     }
 
@@ -189,6 +191,8 @@ def test_product_normalizer_uses_source_english_fields_without_fallback_text(tmp
     assert result.product_name_en == "Source Product Name"
     assert result.quality_score == 110
     assert result.enrichment_missing_fields == []
+    assert result.offers[0].source == "official"
+    assert result.offers[0].source_url == "https://example.test/product"
     assert "미확인" not in json.dumps(result.model_dump(), ensure_ascii=False)
 
 

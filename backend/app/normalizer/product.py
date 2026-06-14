@@ -1,6 +1,6 @@
 import re
 
-from app.models.product import ProductSearchResult, ProductSourceRecord
+from app.models.product import ProductOffer, ProductSearchResult, ProductSourceRecord
 from app.normalizer.brand import BrandAlias, BrandMatch, BrandResolver
 from app.normalizer.text import clean_text, has_hangul, has_latin, normalize_image_url
 
@@ -38,6 +38,7 @@ class ProductNormalizer:
             image_url=record.image_url,
         )
         return ProductSearchResult(
+            canonical_product_id=clean_text(record.canonical_product_id),
             brand_ko=brand_ko,
             brand_en=brand_en,
             product_name_ko=product_name_ko,
@@ -60,6 +61,7 @@ class ProductNormalizer:
             source=record.source,
             quality_score=quality_score,
             enrichment_missing_fields=enrichment_missing_fields,
+            offers=self._offers(record, display_price=display_price, original_price=original_price),
             updated_at=record.updated_at,
         )
 
@@ -120,6 +122,31 @@ class ProductNormalizer:
         if product_name and has_latin(product_name) and not has_hangul(product_name):
             return product_name
         return None
+
+    def _offers(
+        self,
+        record: ProductSourceRecord,
+        *,
+        display_price: int | None,
+        original_price: int | None,
+    ) -> list[ProductOffer]:
+        source_url = normalize_image_url(record.source_url, self._base_url)
+        if not source_url:
+            return []
+        return [
+            ProductOffer(
+                source=record.source,
+                source_url=source_url,
+                source_product_id=clean_text(record.source_product_id),
+                price=display_price,
+                original_price=original_price,
+                sale_price=record.sale_price,
+                currency=clean_text(record.currency) or "KRW",
+                image_url=normalize_image_url(record.image_url, self._base_url),
+                sold_out=record.sold_out,
+                updated_at=record.updated_at,
+            )
+        ]
 
     @staticmethod
     def _quality_score(

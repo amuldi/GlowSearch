@@ -1,4 +1,20 @@
+export type ProductOffer = {
+  source: string;
+  source_label?: string | null;
+  source_priority?: number | null;
+  source_url: string;
+  source_product_id?: string | null;
+  price?: number | null;
+  original_price?: number | null;
+  sale_price?: number | null;
+  currency?: string | null;
+  image_url?: string | null;
+  sold_out?: boolean | null;
+  updated_at?: string | null;
+};
+
 export type Product = {
+  canonical_product_id?: string | null;
   brand_ko: string | null;
   brand_en: string | null;
   product_name_ko: string | null;
@@ -23,6 +39,7 @@ export type Product = {
   source_priority?: number | null;
   quality_score?: number;
   enrichment_missing_fields?: string[];
+  offers?: ProductOffer[];
   updated_at?: string | null;
 };
 

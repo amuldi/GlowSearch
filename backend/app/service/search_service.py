@@ -12,7 +12,7 @@ from app.data_collector.base import ProductCollector, SearchCriteria, SourceUnav
 from app.ingestion.oliveyoung_pipeline import IngestionSummary, OliveYoungIngestionPipeline
 from app.indexing.agents import ProductIngestionAgent, SourceDiscoveryAgent
 from app.indexing.store import ProductIndexStore
-from app.models.product import ProductSearchResult, ProductSourceRecord, SearchResponse
+from app.models.product import ProductOffer, ProductSearchResult, ProductSourceRecord, SearchResponse
 from app.normalizer.brand import BrandMatch
 from app.normalizer.product import ProductNormalizer
 from app.normalizer.text import clean_text
@@ -1382,17 +1382,16 @@ class SearchService:
 
     @classmethod
     def _record_key(cls, record: ProductSourceRecord) -> str:
-        if record.source_product_id and (
-            record.source == "oliveyoung" or record.source.startswith("oliveyoung:")
-        ):
-            return f"oliveyoung:{record.source_product_id}"
+        if record.source_product_id:
+            return f"{record.source}:{record.source_product_id}"
+        source_url_key = cls._key(record.source_url)
+        if source_url_key:
+            return f"{record.source}:{source_url_key}"
         brand_key = cls._key(record.source_brand_name)
         name_key = cls._key(record.product_name_ko)
         if brand_key and name_key:
-            return f"product:{brand_key}:{name_key}"
-        if record.source_product_id:
-            return f"{record.source}:{record.source_product_id}"
-        return f"{record.source}:{cls._key(record.source_url)}"
+            return f"{record.source}:product:{brand_key}:{name_key}"
+        return f"{record.source}:{name_key}"
 
     @staticmethod
     def _only_core_complete(results: list[ProductSearchResult]) -> list[ProductSearchResult]:
@@ -1407,37 +1406,189 @@ class SearchService:
     @classmethod
     def _dedupe_results(cls, results: list[ProductSearchResult]) -> list[ProductSearchResult]:
         deduped: list[ProductSearchResult] = []
-        seen: set[str] = set()
+        index_by_key: dict[str, int] = {}
         for product in results:
-            brand_key = cls._key(product.brand_en)
-            name_key = cls._key(product.product_name_ko)
-            if not brand_key or not name_key:
+            key = cls._product_merge_key(product)
+            if not key:
                 deduped.append(product)
                 continue
-            key = f"{brand_key}:{name_key}"
-            if key in seen:
+            existing_index = index_by_key.get(key)
+            if existing_index is None:
+                index_by_key[key] = len(deduped)
+                deduped.append(product)
                 continue
-            seen.add(key)
-            deduped.append(product)
+            deduped[existing_index] = cls._merge_duplicate_product(
+                deduped[existing_index],
+                product,
+            )
         return deduped
+
+    @classmethod
+    def _product_merge_key(cls, product: ProductSearchResult) -> str | None:
+        canonical_key = cls._key(product.canonical_product_id)
+        if canonical_key:
+            return f"canonical:{canonical_key}"
+        brand_key = cls._key(product.brand_en) or cls._key(product.brand_ko)
+        name_key = cls._key(product.product_name_ko)
+        if not brand_key or not name_key:
+            return None
+        return f"{brand_key}:{name_key}"
+
+    @classmethod
+    def _merge_duplicate_product(
+        cls,
+        existing: ProductSearchResult,
+        incoming: ProductSearchResult,
+    ) -> ProductSearchResult:
+        representative, supplemental = cls._preferred_representative(existing, incoming)
+        offers = cls._merge_offers([*existing.offers, *incoming.offers])
+        update: dict[str, object] = {
+            "offers": offers,
+            "quality_score": max(existing.quality_score, incoming.quality_score),
+        }
+        for field in [
+            "brand_ko",
+            "brand_en",
+            "canonical_product_id",
+            "product_name_ko",
+            "product_name_en",
+            "category",
+            "rating",
+            "review_count",
+            "description",
+            "options",
+            "updated_at",
+        ]:
+            if getattr(representative, field) is None and getattr(supplemental, field) is not None:
+                update[field] = getattr(supplemental, field)
+        merged = representative.model_copy(update=update)
+        return merged.model_copy(
+            update={
+                "enrichment_missing_fields": cls._source_coverage_missing_fields(merged),
+            }
+        )
+
+    @classmethod
+    def _preferred_representative(
+        cls,
+        left: ProductSearchResult,
+        right: ProductSearchResult,
+    ) -> tuple[ProductSearchResult, ProductSearchResult]:
+        def sort_key(product: ProductSearchResult) -> tuple[int, int]:
+            source_priority = product.source_priority if product.source_priority is not None else 1000
+            return (product.quality_score, -source_priority)
+
+        if sort_key(right) > sort_key(left):
+            return right, left
+        return left, right
+
+    @classmethod
+    def _merge_offers(cls, offers: list[ProductOffer]) -> list[ProductOffer]:
+        merged: dict[str, ProductOffer] = {}
+        for offer in offers:
+            if not offer.source_url:
+                continue
+            key = cls._offer_key(offer)
+            existing = merged.get(key)
+            if existing is None or cls._offer_completeness(offer) > cls._offer_completeness(existing):
+                merged[key] = offer
+        return sorted(
+            merged.values(),
+            key=lambda offer: (
+                offer.source_priority if offer.source_priority is not None else 1000,
+                offer.source,
+                offer.source_url,
+            ),
+        )
+
+    @staticmethod
+    def _offer_key(offer: ProductOffer) -> str:
+        if offer.source_product_id:
+            return f"{offer.source}:{offer.source_product_id}"
+        return f"{offer.source}:{offer.source_url}"
+
+    @staticmethod
+    def _offer_completeness(offer: ProductOffer) -> int:
+        score = 0
+        for value in [
+            offer.source_url,
+            offer.source_product_id,
+            offer.price,
+            offer.original_price,
+            offer.sale_price,
+            offer.image_url,
+            offer.updated_at,
+        ]:
+            if value is not None:
+                score += 1
+        return score
+
+    @classmethod
+    def _source_coverage_missing_fields(cls, product: ProductSearchResult) -> list[str]:
+        missing: list[str] = []
+        if not product.brand_en:
+            missing.append("brand_en")
+        if not product.product_name_en:
+            missing.append("product_name_en")
+        if product.price is None:
+            missing.append("price")
+        if not product.image_url:
+            missing.append("image_url")
+        sources = {product.source, *(offer.source for offer in product.offers)}
+        if not any(cls._source_matches(source, "musinsa") for source in sources):
+            missing.append("musinsa_source")
+        if not any(cls._source_matches(source, "official") for source in sources):
+            missing.append("official_source")
+        return list(dict.fromkeys(missing))
 
     def _filter_allowed_sources(
         self,
         results: list[ProductSearchResult],
     ) -> list[ProductSearchResult]:
-        return [
-            product
-            for product in results
-            if self._source_policy.allows(product.source)
-        ]
+        filtered: list[ProductSearchResult] = []
+        for product in results:
+            if not self._source_policy.allows(product.source):
+                continue
+            updated = product.model_copy(
+                update={
+                    "offers": [
+                        offer
+                        for offer in product.offers
+                        if self._source_policy.allows(offer.source)
+                    ]
+                }
+            )
+            filtered.append(
+                updated.model_copy(
+                    update={"enrichment_missing_fields": self._source_coverage_missing_fields(updated)}
+                )
+            )
+        return filtered
 
     def _with_source_metadata(self, product: ProductSearchResult) -> ProductSearchResult:
-        return product.model_copy(
+        offers = [
+            offer.model_copy(
+                update={
+                    "source_label": self._source_policy.label(offer.source),
+                    "source_priority": self._source_policy.priority(offer.source),
+                }
+            )
+            for offer in product.offers
+        ]
+        updated = product.model_copy(
             update={
                 "source_label": self._source_policy.label(product.source),
                 "source_priority": self._source_policy.priority(product.source),
+                "offers": offers,
             }
         )
+        return updated.model_copy(
+            update={"enrichment_missing_fields": self._source_coverage_missing_fields(updated)}
+        )
+
+    @staticmethod
+    def _source_matches(source: str | None, prefix: str) -> bool:
+        return source == prefix or bool(source and source.startswith(f"{prefix}:"))
 
     @classmethod
     def _rank_query_matches(

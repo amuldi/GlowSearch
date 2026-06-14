@@ -194,6 +194,111 @@ class DuplicateFakeCollector:
         ]
 
 
+class MultiSourceSameProductCollector:
+    name = "multi-source"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        return [
+            ProductSourceRecord(
+                source_brand_name="BRTC",
+                product_name_ko="제품",
+                regular_price=24000,
+                source="oliveyoung",
+                source_url="https://oliveyoung.example/products/1",
+                source_product_id="oliveyoung-1",
+            ),
+            ProductSourceRecord(
+                source_brand_name="BRTC",
+                product_name_ko="제품",
+                regular_price=23000,
+                source="musinsa",
+                source_url="https://musinsa.example/products/1",
+                source_product_id="musinsa-1",
+            ),
+            ProductSourceRecord(
+                source_brand_name="BRTC",
+                product_name_ko="제품",
+                regular_price=25000,
+                source="official",
+                source_url="https://official.example/products/1",
+                source_product_id="official-1",
+            ),
+            ProductSourceRecord(
+                source_brand_name="BRTC",
+                product_name_ko="제품",
+                regular_price=21000,
+                source="external",
+                source_product_id="external-without-url",
+            ),
+        ][:limit]
+
+
+class MusinsaFallbackCollector:
+    name = "musinsa"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        return [
+            ProductSourceRecord(
+                source_brand_name="BRTC",
+                product_name_ko="무신사 단독 제품",
+                regular_price=18000,
+                source="musinsa",
+                source_url="https://musinsa.example/products/fallback",
+                source_product_id="musinsa-fallback-1",
+            )
+        ][:limit]
+
+
+class SimilarButDistinctCollector:
+    name = "similar-distinct"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        return [
+            ProductSourceRecord(
+                source_brand_name="BRTC",
+                product_name_ko="제품 토너",
+                regular_price=18000,
+                source="oliveyoung",
+                source_url="https://oliveyoung.example/products/toner",
+                source_product_id="toner-1",
+            ),
+            ProductSourceRecord(
+                source_brand_name="BRTC",
+                product_name_ko="제품 토너 패드",
+                regular_price=22000,
+                source="musinsa",
+                source_url="https://musinsa.example/products/toner-pad",
+                source_product_id="toner-pad-1",
+            ),
+        ][:limit]
+
+
+class CanonicalMappedCollector:
+    name = "canonical-mapped"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        return [
+            ProductSourceRecord(
+                canonical_product_id="verified-product-1",
+                source_brand_name="BRTC",
+                product_name_ko="제품 기획세트",
+                regular_price=24000,
+                source="oliveyoung",
+                source_url="https://oliveyoung.example/products/canonical",
+                source_product_id="canonical-oliveyoung",
+            ),
+            ProductSourceRecord(
+                canonical_product_id="verified-product-1",
+                source_brand_name="BRTC",
+                product_name_ko="제품 단품",
+                regular_price=23000,
+                source="musinsa",
+                source_url="https://musinsa.example/products/canonical",
+                source_product_id="canonical-musinsa",
+            ),
+        ][:limit]
+
+
 class LimitAwareCollector:
     name = "limited"
 
@@ -1262,6 +1367,100 @@ async def test_search_service_dedupes_same_product_from_later_sources(tmp_path) 
     assert response.count == 1
     assert response.results[0].source == "oliveyoung"
     assert response.results[0].price == 24000
+
+
+@pytest.mark.asyncio
+async def test_search_service_merges_verified_source_offers_for_same_product(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    service = SearchService(
+        collectors=[MultiSourceSameProductCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search("제품", SearchCriteria(limit=24))
+
+    assert response.count == 1
+    result = response.results[0]
+    assert result.source == "oliveyoung"
+    assert [offer.source for offer in result.offers] == ["oliveyoung", "official", "musinsa"]
+    assert [offer.source_label for offer in result.offers] == [
+        "Olive Young",
+        "Official brand",
+        "Musinsa",
+    ]
+    assert all(offer.source_url for offer in result.offers)
+    assert "external" not in [offer.source for offer in result.offers]
+    assert "미확인" not in result.model_dump_json()
+    assert "Unknown" not in result.model_dump_json()
+    assert "N/A" not in result.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_search_service_uses_musinsa_when_oliveyoung_is_empty(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    service = SearchService(
+        collectors=[EmptyCollector(), MusinsaFallbackCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search("무신사 단독 제품", SearchCriteria(limit=24))
+
+    assert response.count == 1
+    assert response.results[0].source == "musinsa"
+    assert response.results[0].offers[0].source_label == "Musinsa"
+
+
+@pytest.mark.asyncio
+async def test_search_service_does_not_merge_distinct_similar_products(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    service = SearchService(
+        collectors=[SimilarButDistinctCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search("제품 토너", SearchCriteria(limit=24))
+
+    assert response.count == 2
+    assert {result.product_name_ko for result in response.results} == {
+        "제품 토너",
+        "제품 토너 패드",
+    }
+    assert all(len(result.offers) == 1 for result in response.results)
+
+
+@pytest.mark.asyncio
+async def test_search_service_merges_verified_canonical_cross_source_mapping(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    service = SearchService(
+        collectors=[CanonicalMappedCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search("제품", SearchCriteria(limit=24))
+
+    assert response.count == 1
+    assert response.results[0].canonical_product_id == "verified-product-1"
+    assert [offer.source for offer in response.results[0].offers] == ["oliveyoung", "musinsa"]
 
 
 @pytest.mark.asyncio
