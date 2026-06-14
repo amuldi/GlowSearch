@@ -655,7 +655,7 @@ function ProductCard({ product }: { product: Product }) {
                 ) : null}
                 {product.brand_en ? (
                   <span className="whitespace-normal break-words text-xs font-semibold leading-4 text-neutral-700">
-                    EN {product.brand_en}
+                    {product.brand_en}
                   </span>
                 ) : null}
               </div>
