@@ -60,6 +60,20 @@ class EditorFakeCollector:
                     source_product_id="no-link-1",
                 )
             ]
+        if "테스트" in keyword:
+            return [
+                ProductSourceRecord(
+                    source_brand_name="헤라",
+                    source_brand_name_en="HERA",
+                    product_name_ko="헤라 테스트 13 Colors",
+                    product_name_en=None,
+                    regular_price=60000,
+                    image_url="https://example.test/hera-colors.jpg",
+                    source="oliveyoung",
+                    source_url="https://oliveyoung.example/products/hera-colors",
+                    source_product_id="hera-colors-1",
+                )
+            ]
         return [
             ProductSourceRecord(
                 source_brand_name="헤라",
@@ -207,6 +221,16 @@ async def test_editor_batch_does_not_generate_english_product_name(tmp_path) -> 
     response = await service.batch("롬앤 쉐딩 #그레이쿨", limit=5)
 
     assert response.items[0].candidates[0].product.product_name_en is None
+
+
+@pytest.mark.asyncio
+async def test_editor_batch_does_not_confirm_candidate_without_requested_shade(tmp_path) -> None:
+    service = _editor_service(tmp_path)
+
+    response = await service.batch("헤라 테스트 #13N1", limit=5)
+
+    assert response.items[0].status == "후보 있음"
+    assert response.items[0].candidates[0].product.shade is None
 
 
 @pytest.mark.asyncio

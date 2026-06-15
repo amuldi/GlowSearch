@@ -143,6 +143,58 @@ class EnglishProductNameCollector:
         ]
 
 
+class LooseBrandCategoryCollector:
+    name = "loose-brand-category"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        return [
+            ProductSourceRecord(
+                source_brand_name="페리페라",
+                source_brand_name_en="peripera",
+                product_name_ko="[6월 올영픽] 페리페라 스피디 스키니 브로우 8 Colors",
+                regular_price=5700,
+                source="oliveyoung",
+                source_url="https://oliveyoung.example/products/brow",
+                source_product_id="peripera-brow",
+            ),
+            ProductSourceRecord(
+                source_brand_name="페리페라",
+                source_brand_name_en="peripera",
+                product_name_ko="페리페라 무드 글로이 틴트 27 Colors",
+                regular_price=9150,
+                source="oliveyoung",
+                source_url="https://oliveyoung.example/products/glowy-tint",
+                source_product_id="peripera-glowy-tint",
+            ),
+        ]
+
+
+class RomandTintOnlyCollector:
+    name = "romand-tint-only"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        return [
+            ProductSourceRecord(
+                source_brand_name="롬앤",
+                source_brand_name_en="rom&nd",
+                product_name_ko="롬앤 미피 더 쥬시 래스팅 틴트",
+                regular_price=13000,
+                source="oliveyoung",
+                source_url="https://oliveyoung.example/products/romand-tint",
+                source_product_id="romand-tint",
+            ),
+            ProductSourceRecord(
+                source_brand_name="롬앤",
+                source_brand_name_en="rom&nd",
+                product_name_ko="롬앤 미피 글래스팅 컬러 글로스",
+                regular_price=13000,
+                source="oliveyoung",
+                source_url="https://oliveyoung.example/products/romand-gloss",
+                source_product_id="romand-gloss",
+            ),
+        ]
+
+
 class SoldOutCollector:
     name = "sold-out"
 
@@ -1414,6 +1466,53 @@ async def test_search_service_merges_verified_source_offers_for_same_product(tmp
     assert "미확인" not in result.model_dump_json()
     assert "Unknown" not in result.model_dump_json()
     assert "N/A" not in result.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_search_service_filters_loose_brand_category_matches_for_specific_query(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"peripera","aliases":["페리페라"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    service = SearchService(
+        collectors=[LooseBrandCategoryCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search(
+        "페리페라 포근 픽싱 틴트 19호",
+        SearchCriteria(limit=5),
+    )
+
+    assert response.results == []
+
+
+@pytest.mark.asyncio
+async def test_search_service_filters_wrong_category_for_color_query(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"rom&nd","aliases":["롬앤"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    service = SearchService(
+        collectors=[RomandTintOnlyCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search("롬앤 쉐딩 그레이쿨", SearchCriteria(limit=5))
+
+    assert response.results == []
 
 
 @pytest.mark.asyncio

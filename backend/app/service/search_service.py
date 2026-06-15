@@ -452,6 +452,8 @@ class SearchService:
             relevant, top_score = self._query_matches_in_source_order(filtered, product_query)
         else:
             relevant, top_score = self._rank_query_matches(filtered, product_query)
+        if top_score <= 0 and self._requires_strict_relevance(product_query):
+            return [], 0
         return relevant[: criteria.limit], top_score
 
     @staticmethod
@@ -1744,8 +1746,16 @@ class SearchService:
         if category_tokens and not all(token in haystack_key for token in category_tokens):
             return (0, 0, 0, -index)
         distinctive_tokens = cls._distinctive_tokens(product_query)
-        if distinctive_tokens and not any(token in haystack_key for token in distinctive_tokens):
-            return (0, 0, 0, -index)
+        if distinctive_tokens:
+            matched_distinctive_tokens = [
+                token for token in distinctive_tokens if token in haystack_key
+            ]
+            if len(distinctive_tokens) >= 2:
+                required_matches = max(2, len(distinctive_tokens) - 1)
+                if len(matched_distinctive_tokens) < required_matches:
+                    return (0, 0, 0, -index)
+            elif not matched_distinctive_tokens:
+                return (0, 0, 0, -index)
 
         score = 100 if query_key in haystack_key else 0
         for token in cls._tokens(product_query):
@@ -1768,6 +1778,10 @@ class SearchService:
             "패드",
             "컨실러",
             "섀딩",
+            "쉐딩",
+            "파우더",
+            "브로우",
+            "브로우카라",
             "브러시",
             "팔레트",
             "틴트",
@@ -1825,6 +1839,23 @@ class SearchService:
             if token_key in category_tokens or not token_key.isdigit():
                 keep.append(token)
         return clean_text(" ".join(keep)) or ""
+
+    @classmethod
+    def _requires_strict_relevance(cls, value: str) -> bool:
+        distinctive_tokens = cls._distinctive_tokens(value)
+        if len(distinctive_tokens) >= 2:
+            return True
+        category_tokens = cls._category_tokens(value)
+        color_tokens = cls._color_tokens(value)
+        return bool((distinctive_tokens or color_tokens) and category_tokens)
+
+    @classmethod
+    def _color_tokens(cls, value: str) -> list[str]:
+        return [
+            token_key
+            for token in cls._tokens(value)
+            if (token_key := cls._key(token)) and cls._is_color_token(token_key)
+        ]
 
     @classmethod
     def _can_use_verified_shortcut(cls, query: str, require_relevant: bool) -> bool:

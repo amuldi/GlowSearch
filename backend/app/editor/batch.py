@@ -54,7 +54,7 @@ class EditorBatchService:
         return EditorBatchItem(
             raw_text=parsed.raw_text,
             parsed=parsed,
-            status=_status(candidates),
+            status=_status(parsed, candidates),
             candidates=candidates,
         )
 
@@ -70,10 +70,13 @@ class EditorBatchService:
         return parsed.model_copy(update={"brand_en": brand_en})
 
 
-def _status(candidates: list[EditorProductCandidate]) -> EditorMatchStatus:
+def _status(
+    parsed: EditorParsedLine,
+    candidates: list[EditorProductCandidate],
+) -> EditorMatchStatus:
     if not candidates:
         return "수동 확인 필요"
-    if len(candidates) == 1:
+    if len(candidates) == 1 and _candidate_confirms_shade(parsed, candidates[0].product):
         return "확인됨"
     return "후보 있음"
 
@@ -131,7 +134,10 @@ def _candidate_score(parsed: EditorParsedLine, product: ProductSearchResult) -> 
                 if value
             )
         )
-        score += sum(35 for token in shade_tokens if token and token in shade_text)
+        matched_shades = sum(1 for token in shade_tokens if token and token in shade_text)
+        score += matched_shades * 45
+        if matched_shades == 0:
+            score -= 35
 
     return score
 
@@ -139,7 +145,6 @@ def _candidate_score(parsed: EditorParsedLine, product: ProductSearchResult) -> 
 def _passes_editor_relevance(parsed: EditorParsedLine, product: ProductSearchResult) -> bool:
     brand_query = _key(parsed.brand_query)
     product_tokens = [_key(token) for token in _tokens(parsed.product_query)]
-    shade_tokens = [_key(value) for value in [parsed.shade_code, parsed.shade_name] if value]
 
     brand_text = _key(
         " ".join(
@@ -164,14 +169,22 @@ def _passes_editor_relevance(parsed: EditorParsedLine, product: ProductSearchRes
         if matched_product_tokens < required_matches:
             return False
 
-    if shade_tokens and any(token in product_text for token in shade_tokens):
-        return True
-
     return bool(product_tokens or brand_query)
 
 
 def _has_source_link(product: ProductSearchResult) -> bool:
     return bool(product.source_url or any(offer.source_url for offer in product.offers))
+
+
+def _candidate_confirms_shade(
+    parsed: EditorParsedLine,
+    product: ProductSearchResult,
+) -> bool:
+    shade_tokens = [_key(value) for value in [parsed.shade_code, parsed.shade_name] if value]
+    if not shade_tokens:
+        return True
+    product_text = _product_match_text(product)
+    return all(token and token in product_text for token in shade_tokens)
 
 
 def _product_match_text(product: ProductSearchResult) -> str:

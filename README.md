@@ -33,7 +33,7 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 - 프론트 공식 운영 주소를 `https://glow-search.vercel.app`로 정리했습니다.
 - 이전에 쓰던 `https://frontend-plum-six-32.vercel.app`는 과거 Vercel 배포 주소로 남을 수 있지만, 현재 확인 기준은 공식 운영 주소입니다.
 - 최신 Vercel 고유 배포 URL은 `https://glow-search-2nkagaff5-amuldis-projects.vercel.app`입니다.
-- 백엔드 Render 배포는 `/health`의 `release_sha`가 `7622e71` 계열로 반영된 것을 확인했습니다.
+- 백엔드 Render 배포는 `/health`의 `release_sha`로 확인합니다. 2026-06-15 점검 시 로컬 HEAD와 운영 `release_sha`가 `7a247cc85650526b917a2584bbc30b29cb775348`로 일치했습니다.
 - Musinsa Beauty, Olive Young Global, 브랜드 공식몰을 source-specific JSON provider로 연결할 수 있는 설정을 추가했습니다.
 - `GLOWSEARCH_MUSINSA_API_ENABLED`, `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED`, `GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED`가 켜지고 각 provider base URL이 설정되면 해당 source가 live collector에 포함됩니다.
 - 현재 운영 환경에서는 위 provider URL이 아직 설정되지 않아 세 provider는 기본 비활성화 상태입니다. 무단 scraping이나 추측 URL 생성은 사용하지 않습니다.
@@ -46,6 +46,8 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 - `POST /editor/batch` API를 추가했습니다. 각 줄은 `raw_text`, `brand_query`, `product_query`, `shade_code`, `shade_name`, 후보 상품, 상태(`확인됨`, `후보 있음`, `수동 확인 필요`)로 반환됩니다.
 - 편집자 모드는 후보 선택, source 링크 확인, 한글 자막용/영문 자막용/YouTube 더보기란용/TSV 클립보드 복사를 지원합니다.
 - 확정 매칭을 반복 활용할 수 있도록 SQLite index schema에 `editor_confirmed_mappings` 테이블을 준비했습니다.
+- 편집자 모드는 shade가 입력된 상품 후보에서 source가 해당 shade를 확인하지 못하면 단일 후보라도 `확인됨`으로 올리지 않고 `후보 있음`으로 남깁니다.
+- 구체적인 상품명 토큰이 여러 개인 일반 검색은 브랜드/카테고리만 맞는 느슨한 후보를 제외해 오답 노출을 줄입니다.
 
 검증 결과:
 
@@ -465,6 +467,32 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - HTML/browser collector는 기본 비활성화되어 있습니다.
 - 운영에서는 공식 API, 제휴 데이터, managed scraping provider를 우선 검토합니다.
 - Musinsa Beauty, Olive Young Global, 브랜드 공식몰은 검증된 JSON/API provider URL이 설정된 경우에만 live collector로 연결합니다.
+
+## 운영 source 활성화 기준
+
+`GLOWSEARCH_RESULT_SOURCE_PREFIXES`는 결과에 허용할 source 이름 목록일 뿐이고, 실제 수집 adapter를 켜는 설정은 아닙니다. 운영에서 Musinsa Beauty, Olive Young Global, Official source를 실제로 붙이려면 각 provider가 GlowSearch 공통 상품 JSON을 반환하는 안전한 endpoint여야 하며, 아래처럼 `*_ENABLED=true`와 `*_BASE_URL`이 함께 설정되어야 합니다.
+
+```bash
+GLOWSEARCH_MUSINSA_API_ENABLED=true
+GLOWSEARCH_MUSINSA_API_BASE_URL=https://your-provider.example/musinsa/search
+
+GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED=true
+GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_BASE_URL=https://your-provider.example/oliveyoung-global/search
+
+GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED=true
+GLOWSEARCH_OFFICIAL_BRAND_API_BASE_URL=https://your-provider.example/official/search
+```
+
+provider 응답은 source가 확인한 값만 내려야 합니다. 특히 `product_name_en`, shade, 가격, 이미지, source URL은 자동 번역/추측으로 채우지 않습니다. provider가 없으면 해당 source는 `/diagnostics`에서 `false`로 표시되고, `enrichment_missing_fields`에 `musinsa_source`, `oliveyoung_global_source`, `official_source`, `product_name_en` 등이 남는 것이 정상입니다.
+
+운영 점검 명령:
+
+```bash
+curl https://glowsearch-backend.onrender.com/diagnostics
+curl "https://glowsearch-backend.onrender.com/search?q=%ED%8E%98%EB%A6%AC%ED%8E%98%EB%9D%BC%20%ED%8F%AC%EA%B7%BC%20%ED%94%BD%EC%8B%B1%20%ED%8B%B4%ED%8A%B8%2019%ED%98%B8&limit=5"
+```
+
+현재 verified catalog가 작으면 구조가 있어도 원하는 상품이 나오지 않습니다. source adapter를 켠 뒤에는 `search_gaps`와 seed query를 작은 batch로 반복 처리해 index를 채워야 합니다.
 
 ## 카탈로그 인덱싱 운영
 
