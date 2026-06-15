@@ -307,7 +307,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,#fff7f6_0%,#fbfffb_46%,#ffffff_100%)] px-4 py-7 text-ink sm:px-6 lg:px-8">
+    <main className="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,#fff7f6_0%,#fbfffb_46%,#ffffff_100%)] px-4 py-7 text-ink sm:px-6 lg:px-8">
       <section className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 pt-4 sm:pt-8">
         <div className="text-4xl font-extrabold text-rosewood sm:text-5xl">
           GlowSearch
@@ -572,7 +572,7 @@ function EditorBatchWorkspace() {
   };
 
   return (
-    <section className="mx-auto mt-8 w-full max-w-6xl px-4 sm:px-6 lg:px-0">
+    <section className="mx-auto mt-8 w-full max-w-6xl">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <div className="min-w-0 rounded-lg border border-blush/55 bg-white/92 p-4 shadow-soft">
           <label htmlFor="editor-batch-input" className="text-sm font-bold text-rosewood">
