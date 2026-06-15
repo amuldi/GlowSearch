@@ -625,7 +625,7 @@ function EditorBatchWorkspace() {
                 source URL이 있는 후보만 표시합니다.
               </p>
             </div>
-            <div className="flex min-w-0 flex-wrap gap-1.5 sm:justify-end">
+            <div className="grid min-w-0 grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:justify-end">
               {[
                 ["ko", "한글 자막"],
                 ["en", "영문 자막"],
@@ -638,7 +638,7 @@ function EditorBatchWorkspace() {
                   type="button"
                   onClick={() => copyEditorFormat(format as "ko" | "en" | "description" | "tsv" | "csv")}
                   disabled={!response}
-                  className="inline-flex min-w-0 items-center gap-1 rounded-full border border-line bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-700 transition hover:border-rose hover:bg-blush-soft hover:text-rosewood disabled:cursor-not-allowed disabled:opacity-40"
+                  className="inline-flex min-w-0 items-center justify-center gap-1 rounded-full border border-line bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-700 transition hover:border-rose hover:bg-blush-soft hover:text-rosewood disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {copiedFormat === format ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
                   {label}
