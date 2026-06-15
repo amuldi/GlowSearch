@@ -55,7 +55,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--text", default=EDITOR_SAMPLE_TEXT, help="Batch input text.")
     parser.add_argument("--limit", type=int, default=5, help="Candidate limit per editor line.")
-    parser.add_argument("--timeout", type=float, default=12.0, help="HTTP timeout seconds.")
+    parser.add_argument("--timeout", type=float, default=40.0, help="HTTP timeout seconds.")
     parser.add_argument(
         "--catalog-path",
         type=Path,

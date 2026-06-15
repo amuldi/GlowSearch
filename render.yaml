@@ -82,9 +82,9 @@ services:
       - key: GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_LIMIT
         value: 120
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP
-        value: false
+        value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT
-        value: 48
+        value: 24
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY
         value: 1
       - key: GLOWSEARCH_PRODUCT_INDEX_MAX_SEED_QUERIES
