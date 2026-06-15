@@ -1542,16 +1542,40 @@ class SearchService:
             "review_count",
             "description",
             "options",
+            "search_keywords",
             "updated_at",
         ]:
             if getattr(representative, field) is None and getattr(supplemental, field) is not None:
                 update[field] = getattr(supplemental, field)
+        merged_keywords = cls._merge_text_values(
+            existing.search_keywords,
+            incoming.search_keywords,
+        )
+        if merged_keywords:
+            update["search_keywords"] = merged_keywords
         merged = representative.model_copy(update=update)
         return merged.model_copy(
             update={
                 "enrichment_missing_fields": cls._source_coverage_missing_fields(merged),
             }
         )
+
+    @staticmethod
+    def _merge_text_values(
+        left: list[str] | None,
+        right: list[str] | None,
+    ) -> list[str]:
+        merged: list[str] = []
+        seen: set[str] = set()
+        for values in [left, right]:
+            for value in values or []:
+                text = value.strip()
+                key = SearchService._key(text)
+                if not text or key in seen:
+                    continue
+                seen.add(key)
+                merged.append(text)
+        return merged
 
     @classmethod
     def _preferred_representative(

@@ -19,6 +19,7 @@ class ProductSourceRecord(BaseModel):
     image_url: str | None = None
     description: str | None = None
     options: list[str] | None = None
+    search_keywords: list[str] | None = None
     sold_out: bool | None = None
     source: str
     source_url: str | None = None
@@ -59,6 +60,7 @@ class ProductSearchResult(BaseModel):
     image_url: str | None = Field(default=None)
     description: str | None = Field(default=None)
     options: list[str] | None = Field(default=None)
+    search_keywords: list[str] | None = Field(default=None, exclude=True)
     sold_out: bool | None = Field(default=None)
     source_url: str | None = Field(default=None)
     source_product_id: str | None = Field(default=None)

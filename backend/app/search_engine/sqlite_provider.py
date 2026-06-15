@@ -163,7 +163,7 @@ def _document_from_product(
 
 
 def _tags_from_record(record: ProductSourceRecord) -> list[str]:
-    values = [record.category, record.shade, *(record.options or [])]
+    values = [record.category, record.shade, *(record.options or []), *(record.search_keywords or [])]
     return [text for value in values if (text := clean_text(value))]
 
 

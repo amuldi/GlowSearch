@@ -147,6 +147,7 @@ def _candidate_score(parsed: EditorParsedLine, product: ProductSearchResult) -> 
                 product.description,
                 product.shade,
                 " ".join(product.options or []),
+                " ".join(product.search_keywords or []),
             ]
             if value
         )
@@ -170,6 +171,7 @@ def _candidate_score(parsed: EditorParsedLine, product: ProductSearchResult) -> 
                     product.product_name_ko,
                     product.product_name_en,
                     " ".join(product.options or []),
+                    " ".join(product.search_keywords or []),
                 ]
                 if value
             )
@@ -270,6 +272,7 @@ def _product_match_text(product: ProductSearchResult) -> str:
                 product.description,
                 product.shade,
                 " ".join(product.options or []),
+                " ".join(product.search_keywords or []),
             ]
             if value
         )

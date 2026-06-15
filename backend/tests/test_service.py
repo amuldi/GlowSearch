@@ -258,6 +258,7 @@ class MultiSourceSameProductCollector:
                 source="oliveyoung",
                 source_url="https://oliveyoung.example/products/1",
                 source_product_id="oliveyoung-1",
+                search_keywords=["내부 확인 키워드"],
             ),
             ProductSourceRecord(
                 source_brand_name="BRTC",
@@ -1462,6 +1463,8 @@ async def test_search_service_merges_verified_source_offers_for_same_product(tmp
     ]
     assert all(offer.source_url for offer in result.offers)
     assert "external" not in [offer.source for offer in result.offers]
+    assert result.search_keywords == ["내부 확인 키워드"]
+    assert "내부 확인 키워드" not in result.model_dump_json()
     assert "oliveyoung_global_source" not in result.enrichment_missing_fields
     assert "미확인" not in result.model_dump_json()
     assert "Unknown" not in result.model_dump_json()

@@ -91,6 +91,22 @@ class EditorFakeCollector:
                     source_product_id="hera-colors-1",
                 )
             ]
+        if "치즈냥이" in keyword:
+            return [
+                ProductSourceRecord(
+                    canonical_product_id="verified:clio-pro-eye-palette-air-mogamju-library",
+                    source_brand_name="클리오",
+                    source_brand_name_en="CLIO",
+                    product_name_ko="(클리오X국가유산청) 프로 아이 팔레트 에어",
+                    product_name_en=None,
+                    shade="21 모감주 밑 서재",
+                    regular_price=34000,
+                    source="glowpick",
+                    source_url="https://glowpick.example/products/183245",
+                    source_product_id="glowpick-183245",
+                    search_keywords=["치즈냥이", "모감주 도서관"],
+                )
+            ]
         return [
             ProductSourceRecord(
                 source_brand_name="헤라",
@@ -279,6 +295,20 @@ async def test_editor_batch_includes_registry_brand_en_without_candidate(tmp_pat
     assert response.items[0].candidates == []
 
 
+@pytest.mark.asyncio
+async def test_editor_batch_uses_catalog_keywords_without_exposing_them(tmp_path) -> None:
+    service = _editor_service(tmp_path)
+
+    response = await service.batch("클리오 치즈냥이", limit=5)
+
+    assert response.items[0].status == "확인됨"
+    candidate = response.items[0].candidates[0]
+    assert candidate.product.brand_ko == "클리오"
+    assert candidate.product.shade == "21 모감주 밑 서재"
+    assert "제품 키워드 1/1" in candidate.match_reasons
+    assert "치즈냥이" not in candidate.product.model_dump_json()
+
+
 def test_product_index_prepares_editor_confirmed_mappings_table(tmp_path) -> None:
     db_path = tmp_path / "product_index.sqlite3"
     SQLiteProductIndexStore(db_path)
@@ -326,7 +356,8 @@ def _editor_service(tmp_path) -> EditorBatchService:
         (
             '{"entries":['
             '{"official_en":"HERA","aliases":["헤라"],"sources":[]},'
-            '{"official_en":"rom&nd","aliases":["롬앤"],"sources":[]}'
+            '{"official_en":"rom&nd","aliases":["롬앤"],"sources":[]},'
+            '{"official_en":"CLIO","aliases":["클리오"],"sources":[]}'
             "]}"
         ),
         encoding="utf-8",

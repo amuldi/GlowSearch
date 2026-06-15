@@ -585,6 +585,7 @@ class SQLiteProductIndexStore:
                 image_url TEXT,
                 description TEXT,
                 options_json TEXT,
+                search_keywords_json TEXT,
                 sold_out INTEGER,
                 source_url TEXT,
                 search_text TEXT NOT NULL,
@@ -606,6 +607,7 @@ class SQLiteProductIndexStore:
                 "review_count": "INTEGER",
                 "description": "TEXT",
                 "options_json": "TEXT",
+                "search_keywords_json": "TEXT",
                 "sold_out": "INTEGER",
                 "source_updated_at": "TEXT",
             },
@@ -769,6 +771,7 @@ class SQLiteProductIndexStore:
         record_key = _record_key(record)
         search_text = _search_text(record)
         options_json = _options_json(record.options)
+        search_keywords_json = _options_json(record.search_keywords)
         source_updated_at = record.updated_at or now
         self._connection.execute(
             """
@@ -793,6 +796,7 @@ class SQLiteProductIndexStore:
                 image_url,
                 description,
                 options_json,
+                search_keywords_json,
                 sold_out,
                 source_url,
                 search_text,
@@ -801,7 +805,7 @@ class SQLiteProductIndexStore:
                 last_refreshed_at,
                 source_updated_at
             )
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(record_key) DO UPDATE SET
                 canonical_product_id = COALESCE(excluded.canonical_product_id, products.canonical_product_id),
                 source = excluded.source,
@@ -822,6 +826,7 @@ class SQLiteProductIndexStore:
                 image_url = COALESCE(excluded.image_url, products.image_url),
                 description = COALESCE(excluded.description, products.description),
                 options_json = COALESCE(excluded.options_json, products.options_json),
+                search_keywords_json = COALESCE(excluded.search_keywords_json, products.search_keywords_json),
                 sold_out = COALESCE(excluded.sold_out, products.sold_out),
                 source_url = COALESCE(excluded.source_url, products.source_url),
                 search_text = excluded.search_text,
@@ -850,6 +855,7 @@ class SQLiteProductIndexStore:
                 record.image_url,
                 record.description,
                 options_json,
+                search_keywords_json,
                 _sqlite_bool(record.sold_out),
                 record.source_url,
                 search_text,
@@ -1097,6 +1103,7 @@ def _row_to_record(row: sqlite3.Row) -> ProductSourceRecord:
         image_url=row["image_url"],
         description=row["description"],
         options=_options_from_json(row["options_json"]),
+        search_keywords=_options_from_json(row["search_keywords_json"]),
         sold_out=_bool_from_sqlite(row["sold_out"]),
         source=row["source"],
         source_url=row["source_url"],
@@ -1135,6 +1142,7 @@ def _search_text(record: ProductSourceRecord) -> str:
                 record.shade,
                 record.source_product_id,
                 " ".join(record.options or []),
+                " ".join(record.search_keywords or []),
             ]
             if value
         )
@@ -1152,6 +1160,7 @@ def _search_terms(record: ProductSourceRecord) -> str:
         record.shade,
         record.source_product_id,
         " ".join(record.options or []),
+        " ".join(record.search_keywords or []),
     ]
     terms: list[str] = []
     for value in values:

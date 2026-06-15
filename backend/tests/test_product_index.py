@@ -217,6 +217,7 @@ class FakeIngestionCollector:
                 shade="02 로즈",
                 description="원본 제공 설명",
                 options=["01 피치", "02 로즈"],
+                search_keywords=["로즈 별칭", "편집자 키워드"],
                 sold_out=False,
                 image_url="https://image.oliveyoung.co.kr/item.png",
                 source="oliveyoung",
@@ -316,6 +317,7 @@ async def test_product_index_persists_extended_product_fields(tmp_path) -> None:
                 shade="02 로즈",
                 description="원본 제공 설명",
                 options=["01 피치", "02 로즈"],
+                search_keywords=["로즈 별칭", "편집자 키워드"],
                 sold_out=False,
                 source="oliveyoung",
                 source_product_id="A1",
@@ -325,6 +327,7 @@ async def test_product_index_persists_extended_product_fields(tmp_path) -> None:
     )
 
     records = await store.search("로즈", 10)
+    keyword_records = await store.search("편집자 키워드", 10)
     all_records = await store.all_products()
     await store.close()
 
@@ -334,6 +337,8 @@ async def test_product_index_persists_extended_product_fields(tmp_path) -> None:
     assert records[0].review_count == 123
     assert records[0].description == "원본 제공 설명"
     assert records[0].options == ["01 피치", "02 로즈"]
+    assert records[0].search_keywords == ["로즈 별칭", "편집자 키워드"]
+    assert [record.source_product_id for record in keyword_records] == ["A1"]
     assert records[0].sold_out is False
     assert records[0].updated_at == "2026-06-08T00:00:00+00:00"
     assert all_records[0].source_product_id == "A1"

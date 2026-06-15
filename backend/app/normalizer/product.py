@@ -55,6 +55,7 @@ class ProductNormalizer:
             image_url=normalize_image_url(record.image_url, self._base_url),
             description=clean_text(record.description),
             options=_clean_options(record.options),
+            search_keywords=_clean_options(record.search_keywords),
             sold_out=record.sold_out,
             source_url=normalize_image_url(record.source_url, self._base_url),
             source_product_id=clean_text(record.source_product_id),

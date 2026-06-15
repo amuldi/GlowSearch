@@ -144,6 +144,7 @@ def _record_from_item(item: object) -> ProductSourceRecord:
         shade=clean_text(item.get("shade")),
         description=clean_text(item.get("description")),
         options=_clean_options(item.get("options")),
+        search_keywords=_clean_options(item.get("keywords")),
         sold_out=item.get("sold_out"),
         image_url=clean_text(item.get("image_url")),
         source=clean_text(item.get("source")) or "oliveyoung",
