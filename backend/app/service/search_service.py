@@ -705,7 +705,12 @@ class SearchService:
 
     @staticmethod
     def _is_oliveyoung_collector(collector: ProductCollector) -> bool:
-        return collector.name == "oliveyoung" or collector.name.startswith("oliveyoung:")
+        return collector.name in {
+            "oliveyoung",
+            "oliveyoung:public-api",
+            "oliveyoung:browser",
+            "oliveyoung:apify",
+        }
 
     @staticmethod
     def _has_oliveyoung_records(records: list[ProductSourceRecord]) -> bool:
@@ -758,6 +763,11 @@ class SearchService:
             tuple[ProductCollector, str, int],
         ],
     ) -> bool:
+        if (
+            collector.name == "oliveyoung:verified-cache"
+            and cls._has_pending_primary_oliveyoung_task(pending, tasks, primary_query)
+        ):
+            return True
         return (
             cls._is_oliveyoung_collector(collector)
             and cls._is_broad_related_query(primary_query)
