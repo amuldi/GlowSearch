@@ -443,6 +443,9 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | `NEXT_PUBLIC_API_BASE_URL` | 프론트에서 호출할 백엔드 API base URL |
 | `GLOWSEARCH_PRODUCT_INDEX_PATH` | SQLite product index 경로. Render persistent disk 사용 시 `/var/data/product_index.sqlite3` 권장 |
 | `GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_ENABLED` | Olive Young 공개 JSON adapter 사용 여부 |
+| `GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_TIMEOUT_SECONDS` | Olive Young 공개 JSON adapter source timeout. 넓은 키워드는 `6.0` 이상 권장 |
+| `GLOWSEARCH_LIVE_COLLECT_DEADLINE_SECONDS` | 사용자 검색에서 live source를 기다리는 전체 deadline. 결과 커버리지 우선이면 `7.0` 권장 |
+| `GLOWSEARCH_BACKGROUND_COLLECT_DEADLINE_SECONDS` | 검색 후 백그라운드 refresh deadline. catalog job 보강에는 `18.0` 이상 권장 |
 | `GLOWSEARCH_MUSINSA_API_ENABLED` / `GLOWSEARCH_MUSINSA_API_BASE_URL` | 검증된 Musinsa Beauty JSON provider 연결. 기본 비활성화 |
 | `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED` / `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_BASE_URL` | 검증된 Olive Young Global JSON provider 연결. 기본 비활성화 |
 | `GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED` / `GLOWSEARCH_OFFICIAL_BRAND_API_BASE_URL` | 브랜드 공식몰/공식 catalog JSON provider 연결. 기본 비활성화 |

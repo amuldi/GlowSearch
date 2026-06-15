@@ -1246,7 +1246,24 @@ class SearchService:
                     priority=10 if reason == "empty_result" else 20,
                     max_attempts=3,
                 )
+                self._schedule_catalog_job_run()
             self._metrics.record_search_gap()
+        except Exception as exc:
+            self._last_index_error = f"{type(exc).__name__}: {exc}"
+            self._metrics.record_background_index_error(self._last_index_error)
+
+    def _schedule_catalog_job_run(self) -> None:
+        if self._product_index is None or self._ingestion_agent is None:
+            return
+        task = asyncio.create_task(
+            self._run_catalog_jobs_safely(max_jobs=3, limit_per_query=48)
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    async def _run_catalog_jobs_safely(self, *, max_jobs: int, limit_per_query: int) -> None:
+        try:
+            await self.run_catalog_jobs(max_jobs=max_jobs, limit_per_query=limit_per_query)
         except Exception as exc:
             self._last_index_error = f"{type(exc).__name__}: {exc}"
             self._metrics.record_background_index_error(self._last_index_error)
