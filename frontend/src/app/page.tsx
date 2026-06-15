@@ -572,7 +572,7 @@ function EditorBatchWorkspace() {
   };
 
   return (
-    <section className="mx-auto mt-8 w-full max-w-6xl">
+    <section className="mx-auto mt-8 w-full max-w-6xl px-4 sm:px-6 lg:px-0">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <div className="min-w-0 rounded-lg border border-blush/55 bg-white/92 p-4 shadow-soft">
           <label htmlFor="editor-batch-input" className="text-sm font-bold text-rosewood">
