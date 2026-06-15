@@ -587,15 +587,15 @@ function EditorBatchWorkspace() {
             className="mt-3 min-h-72 w-full resize-y rounded-lg border border-line bg-white p-3 text-sm font-medium leading-6 text-ink outline-none transition placeholder:text-neutral-400 focus:border-rose"
             aria-label="편집자 일괄 정리 입력"
           />
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-xs font-semibold text-neutral-500">
               {lineCount ? `${lineCount.toLocaleString("ko-KR")}개 라인` : "여러 줄을 붙여넣으세요"}
             </span>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex min-w-0 flex-wrap gap-2 sm:justify-end">
               <button
                 type="button"
                 onClick={() => setText(EDITOR_SAMPLE_TEXT)}
-                className="rounded-full border border-line bg-white px-3 py-2 text-xs font-bold text-neutral-700 transition hover:border-rose hover:bg-blush-soft hover:text-rosewood"
+                className="min-w-0 rounded-full border border-line bg-white px-3 py-2 text-xs font-bold text-neutral-700 transition hover:border-rose hover:bg-blush-soft hover:text-rosewood"
               >
                 예시 넣기
               </button>
@@ -603,7 +603,7 @@ function EditorBatchWorkspace() {
                 type="button"
                 onClick={runBatch}
                 disabled={!canSubmit}
-                className="inline-flex items-center gap-1.5 rounded-full bg-rosewood px-4 py-2 text-sm font-bold text-white transition hover:bg-[#873247] disabled:cursor-not-allowed disabled:bg-neutral-300"
+                className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-rosewood px-4 py-2 text-sm font-bold text-white transition hover:bg-[#873247] disabled:cursor-not-allowed disabled:bg-neutral-300"
               >
                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Search className="h-4 w-4" aria-hidden="true" />}
                 정리하기
@@ -618,14 +618,14 @@ function EditorBatchWorkspace() {
         </div>
 
         <div className="rounded-lg border border-blush/55 bg-white/92 p-4 shadow-soft">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-base font-extrabold text-rosewood">정리 결과</h2>
               <p className="mt-1 text-xs font-medium text-neutral-500">
                 source URL이 있는 후보만 표시합니다.
               </p>
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex min-w-0 flex-wrap gap-1.5 sm:justify-end">
               {[
                 ["ko", "한글 자막"],
                 ["en", "영문 자막"],
@@ -638,7 +638,7 @@ function EditorBatchWorkspace() {
                   type="button"
                   onClick={() => copyEditorFormat(format as "ko" | "en" | "description" | "tsv" | "csv")}
                   disabled={!response}
-                  className="inline-flex items-center gap-1 rounded-full border border-line bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-700 transition hover:border-rose hover:bg-blush-soft hover:text-rosewood disabled:cursor-not-allowed disabled:opacity-40"
+                  className="inline-flex min-w-0 items-center gap-1 rounded-full border border-line bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-700 transition hover:border-rose hover:bg-blush-soft hover:text-rosewood disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {copiedFormat === format ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
                   {label}
