@@ -17,8 +17,8 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 
 | 항목 | URL |
 | --- | --- |
-| Frontend | [https://glow-search.vercel.app/](https://glow-search.vercel.app/) |
-| Latest Vercel deployment | [https://glow-search-2nkagaff5-amuldis-projects.vercel.app/](https://glow-search-2nkagaff5-amuldis-projects.vercel.app/) |
+| Frontend | [https://frontend-plum-six-32.vercel.app/](https://frontend-plum-six-32.vercel.app/) |
+| Latest Vercel deployment | [https://frontend-8m9l0epeq-amuldis-projects.vercel.app/](https://frontend-8m9l0epeq-amuldis-projects.vercel.app/) |
 | Backend health | [https://glowsearch-backend.onrender.com/health](https://glowsearch-backend.onrender.com/health) |
 | Search API 예시 | [https://glowsearch-backend.onrender.com/search?q=%EB%A1%9C%EC%85%98&limit=4](https://glowsearch-backend.onrender.com/search?q=%EB%A1%9C%EC%85%98&limit=4) |
 
@@ -30,14 +30,15 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 
 이번 업데이트는 검색 결과의 데이터 품질, 멀티소스 확장 기반, 배포 문서를 정리한 변경입니다.
 
-- 프론트 공식 운영 주소를 `https://glow-search.vercel.app`로 정리했습니다.
-- 이전에 쓰던 `https://frontend-plum-six-32.vercel.app`는 과거 Vercel 배포 주소로 남을 수 있지만, 현재 확인 기준은 공식 운영 주소입니다.
-- 최신 Vercel 고유 배포 URL은 `https://glow-search-2nkagaff5-amuldis-projects.vercel.app`입니다.
-- 백엔드 Render 배포는 `/health`의 `release_sha`로 확인합니다. 2026-06-15 점검 시 로컬 HEAD와 운영 `release_sha`가 `7a247cc85650526b917a2584bbc30b29cb775348`로 일치했습니다.
+- 프론트 운영 주소는 `https://frontend-plum-six-32.vercel.app`입니다.
+- 최신 Vercel 고유 배포 URL은 `https://frontend-8m9l0epeq-amuldis-projects.vercel.app`입니다.
+- 백엔드 Render 배포는 `/health`의 `release_sha`로 확인합니다. 2026-06-16 점검 시 로컬 HEAD와 운영 `release_sha`가 `372ade0a66b6edb2987eb9e7c01e08cda2681cce`로 일치했습니다.
 - Musinsa Beauty, Olive Young Global, 브랜드 공식몰을 source-specific JSON provider로 연결할 수 있는 설정을 추가했습니다.
 - `GLOWSEARCH_MUSINSA_API_ENABLED`, `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED`, `GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED`가 켜지고 각 provider base URL이 설정되면 해당 source가 live collector에 포함됩니다.
-- 현재 운영 환경에서는 위 provider URL이 아직 설정되지 않아 세 provider는 기본 비활성화 상태입니다. 무단 scraping이나 추측 URL 생성은 사용하지 않습니다.
+- 현재 운영 환경에서는 위 provider URL이 아직 설정되지 않아 Musinsa Beauty, Olive Young Global, 브랜드 공식몰, global discovery, managed search adapter는 비활성화 상태입니다. 무단 scraping이나 추측 URL 생성은 사용하지 않습니다.
 - verified catalog 항목에 내부 `canonical_product_id`를 보강해 같은 상품의 여러 source offer를 한 카드로 병합할 수 있는 기반을 넓혔습니다.
+- verified catalog는 35개 상품이며, source 기준으로 Olive Young 16개, Musinsa 6개, Official 6개, Hwahae 3개, Glowpick 2개, Coupang 1개, Fude Japan 1개를 포함합니다.
+- verified catalog에서 source 기반 영문 제품명(`product_name_en`)이 있는 항목은 4개입니다. 영문 제품명은 자동 번역하지 않으므로 source가 제공하지 않은 상품은 빈 값으로 남습니다.
 - 검색 결과 카드는 `offers` 배열을 통해 Olive Young, Musinsa, Olive Young Global, Official 등 여러 source offer를 병합할 수 있습니다. 현재 UI에서는 별도 출처 링크 버튼을 표시하지 않고 source badge만 표시합니다.
 - 영문 제품명은 source, verified catalog, 공식/공개 API 등에서 확인된 경우에만 표시합니다. 자동 번역이나 추측 매핑은 하지 않습니다.
 - 프론트 카드에서 한글 제품명과 영문 제품명이 동일한 경우 중복 표시하지 않도록 처리했습니다.
@@ -45,17 +46,27 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 - 편집자 일괄 정리 모드를 추가했습니다. 뷰티 유튜버가 보낸 러프한 제품 리스트를 붙여넣으면 줄별로 브랜드/제품/shade를 파싱하고 source 기반 후보를 정리합니다.
 - `POST /editor/batch` API를 추가했습니다. 각 줄은 `raw_text`, `brand_query`, `product_query`, `shade_code`, `shade_name`, 후보 상품, 상태(`확인됨`, `후보 있음`, `수동 확인 필요`)로 반환됩니다.
 - 편집자 모드는 후보 선택, source 링크 확인, 한글 자막용/영문 자막용/YouTube 더보기란용/TSV 클립보드 복사를 지원합니다.
+- 편집자 모드는 가격, 할인가, 이미지 URL을 포함한 TSV/CSV 클립보드 복사를 지원합니다.
 - 확정 매칭을 반복 활용할 수 있도록 SQLite index schema에 `editor_confirmed_mappings` 테이블을 준비했습니다.
 - 편집자 모드는 shade가 입력된 상품 후보에서 source가 해당 shade를 확인하지 못하면 단일 후보라도 `확인됨`으로 올리지 않고 `후보 있음`으로 남깁니다.
 - 구체적인 상품명 토큰이 여러 개인 일반 검색은 브랜드/카테고리만 맞는 느슨한 후보를 제외해 오답 노출을 줄입니다.
+- 17개 편집자 샘플 입력의 운영 결과는 2026-06-16 점검 기준 `확인됨` 2개, `후보 있음` 9개, `수동 확인 필요` 6개입니다. `수동 확인 필요`는 어반디케이 파우더, 클리오 치즈냥이, 캔메이크 아라 카푸치노, 어반디케이 문더스트 글림락, 페리페라 포근 픽싱 틴트 19호, 아멜리 하이라이터 432입니다.
+- 반복 점검용 스크립트 `backend/scripts/audit_editor_batch.py`를 추가했습니다.
 
 검증 결과:
 
-- 백엔드 전체 테스트: `124 passed`
-- 백엔드 source/factory/search 집중 테스트: `54 passed`
+- 백엔드 전체 테스트: `147 passed`
 - Ruff: 통과
 - 프론트 production build: 통과
 - 검색 백테스트: `383/391`, `98.0%`
+
+운영 점검 예시:
+
+```bash
+cd backend
+.venv/bin/python scripts/audit_editor_batch.py \
+  --base-url https://glowsearch-backend.onrender.com
+```
 
 ## 프로젝트 목표
 
