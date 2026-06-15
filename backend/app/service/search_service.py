@@ -987,6 +987,11 @@ class SearchService:
             "last_index_error": self._last_index_error,
         }
 
+    def resolve_brand_en(self, value: str | None) -> str | None:
+        if not value:
+            return None
+        return self._normalizer.normalize_brand_filter(value)
+
     async def recent_search_gaps(self, limit: int = 20) -> list[dict[str, int | str | None]]:
         if self._product_index is None:
             return []

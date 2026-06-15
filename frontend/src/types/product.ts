@@ -63,6 +63,7 @@ export type SearchParams = {
 export type EditorParsedLine = {
   raw_text: string;
   brand_query: string | null;
+  brand_en: string | null;
   product_query: string | null;
   shade_query: string | null;
   shade_code: string | null;

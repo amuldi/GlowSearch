@@ -35,6 +35,7 @@ class EditorBatchService:
         return EditorBatchResponse(count=len(items), items=list(items))
 
     async def _resolve_line(self, parsed: EditorParsedLine, *, limit: int) -> EditorBatchItem:
+        parsed = self._with_resolved_brand_en(parsed)
         response = await self._search_service.search(
             parsed.normalized_query,
             SearchCriteria(limit=max(limit, 1)),
@@ -56,6 +57,17 @@ class EditorBatchService:
             status=_status(candidates),
             candidates=candidates,
         )
+
+    def _with_resolved_brand_en(self, parsed: EditorParsedLine) -> EditorParsedLine:
+        if parsed.brand_en or not parsed.brand_query:
+            return parsed
+        resolve_brand_en = getattr(self._search_service, "resolve_brand_en", None)
+        if resolve_brand_en is None:
+            return parsed
+        brand_en = resolve_brand_en(parsed.brand_query)
+        if not brand_en:
+            return parsed
+        return parsed.model_copy(update={"brand_en": brand_en})
 
 
 def _status(candidates: list[EditorProductCandidate]) -> EditorMatchStatus:

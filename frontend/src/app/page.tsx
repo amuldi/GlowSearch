@@ -702,6 +702,8 @@ function EditorBatchRow({
   const status = selectedProduct ? "확인됨" : item.status;
   const shadeCode = item.parsed.shade_code;
   const shadeName = selectedProduct?.shade ?? item.parsed.shade_name;
+  const brandKo = selectedProduct?.brand_ko ?? item.parsed.brand_query;
+  const brandEn = selectedProduct?.brand_en ?? item.parsed.brand_en;
 
   return (
     <article className="rounded-lg border border-line bg-white p-3">
@@ -714,8 +716,8 @@ function EditorBatchRow({
       </div>
 
       <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-        <Field label="브랜드명" value={selectedProduct?.brand_ko} />
-        <Field label="영문 브랜드명" value={selectedProduct?.brand_en} />
+        <Field label="브랜드명" value={brandKo} />
+        <Field label="영문 브랜드명" value={brandEn} />
         <Field label="제품명" value={selectedProduct?.product_name_ko} />
         <Field label="영문 제품명" value={selectedProduct?.product_name_en} />
         <Field label="호수 번호" value={shadeCode} />
@@ -1143,8 +1145,8 @@ function editorCopyPayload(
       ["원문 입력", "브랜드명", "영문 브랜드명", "제품명", "영문 제품명", "호수 번호", "호수명 / 컬러명", "source 링크", "상태"].join("\t"),
       ...rows.map(({ item, product }) => [
         item.raw_text,
-        product?.brand_ko ?? "",
-        product?.brand_en ?? "",
+        product?.brand_ko ?? item.parsed.brand_query ?? "",
+        product?.brand_en ?? item.parsed.brand_en ?? "",
         product?.product_name_ko ?? "",
         product?.product_name_en ?? "",
         item.parsed.shade_code ?? "",
@@ -1163,7 +1165,7 @@ function editorCopyPayload(
         return [product.brand_ko, product.product_name_ko, shade].filter(Boolean).join(" / ");
       }
       if (format === "en") {
-        return [product.brand_en, product.product_name_en, shade].filter(Boolean).join(" / ");
+        return [product.brand_en ?? item.parsed.brand_en, product.product_name_en, shade].filter(Boolean).join(" / ");
       }
       const title = [product.brand_ko, product.product_name_ko, shade].filter(Boolean).join(" - ");
       const link = bestEditorSourceUrl(product);
@@ -1182,7 +1184,7 @@ function editorConfirmPayload(item: EditorBatchItem, product: Product): EditorCo
     source_url: bestEditorSourceUrl(product),
     source_product_id: product.source_product_id,
     brand_ko: product.brand_ko,
-    brand_en: product.brand_en,
+    brand_en: product.brand_en ?? item.parsed.brand_en,
     product_name_ko: product.product_name_ko,
     product_name_en: product.product_name_en,
     shade: product.shade ?? item.parsed.shade_name ?? item.parsed.shade_code,

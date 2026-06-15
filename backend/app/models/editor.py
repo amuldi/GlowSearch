@@ -16,6 +16,7 @@ class EditorBatchRequest(BaseModel):
 class EditorParsedLine(BaseModel):
     raw_text: str
     brand_query: str | None = None
+    brand_en: str | None = None
     product_query: str | None = None
     shade_query: str | None = None
     shade_code: str | None = None

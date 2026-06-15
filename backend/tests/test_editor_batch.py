@@ -209,6 +209,18 @@ async def test_editor_batch_does_not_generate_english_product_name(tmp_path) -> 
     assert response.items[0].candidates[0].product.product_name_en is None
 
 
+@pytest.mark.asyncio
+async def test_editor_batch_includes_registry_brand_en_without_candidate(tmp_path) -> None:
+    service = _editor_service(tmp_path)
+
+    response = await service.batch("헤라 없는제품", limit=5)
+
+    assert response.items[0].status == "수동 확인 필요"
+    assert response.items[0].parsed.brand_query == "헤라"
+    assert response.items[0].parsed.brand_en == "HERA"
+    assert response.items[0].candidates == []
+
+
 def test_product_index_prepares_editor_confirmed_mappings_table(tmp_path) -> None:
     db_path = tmp_path / "product_index.sqlite3"
     SQLiteProductIndexStore(db_path)
