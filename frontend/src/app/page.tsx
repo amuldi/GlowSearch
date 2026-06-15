@@ -547,7 +547,7 @@ function EditorBatchWorkspace() {
     }
   };
 
-  const copyEditorFormat = async (format: "ko" | "en" | "description" | "tsv") => {
+  const copyEditorFormat = async (format: "ko" | "en" | "description" | "tsv" | "csv") => {
     if (!response) return;
     const payload = editorCopyPayload(response.items, selected, format);
     if (!payload) return;
@@ -631,11 +631,12 @@ function EditorBatchWorkspace() {
                 ["en", "영문 자막"],
                 ["description", "더보기란"],
                 ["tsv", "TSV"],
+                ["csv", "CSV"],
               ].map(([format, label]) => (
                 <button
                   key={format}
                   type="button"
-                  onClick={() => copyEditorFormat(format as "ko" | "en" | "description" | "tsv")}
+                  onClick={() => copyEditorFormat(format as "ko" | "en" | "description" | "tsv" | "csv")}
                   disabled={!response}
                   className="inline-flex items-center gap-1 rounded-full border border-line bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-700 transition hover:border-rose hover:bg-blush-soft hover:text-rosewood disabled:cursor-not-allowed disabled:opacity-40"
                 >
@@ -1161,7 +1162,7 @@ function selectedEditorProduct(
 function editorCopyPayload(
   items: EditorBatchItem[],
   selected: Record<number, number>,
-  format: "ko" | "en" | "description" | "tsv",
+  format: "ko" | "en" | "description" | "tsv" | "csv",
 ) {
   const rows = items.map((item, index) => ({
     item,
@@ -1169,36 +1170,11 @@ function editorCopyPayload(
   }));
 
   if (format === "tsv") {
-    return [
-      [
-        "원문 입력",
-        "브랜드명",
-        "영문 브랜드명",
-        "제품명",
-        "영문 제품명",
-        "호수 번호",
-        "호수명 / 컬러명",
-        "가격",
-        "할인가",
-        "이미지 URL",
-        "source 링크",
-        "상태",
-      ].join("\t"),
-      ...rows.map(({ item, product }) => [
-        item.raw_text,
-        product?.brand_ko ?? item.parsed.brand_query ?? "",
-        product?.brand_en ?? item.parsed.brand_en ?? "",
-        product?.product_name_ko ?? "",
-        product?.product_name_en ?? "",
-        item.parsed.shade_code ?? "",
-        product?.shade ?? item.parsed.shade_name ?? "",
-        formatPrice(product?.original_price ?? product?.price ?? null, product?.currency) ?? "",
-        product?.sale_price != null ? formatPrice(product.sale_price, product.currency) ?? "" : "",
-        product?.image_url ?? "",
-        bestEditorSourceUrl(product) ?? "",
-        item.status,
-      ].join("\t")),
-    ].join("\n");
+    return editorDelimitedPayload(rows, "\t");
+  }
+
+  if (format === "csv") {
+    return editorDelimitedPayload(rows, ",");
   }
 
   const lines = rows
@@ -1217,6 +1193,53 @@ function editorCopyPayload(
     })
     .filter(Boolean);
   return lines.join(format === "description" ? "\n\n" : "\n");
+}
+
+function editorDelimitedPayload(
+  rows: Array<{ item: EditorBatchItem; product: Product | null }>,
+  delimiter: "\t" | ",",
+) {
+  const header = [
+    "원문 입력",
+    "브랜드명",
+    "영문 브랜드명",
+    "제품명",
+    "영문 제품명",
+    "호수 번호",
+    "호수명 / 컬러명",
+    "가격",
+    "할인가",
+    "이미지 URL",
+    "source 링크",
+    "상태",
+  ];
+  return [
+    editorDelimitedRow(header, delimiter),
+    ...rows.map(({ item, product }) => editorDelimitedRow([
+      item.raw_text,
+      product?.brand_ko ?? item.parsed.brand_query ?? "",
+      product?.brand_en ?? item.parsed.brand_en ?? "",
+      product?.product_name_ko ?? "",
+      product?.product_name_en ?? "",
+      item.parsed.shade_code ?? "",
+      product?.shade ?? item.parsed.shade_name ?? "",
+      formatPrice(product?.original_price ?? product?.price ?? null, product?.currency) ?? "",
+      product?.sale_price != null ? formatPrice(product.sale_price, product.currency) ?? "" : "",
+      product?.image_url ?? "",
+      bestEditorSourceUrl(product) ?? "",
+      item.status,
+    ], delimiter)),
+  ].join("\n");
+}
+
+function editorDelimitedRow(values: string[], delimiter: "\t" | ",") {
+  if (delimiter === "\t") return values.join("\t");
+  return values.map(csvEscape).join(",");
+}
+
+function csvEscape(value: string) {
+  if (!/[",\n\r]/.test(value)) return value;
+  return `"${value.replaceAll("\"", "\"\"")}"`;
 }
 
 function editorConfirmPayload(item: EditorBatchItem, product: Product): EditorConfirmRequest {
