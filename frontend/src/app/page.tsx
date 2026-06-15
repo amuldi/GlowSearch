@@ -699,11 +699,17 @@ function EditorBatchRow({
 }) {
   const selectedCandidate = selectedIndex !== undefined ? item.candidates[selectedIndex] : undefined;
   const selectedProduct = selectedCandidate?.product;
-  const status = selectedProduct ? "확인됨" : item.status;
+  const status = isSaved ? "확인됨" : item.status;
   const shadeCode = item.parsed.shade_code;
   const shadeName = selectedProduct?.shade ?? item.parsed.shade_name;
   const brandKo = selectedProduct?.brand_ko ?? item.parsed.brand_query;
   const brandEn = selectedProduct?.brand_en ?? item.parsed.brand_en;
+  const selectedOriginalPrice = selectedProduct
+    ? formatPrice(selectedProduct.original_price ?? selectedProduct.price, selectedProduct.currency)
+    : null;
+  const selectedSalePrice = selectedProduct?.sale_price != null
+    ? formatPrice(selectedProduct.sale_price, selectedProduct.currency)
+    : null;
 
   return (
     <article className="rounded-lg border border-line bg-white p-3">
@@ -723,6 +729,27 @@ function EditorBatchRow({
         <Field label="호수 번호" value={shadeCode} />
         <Field label="호수명 / 컬러명" value={shadeName} />
       </dl>
+
+      {selectedProduct ? (
+        <div className="mt-3 grid gap-3 rounded-lg bg-blush-soft/45 p-3 sm:grid-cols-[72px_1fr]">
+          {selectedProduct.image_url ? (
+            <div className="h-[72px] w-[72px] overflow-hidden rounded-lg bg-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={selectedProduct.image_url}
+                alt={selectedProduct.product_name_ko ?? item.raw_text}
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
+            </div>
+          ) : null}
+          <dl className="grid min-w-0 gap-2 text-xs sm:grid-cols-2">
+            <Field label="가격" value={selectedOriginalPrice} />
+            <Field label="할인가" value={selectedSalePrice} />
+            <Field label="이미지 URL" value={selectedProduct.image_url} />
+          </dl>
+        </div>
+      ) : null}
 
       {selectedProduct ? (
         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -777,6 +804,7 @@ function EditorBatchRow({
                 {candidate.product.brand_en ? <span>{candidate.product.brand_en}</span> : null}
                 {candidate.product.product_name_en ? <span>{candidate.product.product_name_en}</span> : null}
                 {candidate.product.shade ? <span>{candidate.product.shade}</span> : null}
+                {candidatePriceText(candidate.product) ? <span>{candidatePriceText(candidate.product)}</span> : null}
                 <span>{sourceLabel(candidate.product)}</span>
               </div>
             </button>
@@ -1113,7 +1141,7 @@ function SourceBadge({ product }: { product: Product }) {
 
 function initialEditorSelection(response: EditorBatchResponse) {
   return response.items.reduce<Record<number, number>>((selected, item, index) => {
-    if (item.status === "확인됨" && item.candidates.length === 1) {
+    if (item.candidates.length) {
       selected[index] = 0;
     }
     return selected;
@@ -1142,7 +1170,20 @@ function editorCopyPayload(
 
   if (format === "tsv") {
     return [
-      ["원문 입력", "브랜드명", "영문 브랜드명", "제품명", "영문 제품명", "호수 번호", "호수명 / 컬러명", "source 링크", "상태"].join("\t"),
+      [
+        "원문 입력",
+        "브랜드명",
+        "영문 브랜드명",
+        "제품명",
+        "영문 제품명",
+        "호수 번호",
+        "호수명 / 컬러명",
+        "가격",
+        "할인가",
+        "이미지 URL",
+        "source 링크",
+        "상태",
+      ].join("\t"),
       ...rows.map(({ item, product }) => [
         item.raw_text,
         product?.brand_ko ?? item.parsed.brand_query ?? "",
@@ -1151,8 +1192,11 @@ function editorCopyPayload(
         product?.product_name_en ?? "",
         item.parsed.shade_code ?? "",
         product?.shade ?? item.parsed.shade_name ?? "",
+        formatPrice(product?.original_price ?? product?.price ?? null, product?.currency) ?? "",
+        product?.sale_price != null ? formatPrice(product.sale_price, product.currency) ?? "" : "",
+        product?.image_url ?? "",
         bestEditorSourceUrl(product) ?? "",
-        product ? "확인됨" : item.status,
+        item.status,
       ].join("\t")),
     ].join("\n");
   }
@@ -1229,6 +1273,12 @@ function sourceLinksForEditorProduct(product: Product): Array<Pick<ProductOffer,
 function bestEditorSourceUrl(product: Product | null) {
   if (!product) return null;
   return sourceLinksForEditorProduct(product)[0]?.source_url ?? null;
+}
+
+function candidatePriceText(product: Product) {
+  const salePrice = product.sale_price != null ? formatPrice(product.sale_price, product.currency) : null;
+  if (salePrice) return salePrice;
+  return formatPrice(product.price ?? product.original_price ?? null, product.currency);
 }
 
 function sourceLabel(sourceInfo: { source: string; source_label?: string | null }) {
