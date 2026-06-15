@@ -18,7 +18,7 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 | 항목 | URL |
 | --- | --- |
 | Frontend | [https://glow-search.vercel.app/](https://glow-search.vercel.app/) |
-| Latest Vercel deployment | [https://glow-search-bsr36lz6m-amuldis-projects.vercel.app/](https://glow-search-bsr36lz6m-amuldis-projects.vercel.app/) |
+| Latest Vercel deployment | [https://glow-search-3qy10dcxn-amuldis-projects.vercel.app/](https://glow-search-3qy10dcxn-amuldis-projects.vercel.app/) |
 | Backend health | [https://glowsearch-backend.onrender.com/health](https://glowsearch-backend.onrender.com/health) |
 | Search API 예시 | [https://glowsearch-backend.onrender.com/search?q=%EB%A1%9C%EC%85%98&limit=4](https://glowsearch-backend.onrender.com/search?q=%EB%A1%9C%EC%85%98&limit=4) |
 
@@ -32,8 +32,8 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 
 - 프론트 공식 운영 주소를 `https://glow-search.vercel.app`로 정리했습니다.
 - 이전에 쓰던 `https://frontend-plum-six-32.vercel.app`는 과거 Vercel 배포 주소로 남을 수 있지만, 현재 확인 기준은 공식 운영 주소입니다.
-- 최신 Vercel 고유 배포 URL은 `https://glow-search-bsr36lz6m-amuldis-projects.vercel.app`입니다.
-- 백엔드 Render 배포는 `/health`의 `release_sha`가 `1e4579c81a10dda4951b4d591568b60eb46459d8`로 반영된 것을 확인했습니다.
+- 최신 Vercel 고유 배포 URL은 `https://glow-search-3qy10dcxn-amuldis-projects.vercel.app`입니다.
+- 백엔드 Render 배포는 `/health`의 `release_sha`가 `2fe60bb4da67432e0a7048b94f22640150d441ea`로 반영된 것을 확인했습니다.
 - Musinsa Beauty, Olive Young Global, 브랜드 공식몰을 source-specific JSON provider로 연결할 수 있는 설정을 추가했습니다.
 - `GLOWSEARCH_MUSINSA_API_ENABLED`, `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED`, `GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED`가 켜지고 각 provider base URL이 설정되면 해당 source가 live collector에 포함됩니다.
 - 현재 운영 환경에서는 위 provider URL이 아직 설정되지 않아 세 provider는 기본 비활성화 상태입니다. 무단 scraping이나 추측 URL 생성은 사용하지 않습니다.
