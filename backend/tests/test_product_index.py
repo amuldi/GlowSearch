@@ -581,7 +581,7 @@ async def test_search_service_returns_partial_warm_index_before_network(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_search_service_returns_partial_index_immediately_for_broad_single_query(
+async def test_search_service_uses_live_source_for_partial_broad_single_query(
     tmp_path,
 ) -> None:
     registry_path = tmp_path / "brand_registry.json"
@@ -617,8 +617,8 @@ async def test_search_service_returns_partial_index_immediately_for_broad_single
     await service.close()
 
     assert response.count == 1
-    assert response.results[0].product_name_ko == "식물나라 부분 인덱스 젤"
-    assert official.calls == []
+    assert response.results[0].product_name_ko == "식물나라 수분 젤"
+    assert official.calls == ["젤"]
 
 
 @pytest.mark.asyncio

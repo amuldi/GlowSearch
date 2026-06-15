@@ -235,6 +235,11 @@ class SearchService:
             and bool(indexed_collected.records)
             and (indexed_top_score > 0 or indexed_collected.has_official_records)
             and not require_relevant
+            and self._has_sufficient_index_results(
+                cleaned_query,
+                criteria,
+                len(indexed_results),
+            )
         ):
             await self._cache.set(cache_key, indexed_collected)
             self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
@@ -1277,6 +1282,18 @@ class SearchService:
         except Exception as exc:
             self._last_index_error = f"{type(exc).__name__}: {exc}"
             self._metrics.record_background_index_error(self._last_index_error)
+
+    def _has_sufficient_index_results(
+        self,
+        query: str,
+        criteria: SearchCriteria,
+        result_count: int,
+    ) -> bool:
+        if result_count >= criteria.limit:
+            return True
+        if not self._is_broad_related_query(query):
+            return result_count > 0
+        return result_count >= self._search_gap_threshold(criteria)
 
     def _gap_catalog_queries(self, query: str) -> list[str]:
         candidates = [
