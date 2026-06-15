@@ -445,6 +445,20 @@
       "keywords": ["Heart Percent", "하트퍼센트", "립베이스", "립 베이스", "도트 온 무드 올 커버 립 베이스"]
     },
     {
+      "canonical_product_id": "verified:etude-soft-fixing-tint",
+      "brand_en": "ETUDE",
+      "brand_ko": "에뛰드",
+      "product_name_ko": "에뛰드 포근 픽싱 틴트 (단품/기획) 17 Colors",
+      "price": 16000,
+      "original_price": 16000,
+      "shade": null,
+      "image_url": "https://image.oliveyoung.co.kr/uploads/images/goods/10/0000/0024/A00000024638041ko.png?l=ko",
+      "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000246380",
+      "goods_no": "A000000246380",
+      "source": "oliveyoung",
+      "keywords": ["ETUDE", "에뛰드", "포근 픽싱 틴트", "픽싱 틴트", "19호"]
+    },
+    {
       "canonical_product_id": "verified:ofra-mini-highlighter",
       "brand_en": null,
       "brand_ko": "오프라",

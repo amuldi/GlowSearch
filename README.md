@@ -51,7 +51,7 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 - `GLOWSEARCH_MUSINSA_API_ENABLED`, `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED`, `GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED`가 켜지고 각 provider base URL이 설정되면 해당 source가 live collector에 포함됩니다.
 - 현재 운영 환경에서는 위 provider URL이 아직 설정되지 않아 Musinsa Beauty, Olive Young Global, 브랜드 공식몰, global discovery, managed search adapter는 비활성화 상태입니다. 무단 scraping이나 추측 URL 생성은 사용하지 않습니다.
 - verified catalog 항목에 내부 `canonical_product_id`를 보강해 같은 상품의 여러 source offer를 한 카드로 병합할 수 있는 기반을 넓혔습니다.
-- verified catalog는 35개 상품이며, source 기준으로 Olive Young 16개, Musinsa 6개, Official 6개, Hwahae 3개, Glowpick 2개, Coupang 1개, Fude Japan 1개를 포함합니다.
+- verified catalog는 36개 상품이며, source 기준으로 Olive Young 17개, Musinsa 6개, Official 6개, Hwahae 3개, Glowpick 2개, Coupang 1개, Fude Japan 1개를 포함합니다.
 - verified catalog에서 source 기반 영문 제품명(`product_name_en`)이 있는 항목은 4개입니다. 영문 제품명은 자동 번역하지 않으므로 source가 제공하지 않은 상품은 빈 값으로 남습니다.
 - 검색 결과 카드는 `offers` 배열을 통해 Olive Young, Musinsa, Olive Young Global, Official 등 여러 source offer를 병합할 수 있습니다. 현재 UI에서는 별도 출처 링크 버튼을 표시하지 않고 source badge만 표시합니다.
 - 영문 제품명은 source, verified catalog, 공식/공개 API 등에서 확인된 경우에만 표시합니다. 자동 번역이나 추측 매핑은 하지 않습니다.
@@ -71,7 +71,7 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 
 검증 결과:
 
-- 백엔드 전체 테스트: `150 passed`
+- 백엔드 전체 테스트: `151 passed`
 - Ruff: 통과
 - 프론트 production build: 통과
 - 검색 백테스트: `383/391`, `98.0%`

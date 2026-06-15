@@ -217,6 +217,8 @@ def _diagnostics_summary(payload: Any) -> dict[str, Any]:
             "last_source_errors": metrics.get("last_source_errors"),
         },
         "catalog_jobs": catalog_job_stats,
+        "verified_catalog": payload.get("verified_catalog"),
+        "adapter_readiness": payload.get("adapter_readiness"),
     }
 
 
