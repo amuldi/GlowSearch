@@ -59,3 +59,30 @@ export type SearchParams = {
   query: string;
   limit?: number;
 };
+
+export type EditorParsedLine = {
+  raw_text: string;
+  brand_query: string | null;
+  product_query: string | null;
+  shade_query: string | null;
+  shade_code: string | null;
+  shade_name: string | null;
+  normalized_query: string;
+};
+
+export type EditorProductCandidate = {
+  product: Product;
+  match_score: number;
+};
+
+export type EditorBatchItem = {
+  raw_text: string;
+  parsed: EditorParsedLine;
+  status: "확인됨" | "후보 있음" | "수동 확인 필요";
+  candidates: EditorProductCandidate[];
+};
+
+export type EditorBatchResponse = {
+  count: number;
+  items: EditorBatchItem[];
+};

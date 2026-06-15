@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.core.config import get_settings
 from app.data_collector.base import SearchCriteria
+from app.editor.batch import EditorBatchService
+from app.models.editor import EditorBatchRequest, EditorBatchResponse
 from app.models.product import SearchResponse, SuggestionResponse
 from app.search_engine.analytics import InMemorySearchAnalytics
 from app.service.factory import get_search_analytics, get_search_service
@@ -70,6 +72,14 @@ async def suggest(
     if not term:
         raise HTTPException(status_code=422, detail="q가 필요합니다.")
     return SuggestionResponse(query=term, suggestions=service.suggest(term, limit))
+
+
+@router.post("/editor/batch", response_model=EditorBatchResponse)
+async def editor_batch(
+    request: EditorBatchRequest,
+    service: SearchService = Depends(get_search_service),
+) -> EditorBatchResponse:
+    return await EditorBatchService(service).batch(request.text, limit=request.limit)
 
 
 @router.get("/index/status")

@@ -1,4 +1,4 @@
-import type { SearchParams, SearchResponse, SuggestionResponse } from "@/types/product";
+import type { EditorBatchResponse, SearchParams, SearchResponse, SuggestionResponse } from "@/types/product";
 
 const DEFAULT_API_BASE_URL =
   process.env.NODE_ENV === "production"
@@ -49,4 +49,25 @@ export async function fetchSearchSuggestions(
     throw new Error(`추천 검색어 요청 실패: ${response.status}`);
   }
   return response.json() as Promise<SuggestionResponse>;
+}
+
+export async function organizeEditorBatch(
+  text: string,
+  signal?: AbortSignal,
+): Promise<EditorBatchResponse> {
+  const url = new URL("/editor/batch", API_BASE_URL);
+  const response = await fetch(url, {
+    method: "POST",
+    signal,
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ text, limit: 5 }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`편집자 정리 요청 실패: ${response.status}`);
+  }
+  return response.json() as Promise<EditorBatchResponse>;
 }

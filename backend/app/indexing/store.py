@@ -611,6 +611,32 @@ class SQLiteProductIndexStore:
         self._connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_catalog_jobs_kind_status ON catalog_jobs(kind, status)"
         )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS editor_confirmed_mappings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                raw_text TEXT NOT NULL,
+                normalized_query TEXT NOT NULL,
+                canonical_product_id TEXT,
+                source TEXT NOT NULL,
+                source_url TEXT,
+                source_product_id TEXT,
+                brand_ko TEXT,
+                brand_en TEXT,
+                product_name_ko TEXT,
+                product_name_en TEXT,
+                shade TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        self._connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_editor_confirmed_mappings_query
+            ON editor_confirmed_mappings(normalized_query)
+            """
+        )
         self._ensure_fts_table()
         self._connection.commit()
 

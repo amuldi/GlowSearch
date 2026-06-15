@@ -1,0 +1,134 @@
+from __future__ import annotations
+
+import asyncio
+import re
+
+from app.data_collector.base import SearchCriteria
+from app.editor.parser import parse_editor_lines
+from app.models.editor import (
+    EditorBatchItem,
+    EditorBatchResponse,
+    EditorMatchStatus,
+    EditorParsedLine,
+    EditorProductCandidate,
+)
+from app.models.product import ProductSearchResult
+from app.search.synonyms import search_key
+from app.service.search_service import SearchService
+
+
+class EditorBatchService:
+    _CONCURRENCY = 4
+
+    def __init__(self, search_service: SearchService):
+        self._search_service = search_service
+
+    async def batch(self, text: str, *, limit: int = 5) -> EditorBatchResponse:
+        parsed_lines = parse_editor_lines(text)
+        semaphore = asyncio.Semaphore(self._CONCURRENCY)
+
+        async def resolve(parsed: EditorParsedLine) -> EditorBatchItem:
+            async with semaphore:
+                return await self._resolve_line(parsed, limit=limit)
+
+        items = await asyncio.gather(*(resolve(parsed) for parsed in parsed_lines))
+        return EditorBatchResponse(count=len(items), items=list(items))
+
+    async def _resolve_line(self, parsed: EditorParsedLine, *, limit: int) -> EditorBatchItem:
+        response = await self._search_service.search(
+            parsed.normalized_query,
+            SearchCriteria(limit=max(limit, 1)),
+        )
+        products = [product for product in response.results if _has_source_link(product)]
+        candidates = [
+            EditorProductCandidate(product=product, match_score=_candidate_score(parsed, product))
+            for product in products
+        ]
+        candidates.sort(key=lambda candidate: candidate.match_score, reverse=True)
+        candidates = candidates[:limit]
+        return EditorBatchItem(
+            raw_text=parsed.raw_text,
+            parsed=parsed,
+            status=_status(candidates),
+            candidates=candidates,
+        )
+
+
+def _status(candidates: list[EditorProductCandidate]) -> EditorMatchStatus:
+    if not candidates:
+        return "수동 확인 필요"
+    if len(candidates) == 1:
+        return "확인됨"
+    return "후보 있음"
+
+
+def _candidate_score(parsed: EditorParsedLine, product: ProductSearchResult) -> int:
+    score = product.quality_score
+    if product.source_priority is not None:
+        score += max(0, 80 - product.source_priority)
+    if product.product_name_en:
+        score += 8
+    if product.source_url or any(offer.source_url for offer in product.offers):
+        score += 10
+    if product.image_url:
+        score += 4
+
+    brand_query = _key(parsed.brand_query)
+    if brand_query:
+        brand_text = _key(" ".join(value for value in [product.brand_ko, product.brand_en] if value))
+        if brand_query and brand_query in brand_text:
+            score += 40
+
+    product_tokens = [_key(token) for token in _tokens(parsed.product_query)]
+    product_text = _key(
+        " ".join(
+            value
+            for value in [
+                product.product_name_ko,
+                product.product_name_en,
+                product.category,
+                product.description,
+                product.shade,
+                " ".join(product.options or []),
+            ]
+            if value
+        )
+    )
+    if product_tokens:
+        matched = sum(1 for token in product_tokens if token and token in product_text)
+        score += matched * 18
+        if matched == len(product_tokens):
+            score += 20
+
+    shade_values = [parsed.shade_code, parsed.shade_name]
+    shade_tokens = [_key(value) for value in shade_values if value]
+    if shade_tokens:
+        shade_text = _key(
+            " ".join(
+                value
+                for value in [
+                    product.shade,
+                    product.product_name_ko,
+                    product.product_name_en,
+                    " ".join(product.options or []),
+                ]
+                if value
+            )
+        )
+        score += sum(35 for token in shade_tokens if token and token in shade_text)
+
+    return score
+
+
+def _has_source_link(product: ProductSearchResult) -> bool:
+    return bool(product.source_url or any(offer.source_url for offer in product.offers))
+
+
+def _tokens(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return re.findall(r"[0-9A-Za-z가-힣]+", value)
+
+
+def _key(value: str | None) -> str:
+    return search_key(value)
