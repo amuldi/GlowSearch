@@ -74,6 +74,7 @@ export type EditorParsedLine = {
 export type EditorProductCandidate = {
   product: Product;
   match_score: number;
+  match_reasons?: string[];
 };
 
 export type EditorBatchItem = {

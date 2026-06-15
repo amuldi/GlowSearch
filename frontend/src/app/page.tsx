@@ -798,7 +798,7 @@ function EditorBatchRow({
                   {[candidate.product.brand_ko, candidate.product.product_name_ko].filter(Boolean).join(" / ")}
                 </span>
                 <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-neutral-600">
-                  후보 {candidateIndex + 1}
+                  후보 {candidateIndex + 1} · {candidate.match_score}
                 </span>
               </div>
               <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-neutral-600">
@@ -808,6 +808,18 @@ function EditorBatchRow({
                 {candidatePriceText(candidate.product) ? <span>{candidatePriceText(candidate.product)}</span> : null}
                 <span>{sourceLabel(candidate.product)}</span>
               </div>
+              {candidate.match_reasons?.length ? (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {candidate.match_reasons.map((reason) => (
+                    <span
+                      key={reason}
+                      className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-bold text-neutral-500"
+                    >
+                      {reason}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </button>
           ))}
         </div>

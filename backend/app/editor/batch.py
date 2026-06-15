@@ -74,10 +74,16 @@ class EditorBatchService:
             if _has_source_link(product)
             and _passes_editor_relevance(parsed, product, require_brand=require_brand)
         ]
-        candidates = [
-            EditorProductCandidate(product=product, match_score=_candidate_score(parsed, product))
-            for product in products
-        ]
+        candidates = []
+        for product in products:
+            score, reasons = _candidate_score(parsed, product)
+            candidates.append(
+                EditorProductCandidate(
+                    product=product,
+                    match_score=score,
+                    match_reasons=reasons,
+                )
+            )
         candidates.sort(key=lambda candidate: candidate.match_score, reverse=True)
         return candidates[:limit]
 
@@ -99,27 +105,36 @@ def _status(
 ) -> EditorMatchStatus:
     if not candidates:
         return "수동 확인 필요"
+    if parsed.brand_query and not any(_candidate_brand_matches(parsed, candidate.product) for candidate in candidates):
+        return "수동 확인 필요"
     if len(candidates) == 1 and _candidate_confirms_identity(parsed, candidates[0].product):
         return "확인됨"
     return "후보 있음"
 
 
-def _candidate_score(parsed: EditorParsedLine, product: ProductSearchResult) -> int:
+def _candidate_score(parsed: EditorParsedLine, product: ProductSearchResult) -> tuple[int, list[str]]:
     score = product.quality_score
+    reasons: list[str] = []
     if product.source_priority is not None:
         score += max(0, 80 - product.source_priority)
     if product.product_name_en:
         score += 8
+        reasons.append("영문 제품명")
     if product.source_url or any(offer.source_url for offer in product.offers):
         score += 10
+        reasons.append("source 링크")
     if product.image_url:
         score += 4
+        reasons.append("이미지")
 
     brand_query = _key(parsed.brand_query)
     if brand_query:
         brand_text = _key(" ".join(value for value in [product.brand_ko, product.brand_en] if value))
         if brand_query and brand_query in brand_text:
             score += 40
+            reasons.append("브랜드 일치")
+        else:
+            reasons.append("브랜드 불일치")
 
     product_tokens = [_key(token) for token in _tokens(parsed.product_query)]
     product_text = _key(
@@ -141,6 +156,8 @@ def _candidate_score(parsed: EditorParsedLine, product: ProductSearchResult) -> 
         score += matched * 18
         if matched == len(product_tokens):
             score += 20
+        if matched:
+            reasons.append(f"제품 키워드 {matched}/{len(product_tokens)}")
 
     shade_values = [parsed.shade_code, parsed.shade_name]
     shade_tokens = [_key(value) for value in shade_values if value]
@@ -159,10 +176,13 @@ def _candidate_score(parsed: EditorParsedLine, product: ProductSearchResult) -> 
         )
         matched_shades = sum(1 for token in shade_tokens if token and token in shade_text)
         score += matched_shades * 45
+        if matched_shades:
+            reasons.append("호수/컬러 일치")
         if matched_shades == 0:
             score -= 35
+            reasons.append("호수/컬러 확인 필요")
 
-    return score
+    return score, reasons
 
 
 def _passes_editor_relevance(
@@ -208,27 +228,35 @@ def _candidate_confirms_identity(
     parsed: EditorParsedLine,
     product: ProductSearchResult,
 ) -> bool:
-    brand_query = _key(parsed.brand_query)
-    if brand_query:
-        brand_text = _key(
-            " ".join(
-                value
-                for value in [
-                    product.brand_ko,
-                    product.brand_en,
-                    product.product_name_ko,
-                    product.product_name_en,
-                ]
-                if value
-            )
-        )
-        if brand_query not in brand_text:
-            return False
+    if not _candidate_brand_matches(parsed, product):
+        return False
     shade_tokens = [_key(value) for value in [parsed.shade_code, parsed.shade_name] if value]
     if not shade_tokens:
         return True
     product_text = _product_match_text(product)
     return all(token and token in product_text for token in shade_tokens)
+
+
+def _candidate_brand_matches(
+    parsed: EditorParsedLine,
+    product: ProductSearchResult,
+) -> bool:
+    brand_query = _key(parsed.brand_query)
+    if not brand_query:
+        return True
+    brand_text = _key(
+        " ".join(
+            value
+            for value in [
+                product.brand_ko,
+                product.brand_en,
+                product.product_name_ko,
+                product.product_name_en,
+            ]
+            if value
+        )
+    )
+    return brand_query in brand_text
 
 
 def _product_match_text(product: ProductSearchResult) -> str:

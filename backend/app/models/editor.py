@@ -27,6 +27,7 @@ class EditorParsedLine(BaseModel):
 class EditorProductCandidate(BaseModel):
     product: ProductSearchResult
     match_score: int
+    match_reasons: list[str] = Field(default_factory=list)
 
 
 class EditorBatchItem(BaseModel):

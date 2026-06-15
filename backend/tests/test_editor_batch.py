@@ -218,6 +218,8 @@ async def test_editor_batch_returns_statuses_and_filters_candidates_without_sour
     assert response.items[0].status == "확인됨"
     assert response.items[0].candidates[0].product.brand_en == "HERA"
     assert response.items[0].candidates[0].product.product_name_en == "HERA Powder"
+    assert "브랜드 일치" in response.items[0].candidates[0].match_reasons
+    assert "호수/컬러 일치" in response.items[0].candidates[0].match_reasons
     assert response.items[1].status == "후보 있음"
     assert [candidate.product.shade for candidate in response.items[1].candidates] == [
         "그레이쿨",
@@ -259,9 +261,10 @@ async def test_editor_batch_uses_product_fallback_without_confirming_brand_misma
     response = await service.batch("페리페라 포근 픽싱 틴트 19호", limit=5)
 
     assert response.items[0].parsed.brand_query == "페리페라"
-    assert response.items[0].status == "후보 있음"
+    assert response.items[0].status == "수동 확인 필요"
     assert response.items[0].candidates[0].product.brand_ko == "에뛰드"
     assert response.items[0].candidates[0].product.source_url
+    assert "브랜드 불일치" in response.items[0].candidates[0].match_reasons
 
 
 @pytest.mark.asyncio
