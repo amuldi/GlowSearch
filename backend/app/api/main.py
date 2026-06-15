@@ -23,9 +23,16 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def warm_product_index() -> None:
-        if not settings.product_index_enabled or not settings.product_index_warmup_on_startup:
+        if not settings.product_index_enabled:
             return
-        scheduled_queries = get_search_service().schedule_warm_index()
+        service = get_search_service()
+        if settings.product_index_verified_catalog_backfill_on_startup:
+            app.state.product_index_verified_catalog_backfill_count = (
+                await service.backfill_verified_catalog()
+            )
+        if not settings.product_index_warmup_on_startup:
+            return
+        scheduled_queries = service.schedule_warm_index()
         app.state.product_index_warmup_scheduled_queries = scheduled_queries
 
     @app.on_event("shutdown")

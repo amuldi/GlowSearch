@@ -228,6 +228,31 @@ class FakeIngestionCollector:
         ][:limit]
 
 
+class VerifiedCatalogBackfillCollector:
+    name = "oliveyoung:verified-cache"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        return []
+
+    async def all_records(self, limit: int | None = None) -> list[ProductSourceRecord]:
+        records = [
+            ProductSourceRecord(
+                source_brand_name="롬앤",
+                source_brand_name_en="rom&nd",
+                product_name_ko="롬앤 베러 댄 쉐입 쉐딩",
+                regular_price=9900,
+                shade=None,
+                source="oliveyoung",
+                source_url="https://oliveyoung.example/products/shading",
+                source_product_id="A000000135220",
+                search_keywords=["그레이쿨", "베러 댄 쉐입 쉐딩"],
+            )
+        ]
+        if limit is not None and limit > 0:
+            return records[:limit]
+        return records
+
+
 class FakeDetailEnricher:
     async def enrich(self, records: list[ProductSourceRecord]) -> list[ProductSourceRecord]:
         return [
@@ -342,6 +367,31 @@ async def test_product_index_persists_extended_product_fields(tmp_path) -> None:
     assert records[0].sold_out is False
     assert records[0].updated_at == "2026-06-08T00:00:00+00:00"
     assert all_records[0].source_product_id == "A1"
+
+
+@pytest.mark.asyncio
+async def test_search_service_backfills_verified_catalog_into_index(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    service = SearchService(
+        collectors=[VerifiedCatalogBackfillCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    count = await service.backfill_verified_catalog()
+    records = await store.search("그레이쿨", 10)
+    await service.close()
+
+    assert count == 1
+    assert [record.source_product_id for record in records] == ["A000000135220"]
+    assert records[0].search_keywords == ["그레이쿨", "베러 댄 쉐입 쉐딩"]
 
 
 @pytest.mark.asyncio

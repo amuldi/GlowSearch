@@ -966,6 +966,31 @@ class SearchService:
         await self._warm_index_queries(seeds, limit or self._index_warmup_limit)
         return len(seeds)
 
+    async def backfill_verified_catalog(self, *, limit: int | None = None) -> int:
+        if self._product_index is None:
+            return 0
+        records: list[ProductSourceRecord] = []
+        seen: set[str] = set()
+        for collector in self._collectors:
+            all_records = getattr(collector, "all_records", None)
+            if all_records is None:
+                continue
+            source_records = await all_records(limit=limit)
+            for record in source_records:
+                key = self._record_key(record)
+                if key in seen:
+                    continue
+                seen.add(key)
+                records.append(record)
+                if limit is not None and limit > 0 and len(records) >= limit:
+                    break
+            if limit is not None and limit > 0 and len(records) >= limit:
+                break
+        if not records:
+            return 0
+        await self._product_index.upsert_search_results("verified-catalog", records)
+        return len(records)
+
     def schedule_warm_index(
         self,
         queries: Iterable[str] | None = None,

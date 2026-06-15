@@ -15,13 +15,27 @@ class LocalVerifiedCatalogCollector:
     def __init__(self, catalog_path: Path):
         self._catalog_path = catalog_path
 
+    async def all_records(self, limit: int | None = None) -> list[ProductSourceRecord]:
+        products = self._products()
+        records: list[ProductSourceRecord] = []
+        seen: set[str] = set()
+        for item in products:
+            record = _record_from_item(item)
+            key = _record_key(record)
+            if key in seen:
+                continue
+            seen.add(key)
+            records.append(record)
+            if limit is not None and limit > 0 and len(records) >= limit:
+                break
+        return records
+
     async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
         keyword_key = self._key(keyword)
         if not keyword_key or not self._catalog_path.exists():
             return []
 
-        payload = json.loads(self._catalog_path.read_text(encoding="utf-8"))
-        products = payload.get("products", [])
+        products = self._products()
         canonical_groups = _canonical_groups(products)
         records: list[ProductSourceRecord] = []
         seen: set[str] = set()
@@ -42,6 +56,15 @@ class LocalVerifiedCatalogCollector:
             if len(records) >= limit:
                 break
         return records
+
+    def _products(self) -> list[object]:
+        if not self._catalog_path.exists():
+            return []
+        payload = json.loads(self._catalog_path.read_text(encoding="utf-8"))
+        products = payload.get("products", [])
+        if not isinstance(products, list):
+            return []
+        return products
 
     def _item_haystack_key(self, item: object) -> str:
         if not isinstance(item, dict):

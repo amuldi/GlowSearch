@@ -122,6 +122,7 @@ async def index_status(
             "product_index_enabled": settings.product_index_enabled,
             "product_index_path": str(settings.product_index_path),
             "warmup_on_startup": settings.product_index_warmup_on_startup,
+            "verified_catalog_backfill_on_startup": settings.product_index_verified_catalog_backfill_on_startup,
             "max_seed_queries": settings.product_index_max_seed_queries,
             "background_refresh_limit": settings.product_index_background_refresh_limit,
             "browser_collector_enabled": settings.browser_collector_enabled,
@@ -151,6 +152,7 @@ async def diagnostics(
     payload["config"] = {
         "product_index_enabled": settings.product_index_enabled,
         "warmup_on_startup": settings.product_index_warmup_on_startup,
+        "verified_catalog_backfill_on_startup": settings.product_index_verified_catalog_backfill_on_startup,
         "product_index_background_refresh_limit": settings.product_index_background_refresh_limit,
         "source_time_budget_seconds": settings.source_time_budget_seconds,
         "live_collect_deadline_seconds": settings.live_collect_deadline_seconds,

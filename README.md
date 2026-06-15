@@ -479,7 +479,8 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | `GLOWSEARCH_MUSINSA_API_ENABLED` / `GLOWSEARCH_MUSINSA_API_BASE_URL` | 검증된 Musinsa Beauty JSON provider 연결. 기본 비활성화 |
 | `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED` / `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_BASE_URL` | 검증된 Olive Young Global JSON provider 연결. 기본 비활성화 |
 | `GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED` / `GLOWSEARCH_OFFICIAL_BRAND_API_BASE_URL` | 브랜드 공식몰/공식 catalog JSON provider 연결. 기본 비활성화 |
-| `GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP` | 서버 시작 시 seed index warmup 실행 여부. 운영에서는 live 요청과 경쟁하지 않도록 `false` 권장 |
+| `GLOWSEARCH_PRODUCT_INDEX_VERIFIED_CATALOG_BACKFILL_ON_STARTUP` | 서버 시작 시 `verified_products.json` 전체를 SQLite index에 적재합니다. 네트워크를 쓰지 않으므로 운영 기본 `true` 권장 |
+| `GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP` | 서버 시작 시 seed index warmup 실행 여부. 작은 batch와 낮은 concurrency로만 켜는 것을 권장 |
 | `GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN` | 원격 `/index/warm`, `/index/catalog/run` 보호 token |
 | `GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_LIMIT` | 검색 후 백그라운드 refresh 수집 개수. 운영 초기에는 `48~120` 권장 |
 | `GLOWSEARCH_RESULT_SOURCE_PREFIXES` | 결과에 허용할 source prefix 목록. 기본값: `oliveyoung,oliveyoung-global,official,musinsa,coupang,hwahae,glowpick,fudejapan,managed,barcode,discovery,external` |

@@ -83,6 +83,8 @@ services:
         value: 120
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP
         value: true
+      - key: GLOWSEARCH_PRODUCT_INDEX_VERIFIED_CATALOG_BACKFILL_ON_STARTUP
+        value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT
         value: 24
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY

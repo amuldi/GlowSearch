@@ -40,6 +40,12 @@ async def test_local_catalog_returns_verified_matching_products(tmp_path) -> Non
     assert records[0].product_name_ko == "롬앤 틴트"
     assert records[0].regular_price == 13000
     assert records[0].source_url == "https://example.com/product"
+    assert records[0].search_keywords == ["romand", "틴트"]
+
+    all_records = await collector.all_records()
+
+    assert len(all_records) == 1
+    assert all_records[0].search_keywords == ["romand", "틴트"]
 
 
 @pytest.mark.asyncio

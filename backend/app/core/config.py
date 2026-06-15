@@ -108,6 +108,7 @@ class Settings(BaseSettings):
     product_index_background_refresh_enabled: bool = True
     product_index_background_refresh_limit: int = 240
     product_index_warmup_on_startup: bool = False
+    product_index_verified_catalog_backfill_on_startup: bool = True
     product_index_warmup_limit: int = 48
     product_index_warmup_concurrency: int = 2
     product_index_max_seed_queries: int = 180
