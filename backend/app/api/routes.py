@@ -1,5 +1,8 @@
 import os
+import json
+from collections import Counter
 from dataclasses import asdict
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -143,6 +146,8 @@ async def diagnostics(
         "stats": await service.catalog_job_stats(),
         "recent": await service.recent_catalog_jobs(limit=20),
     }
+    payload["verified_catalog"] = _verified_catalog_stats(settings.verified_catalog_path)
+    payload["adapter_readiness"] = _adapter_readiness(settings)
     payload["config"] = {
         "product_index_enabled": settings.product_index_enabled,
         "warmup_on_startup": settings.product_index_warmup_on_startup,
@@ -164,6 +169,147 @@ async def diagnostics(
         "barcode_lookup_api_enabled": settings.barcode_lookup_api_enabled,
     }
     return payload
+
+
+def _verified_catalog_stats(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {
+            "path": str(path),
+            "exists": False,
+            "total": 0,
+            "canonical_product_id": 0,
+            "product_name_en": 0,
+            "source_counts": {},
+        }
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    products = payload.get("products", []) if isinstance(payload, dict) else payload
+    items = [item for item in products if isinstance(item, dict)]
+    source_counts: Counter[str] = Counter()
+    canonical_count = 0
+    product_name_en_count = 0
+
+    for item in items:
+        if item.get("canonical_product_id"):
+            canonical_count += 1
+        if item.get("product_name_en"):
+            product_name_en_count += 1
+        for source in _catalog_sources(item):
+            source_counts[source] += 1
+
+    return {
+        "path": str(path),
+        "exists": True,
+        "total": len(items),
+        "canonical_product_id": canonical_count,
+        "product_name_en": product_name_en_count,
+        "source_counts": dict(sorted(source_counts.items())),
+    }
+
+
+def _catalog_sources(item: dict[str, object]) -> set[str]:
+    sources: set[str] = set()
+    source = item.get("source")
+    if isinstance(source, str) and source:
+        sources.add(source.split(":", 1)[0])
+    source_url = item.get("source_url")
+    if not sources and isinstance(source_url, str):
+        inferred_source = _source_from_url(source_url)
+        if inferred_source:
+            sources.add(inferred_source)
+    offers = item.get("offers")
+    if isinstance(offers, list):
+        for offer in offers:
+            if not isinstance(offer, dict):
+                continue
+            offer_source = offer.get("source")
+            if isinstance(offer_source, str) and offer_source:
+                sources.add(offer_source.split(":", 1)[0])
+    return sources
+
+
+def _source_from_url(source_url: str) -> str | None:
+    source_url = source_url.casefold()
+    if "oliveyoung" in source_url:
+        return "oliveyoung"
+    if "musinsa" in source_url:
+        return "musinsa"
+    if "coupang" in source_url:
+        return "coupang"
+    if "hwahae" in source_url:
+        return "hwahae"
+    if "glowpick" in source_url:
+        return "glowpick"
+    if "fudejapan" in source_url:
+        return "fudejapan"
+    return None
+
+
+def _adapter_readiness(settings) -> dict[str, dict[str, object]]:
+    return {
+        "oliveyoung_public_api": {
+            "enabled": settings.oliveyoung_public_api_enabled,
+            "configured": bool(settings.oliveyoung_public_api_base_url),
+            "base_url_configured": bool(settings.oliveyoung_public_api_base_url),
+            "reason": _adapter_reason(
+                enabled=settings.oliveyoung_public_api_enabled,
+                base_url=settings.oliveyoung_public_api_base_url,
+            ),
+        },
+        "musinsa": {
+            "enabled": settings.musinsa_api_enabled,
+            "configured": bool(settings.musinsa_api_base_url),
+            "base_url_configured": bool(settings.musinsa_api_base_url),
+            "reason": _adapter_reason(
+                enabled=settings.musinsa_api_enabled,
+                base_url=settings.musinsa_api_base_url,
+            ),
+        },
+        "oliveyoung_global": {
+            "enabled": settings.oliveyoung_global_api_enabled,
+            "configured": bool(settings.oliveyoung_global_api_base_url),
+            "base_url_configured": bool(settings.oliveyoung_global_api_base_url),
+            "reason": _adapter_reason(
+                enabled=settings.oliveyoung_global_api_enabled,
+                base_url=settings.oliveyoung_global_api_base_url,
+            ),
+        },
+        "official_brand": {
+            "enabled": settings.official_brand_api_enabled,
+            "configured": bool(settings.official_brand_api_base_url),
+            "base_url_configured": bool(settings.official_brand_api_base_url),
+            "reason": _adapter_reason(
+                enabled=settings.official_brand_api_enabled,
+                base_url=settings.official_brand_api_base_url,
+            ),
+        },
+        "global_discovery": {
+            "enabled": settings.global_discovery_api_enabled,
+            "configured": bool(settings.global_discovery_api_base_url),
+            "base_url_configured": bool(settings.global_discovery_api_base_url),
+            "reason": _adapter_reason(
+                enabled=settings.global_discovery_api_enabled,
+                base_url=settings.global_discovery_api_base_url,
+            ),
+        },
+        "managed_search": {
+            "enabled": settings.managed_search_api_enabled,
+            "configured": bool(settings.managed_search_api_base_url),
+            "base_url_configured": bool(settings.managed_search_api_base_url),
+            "reason": _adapter_reason(
+                enabled=settings.managed_search_api_enabled,
+                base_url=settings.managed_search_api_base_url,
+            ),
+        },
+    }
+
+
+def _adapter_reason(*, enabled: bool, base_url: str | None) -> str:
+    if not enabled:
+        return "disabled"
+    if not base_url:
+        return "missing_base_url"
+    return "ready"
 
 
 @router.get("/index/catalog/status")

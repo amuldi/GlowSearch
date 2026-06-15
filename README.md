@@ -26,13 +26,27 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 
 ## 최근 업데이트
 
+### 2026-06-16
+
+이번 업데이트는 편집자 일괄 정리의 실제 운영 진단과 브랜드 alias/fallback 정확도를 개선한 변경입니다.
+
+- 백엔드 Render 배포는 `/health`의 `release_sha`로 확인합니다. 2026-06-16 점검 기준 로컬 HEAD와 운영 `release_sha`가 `16054e08425742dc3dae2ba59389d86178506a08`로 일치했습니다.
+- 편집자 일괄 정리에서 브랜드 포함 검색이 실패하면 제품명 기반 fallback 검색을 한 번 더 수행합니다. 다만 source 브랜드가 입력 브랜드와 다르면 `확인됨`으로 확정하지 않고 `후보 있음`으로 유지합니다.
+- `Urban Decay`, `HAMING`, `OFRA Cosmetics`, `MERZY`, `VIDIVICI`, `HOLIKA HOLIKA`의 한글 alias/영문 브랜드명 매핑을 보강했습니다.
+- 17개 편집자 샘플 입력의 운영 결과는 `확인됨` 5개, `후보 있음` 7개, `수동 확인 필요` 5개입니다. 브랜드 영문명은 17개 라인 모두에서 확인되지만, 영문 제품명은 샘플 후보 중 source 기반 확인값이 없어 0개입니다.
+- `수동 확인 필요`로 남는 항목은 어반디케이 파우더, 클리오 치즈냥이, 캔메이크 아라 카푸치노, 어반디케이 문더스트 글림락, 아멜리 하이라이터 432입니다. 현재 안전한 source에서 직접 확인된 상품 URL이 없어 임의 catalog 추가를 하지 않았습니다.
+- `페리페라 포근 픽싱 틴트 19호`는 제품명 fallback으로 source 기반 후보가 표시됩니다. 다만 후보 source는 에뛰드 제품으로 확인되어 브랜드 불일치 때문에 `후보 있음`으로 남깁니다.
+- `/diagnostics` 응답에 `verified_catalog`와 `adapter_readiness`를 추가했습니다. 운영자는 verified catalog 총량, source별 개수, `product_name_en` 보유 개수, Musinsa/Olive Young Global/Official adapter의 `disabled` 또는 `missing_base_url` 상태를 바로 확인할 수 있습니다.
+- 현재 운영 환경에서는 Olive Young public API와 verified catalog cache만 활성화되어 있습니다. Musinsa Beauty, Olive Young Global, Official brand, global discovery, managed search adapter는 provider base URL이 없어 비활성화 상태입니다.
+- `수분` 같은 넓은 키워드가 Olive Young 실제 페이지보다 훨씬 적게 나오는 원인은 최신 배포 문제가 아니라 운영 index/source 커버리지 부족입니다. persistent disk 또는 외부 검색 저장소와 source provider 연결이 다음 병목입니다.
+
 ### 2026-06-15
 
 이번 업데이트는 검색 결과의 데이터 품질, 멀티소스 확장 기반, 배포 문서를 정리한 변경입니다.
 
 - 프론트 운영 주소는 `https://frontend-plum-six-32.vercel.app`입니다.
 - 최신 Vercel 고유 배포 URL은 `https://frontend-8m9l0epeq-amuldis-projects.vercel.app`입니다.
-- 백엔드 Render 배포는 `/health`의 `release_sha`로 확인합니다. 2026-06-16 점검 시 로컬 HEAD와 운영 `release_sha`가 `372ade0a66b6edb2987eb9e7c01e08cda2681cce`로 일치했습니다.
+- 백엔드 Render 배포는 `/health`의 `release_sha`로 확인합니다.
 - Musinsa Beauty, Olive Young Global, 브랜드 공식몰을 source-specific JSON provider로 연결할 수 있는 설정을 추가했습니다.
 - `GLOWSEARCH_MUSINSA_API_ENABLED`, `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED`, `GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED`가 켜지고 각 provider base URL이 설정되면 해당 source가 live collector에 포함됩니다.
 - 현재 운영 환경에서는 위 provider URL이 아직 설정되지 않아 Musinsa Beauty, Olive Young Global, 브랜드 공식몰, global discovery, managed search adapter는 비활성화 상태입니다. 무단 scraping이나 추측 URL 생성은 사용하지 않습니다.
@@ -50,14 +64,14 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 - 확정 매칭을 반복 활용할 수 있도록 SQLite index schema에 `editor_confirmed_mappings` 테이블을 준비했습니다.
 - 편집자 모드는 shade가 입력된 상품 후보에서 source가 해당 shade를 확인하지 못하면 단일 후보라도 `확인됨`으로 올리지 않고 `후보 있음`으로 남깁니다.
 - 구체적인 상품명 토큰이 여러 개인 일반 검색은 브랜드/카테고리만 맞는 느슨한 후보를 제외해 오답 노출을 줄입니다.
-- 17개 편집자 샘플 입력의 운영 결과는 2026-06-16 점검 기준 `확인됨` 5개, `후보 있음` 6개, `수동 확인 필요` 6개입니다. `수동 확인 필요`는 어반디케이 파우더, 클리오 치즈냥이, 캔메이크 아라 카푸치노, 어반디케이 문더스트 글림락, 페리페라 포근 픽싱 틴트 19호, 아멜리 하이라이터 432입니다.
+- 17개 편집자 샘플 입력의 운영 결과는 이후 2026-06-16 업데이트에서 다시 개선했습니다.
 - 반복 점검용 스크립트 `backend/scripts/audit_editor_batch.py`를 추가했습니다.
 - Render 재배포 직후 운영 index가 비어 시작할 수 있음을 확인했습니다. 즉 배포 SHA가 최신이어도 index가 차갑게 시작하면 결과가 적게 보일 수 있습니다. 이를 줄이기 위해 `GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP=true`, `GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT=24`로 시작 시 작은 warmup을 켰습니다.
 - 장기적으로는 Render persistent disk를 `/var/data`에 붙이거나 Postgres/Typesense 같은 외부 저장소로 index를 옮겨야 합니다. Render persistent disk는 비용이 발생할 수 있으므로 실제 계정 적용 전 요금 확인이 필요합니다.
 
 검증 결과:
 
-- 백엔드 전체 테스트: `147 passed`
+- 백엔드 전체 테스트: `150 passed`
 - Ruff: 통과
 - 프론트 production build: 통과
 - 검색 백테스트: `383/391`, `98.0%`
