@@ -1,4 +1,11 @@
-import type { EditorBatchResponse, SearchParams, SearchResponse, SuggestionResponse } from "@/types/product";
+import type {
+  EditorBatchResponse,
+  EditorConfirmRequest,
+  EditorConfirmResponse,
+  SearchParams,
+  SearchResponse,
+  SuggestionResponse,
+} from "@/types/product";
 
 const DEFAULT_API_BASE_URL =
   process.env.NODE_ENV === "production"
@@ -70,4 +77,25 @@ export async function organizeEditorBatch(
     throw new Error(`편집자 정리 요청 실패: ${response.status}`);
   }
   return response.json() as Promise<EditorBatchResponse>;
+}
+
+export async function confirmEditorCandidate(
+  payload: EditorConfirmRequest,
+  signal?: AbortSignal,
+): Promise<EditorConfirmResponse> {
+  const url = new URL("/editor/confirm", API_BASE_URL);
+  const response = await fetch(url, {
+    method: "POST",
+    signal,
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(`편집자 확정 저장 실패: ${response.status}`);
+  }
+  return response.json() as Promise<EditorConfirmResponse>;
 }

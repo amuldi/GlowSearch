@@ -39,7 +39,11 @@ class EditorBatchService:
             parsed.normalized_query,
             SearchCriteria(limit=max(limit, 1)),
         )
-        products = [product for product in response.results if _has_source_link(product)]
+        products = [
+            product
+            for product in response.results
+            if _has_source_link(product) and _passes_editor_relevance(parsed, product)
+        ]
         candidates = [
             EditorProductCandidate(product=product, match_score=_candidate_score(parsed, product))
             for product in products
@@ -120,8 +124,59 @@ def _candidate_score(parsed: EditorParsedLine, product: ProductSearchResult) -> 
     return score
 
 
+def _passes_editor_relevance(parsed: EditorParsedLine, product: ProductSearchResult) -> bool:
+    brand_query = _key(parsed.brand_query)
+    product_tokens = [_key(token) for token in _tokens(parsed.product_query)]
+    shade_tokens = [_key(value) for value in [parsed.shade_code, parsed.shade_name] if value]
+
+    brand_text = _key(
+        " ".join(
+            value
+            for value in [
+                product.brand_ko,
+                product.brand_en,
+                product.product_name_ko,
+                product.product_name_en,
+            ]
+            if value
+        )
+    )
+    product_text = _product_match_text(product)
+
+    if brand_query and brand_query not in brand_text:
+        return False
+
+    if product_tokens:
+        matched_product_tokens = sum(1 for token in product_tokens if token and token in product_text)
+        required_matches = len(product_tokens) if len(product_tokens) <= 2 else max(2, len(product_tokens) - 1)
+        if matched_product_tokens < required_matches:
+            return False
+
+    if shade_tokens and any(token in product_text for token in shade_tokens):
+        return True
+
+    return bool(product_tokens or brand_query)
+
+
 def _has_source_link(product: ProductSearchResult) -> bool:
     return bool(product.source_url or any(offer.source_url for offer in product.offers))
+
+
+def _product_match_text(product: ProductSearchResult) -> str:
+    return _key(
+        " ".join(
+            value
+            for value in [
+                product.product_name_ko,
+                product.product_name_en,
+                product.category,
+                product.description,
+                product.shade,
+                " ".join(product.options or []),
+            ]
+            if value
+        )
+    )
 
 
 def _tokens(value: str | None) -> list[str]:

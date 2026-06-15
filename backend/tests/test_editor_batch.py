@@ -21,7 +21,7 @@ class EditorFakeCollector:
     async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
         if "없는" in keyword:
             return []
-        if "후보" in keyword:
+        if "쉐딩" in keyword:
             return [
                 ProductSourceRecord(
                     source_brand_name="롬앤",
@@ -115,6 +115,36 @@ async def test_editor_batch_api_returns_line_items() -> None:
     assert payload["items"][0]["candidates"][0]["product"]["source_url"]
 
 
+@pytest.mark.asyncio
+async def test_editor_confirm_api_saves_mapping(tmp_path) -> None:
+    service = _editor_service(tmp_path)
+    app = create_app()
+    app.dependency_overrides[get_search_service] = lambda: service._search_service
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/editor/confirm",
+            json={
+                "raw_text": "헤라 파우더 #13N1",
+                "normalized_query": "헤라 파우더",
+                "source": "oliveyoung",
+                "source_url": "https://oliveyoung.example/products/hera",
+                "source_product_id": "hera-1",
+                "brand_ko": "헤라",
+                "brand_en": "HERA",
+                "product_name_ko": "헤라 파우더 13N1",
+                "product_name_en": "HERA Powder",
+                "shade": "13N1",
+            },
+        )
+
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {"saved": True}
+
+
 def test_parse_editor_lines_splits_batch_input() -> None:
     parsed = parse_editor_lines("헤라 파우더 #13N1\n\n롬앤 쉐딩 #그레이쿨")
 
@@ -149,7 +179,7 @@ async def test_editor_batch_returns_statuses_and_filters_candidates_without_sour
     service = _editor_service(tmp_path)
 
     response = await service.batch(
-        "헤라 파우더 #13N1\n롬앤 후보 #그레이쿨\n노링크브랜드 노링크제품\n없는 상품",
+        "헤라 파우더 #13N1\n롬앤 쉐딩 #그레이쿨\n노링크브랜드 노링크제품\n없는 상품",
         limit=5,
     )
 
@@ -174,7 +204,7 @@ async def test_editor_batch_returns_statuses_and_filters_candidates_without_sour
 async def test_editor_batch_does_not_generate_english_product_name(tmp_path) -> None:
     service = _editor_service(tmp_path)
 
-    response = await service.batch("롬앤 후보 #그레이쿨", limit=5)
+    response = await service.batch("롬앤 쉐딩 #그레이쿨", limit=5)
 
     assert response.items[0].candidates[0].product.product_name_en is None
 
@@ -190,6 +220,34 @@ def test_product_index_prepares_editor_confirmed_mappings_table(tmp_path) -> Non
     connection.close()
 
     assert table is not None
+
+
+@pytest.mark.asyncio
+async def test_product_index_records_editor_confirmed_mapping(tmp_path) -> None:
+    db_path = tmp_path / "product_index.sqlite3"
+    store = SQLiteProductIndexStore(db_path)
+
+    saved = await store.record_editor_confirmed_mapping(
+        raw_text="헤라 파우더 #13N1",
+        normalized_query="헤라 파우더",
+        source="oliveyoung",
+        source_url="https://oliveyoung.example/products/hera",
+        source_product_id="hera-1",
+        brand_ko="헤라",
+        brand_en="HERA",
+        product_name_ko="헤라 파우더 13N1",
+        product_name_en="HERA Powder",
+        shade="13N1",
+    )
+
+    connection = sqlite3.connect(db_path)
+    row = connection.execute(
+        "SELECT raw_text, normalized_query, source, product_name_en FROM editor_confirmed_mappings"
+    ).fetchone()
+    connection.close()
+
+    assert saved is True
+    assert row == ("헤라 파우더 #13N1", "헤라 파우더", "oliveyoung", "HERA Powder")
 
 
 def _editor_service(tmp_path) -> EditorBatchService:
@@ -210,5 +268,6 @@ def _editor_service(tmp_path) -> EditorBatchService:
             base_url="https://www.oliveyoung.co.kr",
         ),
         cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=SQLiteProductIndexStore(tmp_path / "editor_index.sqlite3"),
     )
     return EditorBatchService(search_service)

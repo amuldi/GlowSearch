@@ -86,3 +86,21 @@ export type EditorBatchResponse = {
   count: number;
   items: EditorBatchItem[];
 };
+
+export type EditorConfirmRequest = {
+  raw_text: string;
+  normalized_query: string;
+  source: string;
+  source_url?: string | null;
+  source_product_id?: string | null;
+  canonical_product_id?: string | null;
+  brand_ko?: string | null;
+  brand_en?: string | null;
+  product_name_ko?: string | null;
+  product_name_en?: string | null;
+  shade?: string | null;
+};
+
+export type EditorConfirmResponse = {
+  saved: boolean;
+};

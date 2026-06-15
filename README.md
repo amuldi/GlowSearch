@@ -209,7 +209,8 @@ GlowSearch는 뷰티 유튜버 편집자가 영상 원고, 자막, YouTube 더�
 2. 유튜버가 보낸 제품 리스트를 여러 줄로 붙여넣습니다.
 3. `정리하기`를 누르면 각 줄을 파싱하고 후보 상품을 3~5개까지 찾습니다.
 4. 후보가 여러 개면 편집자가 하나를 선택합니다.
-5. 한글 자막, 영문 자막, 더보기란, TSV 형식으로 클립보드 복사합니다.
+5. 선택한 후보를 `정답 저장`으로 기록해 이후 랭킹/학습 데이터로 누적합니다.
+6. 한글 자막, 영문 자막, 더보기란, TSV 형식으로 클립보드 복사합니다.
 
 API:
 
@@ -219,6 +220,8 @@ curl -X POST https://glowsearch-backend.onrender.com/editor/batch \
   -d '{"text":"헤라 파우더 #13N1\n롬앤 쉐딩 #그레이쿨","limit":5}'
 ```
 
+편집자가 후보를 확정하면 `POST /editor/confirm`으로 `editor_confirmed_mappings`에 원문 입력, 정규화 query, 선택 상품/source 정보를 저장합니다. 이 기록은 즉시 상품명을 생성하거나 번역하는 데 쓰지 않고, 추후 랭킹 보정과 모델 학습용 정답 데이터로 사용합니다.
+
 응답은 줄별로 다음 정보를 포함합니다.
 
 - 원문 입력
@@ -226,7 +229,7 @@ curl -X POST https://glowsearch-backend.onrender.com/editor/batch \
 - source URL이 있는 후보 상품
 - 상태: `확인됨`, `후보 있음`, `수동 확인 필요`
 
-편집자 모드에서도 데이터 원칙은 동일합니다. 영문 브랜드명/영문 제품명/source 링크는 source, verified catalog, 공식/공개 API, JSON-LD, 공식 홈페이지, Olive Young Global, Musinsa Beauty 등에서 확인된 경우에만 표시합니다. 모델이나 규칙은 입력 분해와 후보 랭킹 보조에만 사용하고, 없는 제품명이나 영문명을 생성하지 않습니다.
+편집자 모드에서도 데이터 원칙은 동일합니다. 영문 브랜드명/영문 제품명/source 링크는 source, verified catalog, 공식/공개 API, JSON-LD, 공식 홈페이지, Olive Young Global, Musinsa Beauty 등에서 확인된 경우에만 표시합니다. 모델이나 규칙은 입력 분해와 후보 랭킹 보조에만 사용하고, 없는 제품명이나 영문명을 생성하지 않습니다. 제품 키워드가 후보 상품명/설명/options에 충분히 맞지 않으면 editor 후보에서 제외해 부정확한 결과를 줄입니다.
 
 ## 기술 스택
 

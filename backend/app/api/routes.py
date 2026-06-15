@@ -7,7 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from app.core.config import get_settings
 from app.data_collector.base import SearchCriteria
 from app.editor.batch import EditorBatchService
-from app.models.editor import EditorBatchRequest, EditorBatchResponse
+from app.models.editor import (
+    EditorBatchRequest,
+    EditorBatchResponse,
+    EditorConfirmRequest,
+    EditorConfirmResponse,
+)
 from app.models.product import SearchResponse, SuggestionResponse
 from app.search_engine.analytics import InMemorySearchAnalytics
 from app.service.factory import get_search_analytics, get_search_service
@@ -80,6 +85,27 @@ async def editor_batch(
     service: SearchService = Depends(get_search_service),
 ) -> EditorBatchResponse:
     return await EditorBatchService(service).batch(request.text, limit=request.limit)
+
+
+@router.post("/editor/confirm", response_model=EditorConfirmResponse)
+async def editor_confirm(
+    request: EditorConfirmRequest,
+    service: SearchService = Depends(get_search_service),
+) -> EditorConfirmResponse:
+    saved = await service.record_editor_confirmed_mapping(
+        raw_text=request.raw_text,
+        normalized_query=request.normalized_query,
+        source=request.source,
+        source_url=request.source_url,
+        source_product_id=request.source_product_id,
+        canonical_product_id=request.canonical_product_id,
+        brand_ko=request.brand_ko,
+        brand_en=request.brand_en,
+        product_name_ko=request.product_name_ko,
+        product_name_en=request.product_name_en,
+        shade=request.shade,
+    )
+    return EditorConfirmResponse(saved=saved)
 
 
 @router.get("/index/status")

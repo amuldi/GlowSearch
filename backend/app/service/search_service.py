@@ -1020,6 +1020,40 @@ class SearchService:
             return []
         return await recent(limit)
 
+    async def record_editor_confirmed_mapping(
+        self,
+        *,
+        raw_text: str,
+        normalized_query: str,
+        source: str,
+        source_url: str | None = None,
+        source_product_id: str | None = None,
+        canonical_product_id: str | None = None,
+        brand_ko: str | None = None,
+        brand_en: str | None = None,
+        product_name_ko: str | None = None,
+        product_name_en: str | None = None,
+        shade: str | None = None,
+    ) -> bool:
+        if self._product_index is None:
+            return False
+        record = getattr(self._product_index, "record_editor_confirmed_mapping", None)
+        if record is None:
+            return False
+        return await record(
+            raw_text=raw_text,
+            normalized_query=normalized_query,
+            source=source,
+            source_url=source_url,
+            source_product_id=source_product_id,
+            canonical_product_id=canonical_product_id,
+            brand_ko=brand_ko,
+            brand_en=brand_en,
+            product_name_ko=product_name_ko,
+            product_name_en=product_name_en,
+            shade=shade,
+        )
+
     async def run_catalog_jobs(
         self,
         *,

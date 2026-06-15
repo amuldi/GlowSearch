@@ -4,8 +4,15 @@ import { Check, ChevronRight, Copy, ExternalLink, Loader2, Search, X } from "luc
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchSearchSuggestions, organizeEditorBatch, searchProducts } from "@/lib/api";
-import type { EditorBatchItem, EditorBatchResponse, Product, ProductOffer, SearchResponse } from "@/types/product";
+import { confirmEditorCandidate, fetchSearchSuggestions, organizeEditorBatch, searchProducts } from "@/lib/api";
+import type {
+  EditorBatchItem,
+  EditorBatchResponse,
+  EditorConfirmRequest,
+  Product,
+  ProductOffer,
+  SearchResponse,
+} from "@/types/product";
 
 const currencyFormatter = new Intl.NumberFormat("ko-KR", {
   style: "currency",
@@ -502,6 +509,8 @@ function EditorBatchWorkspace() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
+  const [savedRows, setSavedRows] = useState<Record<number, boolean>>({});
+  const [savingRows, setSavingRows] = useState<Record<number, boolean>>({});
   const requestIdRef = useRef(0);
 
   const lineCount = useMemo(
@@ -522,11 +531,15 @@ function EditorBatchWorkspace() {
       if (requestIdRef.current !== requestId) return;
       setResponse(data);
       setSelected(initialEditorSelection(data));
+      setSavedRows({});
+      setSavingRows({});
     } catch (error) {
       if (requestIdRef.current !== requestId) return;
       setErrorMessage("일괄 정리 중 문제가 발생했습니다.");
       setResponse(null);
       setSelected({});
+      setSavedRows({});
+      setSavingRows({});
     } finally {
       if (requestIdRef.current === requestId) {
         setIsLoading(false);
@@ -541,6 +554,21 @@ function EditorBatchWorkspace() {
     await copyToClipboard(payload);
     setCopiedFormat(format);
     window.setTimeout(() => setCopiedFormat(null), 1200);
+  };
+
+  const confirmSelection = async (index: number) => {
+    const item = response?.items[index];
+    const product = item ? selectedEditorProduct(item, selected, index) : null;
+    if (!item || !product || savingRows[index]) return;
+    setSavingRows((current) => ({ ...current, [index]: true }));
+    try {
+      await confirmEditorCandidate(editorConfirmPayload(item, product));
+      setSavedRows((current) => ({ ...current, [index]: true }));
+    } catch {
+      setErrorMessage("정답 저장 중 문제가 발생했습니다.");
+    } finally {
+      setSavingRows((current) => ({ ...current, [index]: false }));
+    }
   };
 
   return (
@@ -618,7 +646,7 @@ function EditorBatchWorkspace() {
             </div>
           </div>
 
-          <div className="mt-4 space-y-3">
+          <div className="mt-4 max-h-[68vh] space-y-3 overflow-y-auto pr-1 lg:max-h-[640px]">
             {isLoading ? (
               <div className="flex items-center gap-2 rounded-lg bg-blush-soft px-3 py-4 text-sm font-bold text-rosewood">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -636,9 +664,13 @@ function EditorBatchWorkspace() {
                 item={item}
                 index={index}
                 selectedIndex={selected[index]}
+                isSaved={Boolean(savedRows[index])}
+                isSaving={Boolean(savingRows[index])}
                 onSelect={(candidateIndex) => {
                   setSelected((current) => ({ ...current, [index]: candidateIndex }));
+                  setSavedRows((current) => ({ ...current, [index]: false }));
                 }}
+                onConfirm={() => confirmSelection(index)}
               />
             ))}
           </div>
@@ -652,12 +684,18 @@ function EditorBatchRow({
   item,
   index,
   selectedIndex,
+  isSaved,
+  isSaving,
   onSelect,
+  onConfirm,
 }: {
   item: EditorBatchItem;
   index: number;
   selectedIndex?: number;
+  isSaved: boolean;
+  isSaving: boolean;
   onSelect: (candidateIndex: number) => void;
+  onConfirm: () => void;
 }) {
   const selectedCandidate = selectedIndex !== undefined ? item.candidates[selectedIndex] : undefined;
   const selectedProduct = selectedCandidate?.product;
@@ -698,6 +736,15 @@ function EditorBatchRow({
               <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
             </a>
           ))}
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isSaving || isSaved}
+            className="inline-flex max-w-full items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 transition hover:border-emerald-300 hover:bg-white disabled:cursor-default disabled:opacity-70"
+          >
+            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <Check className="h-3 w-3" aria-hidden="true" />}
+            {isSaved ? "저장됨" : "정답 저장"}
+          </button>
         </div>
       ) : null}
 
@@ -1124,6 +1171,22 @@ function editorCopyPayload(
     })
     .filter(Boolean);
   return lines.join(format === "description" ? "\n\n" : "\n");
+}
+
+function editorConfirmPayload(item: EditorBatchItem, product: Product): EditorConfirmRequest {
+  return {
+    raw_text: item.raw_text,
+    normalized_query: item.parsed.normalized_query,
+    canonical_product_id: product.canonical_product_id,
+    source: product.source,
+    source_url: bestEditorSourceUrl(product),
+    source_product_id: product.source_product_id,
+    brand_ko: product.brand_ko,
+    brand_en: product.brand_en,
+    product_name_ko: product.product_name_ko,
+    product_name_en: product.product_name_en,
+    shade: product.shade ?? item.parsed.shade_name ?? item.parsed.shade_code,
+  };
 }
 
 async function copyToClipboard(value: string) {

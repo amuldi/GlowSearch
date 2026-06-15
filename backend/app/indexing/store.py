@@ -74,6 +74,22 @@ class ProductIndexStore(Protocol):
 
     async def recent_catalog_jobs(self, limit: int = 20) -> list[dict[str, int | str | None]]: ...
 
+    async def record_editor_confirmed_mapping(
+        self,
+        *,
+        raw_text: str,
+        normalized_query: str,
+        source: str,
+        source_url: str | None = None,
+        source_product_id: str | None = None,
+        canonical_product_id: str | None = None,
+        brand_ko: str | None = None,
+        brand_en: str | None = None,
+        product_name_ko: str | None = None,
+        product_name_en: str | None = None,
+        shade: str | None = None,
+    ) -> bool: ...
+
     async def stats(self) -> dict[str, int | str | None]: ...
 
     async def all_products(self, limit: int | None = None) -> list[ProductSourceRecord]: ...
@@ -419,6 +435,63 @@ class SQLiteProductIndexStore:
             }
             for row in rows
         ]
+
+    async def record_editor_confirmed_mapping(
+        self,
+        *,
+        raw_text: str,
+        normalized_query: str,
+        source: str,
+        source_url: str | None = None,
+        source_product_id: str | None = None,
+        canonical_product_id: str | None = None,
+        brand_ko: str | None = None,
+        brand_en: str | None = None,
+        product_name_ko: str | None = None,
+        product_name_en: str | None = None,
+        shade: str | None = None,
+    ) -> bool:
+        if not raw_text.strip() or not normalized_query.strip() or not source.strip():
+            return False
+        now = datetime.now(tz=UTC).isoformat()
+        async with self._lock:
+            self._connection.execute(
+                """
+                INSERT INTO editor_confirmed_mappings(
+                    raw_text,
+                    normalized_query,
+                    canonical_product_id,
+                    source,
+                    source_url,
+                    source_product_id,
+                    brand_ko,
+                    brand_en,
+                    product_name_ko,
+                    product_name_en,
+                    shade,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    raw_text.strip(),
+                    normalized_query.strip(),
+                    canonical_product_id,
+                    source.strip(),
+                    source_url,
+                    source_product_id,
+                    brand_ko,
+                    brand_en,
+                    product_name_ko,
+                    product_name_en,
+                    shade,
+                    now,
+                    now,
+                ),
+            )
+            self._connection.commit()
+        return True
 
     async def upsert_search_results(
         self,
