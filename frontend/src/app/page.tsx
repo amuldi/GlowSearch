@@ -572,9 +572,9 @@ function EditorBatchWorkspace() {
   };
 
   return (
-    <section className="mx-auto mt-8 w-full max-w-6xl">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <div className="min-w-0 rounded-lg border border-blush/55 bg-white/92 p-4 shadow-soft">
+    <section className="mx-auto mt-8 w-full max-w-[calc(100vw-2rem)] lg:max-w-6xl">
+      <div className="grid w-full min-w-0 max-w-full gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div className="min-w-0 overflow-hidden rounded-lg border border-blush/55 bg-white/92 p-4 shadow-soft">
           <label htmlFor="editor-batch-input" className="text-sm font-bold text-rosewood">
             러프 제품 리스트
           </label>
@@ -617,7 +617,7 @@ function EditorBatchWorkspace() {
           ) : null}
         </div>
 
-        <div className="min-w-0 rounded-lg border border-blush/55 bg-white/92 p-4 shadow-soft">
+        <div className="min-w-0 overflow-hidden rounded-lg border border-blush/55 bg-white/92 p-4 shadow-soft">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-base font-extrabold text-rosewood">정리 결과</h2>
