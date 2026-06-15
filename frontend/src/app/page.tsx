@@ -574,7 +574,7 @@ function EditorBatchWorkspace() {
   return (
     <section className="mx-auto mt-8 w-full max-w-6xl">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <div className="rounded-lg border border-blush/55 bg-white/92 p-4 shadow-soft">
+        <div className="min-w-0 rounded-lg border border-blush/55 bg-white/92 p-4 shadow-soft">
           <label htmlFor="editor-batch-input" className="text-sm font-bold text-rosewood">
             러프 제품 리스트
           </label>
@@ -617,7 +617,7 @@ function EditorBatchWorkspace() {
           ) : null}
         </div>
 
-        <div className="rounded-lg border border-blush/55 bg-white/92 p-4 shadow-soft">
+        <div className="min-w-0 rounded-lg border border-blush/55 bg-white/92 p-4 shadow-soft">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-base font-extrabold text-rosewood">정리 결과</h2>
@@ -625,7 +625,7 @@ function EditorBatchWorkspace() {
                 source URL이 있는 후보만 표시합니다.
               </p>
             </div>
-            <div className="grid min-w-0 grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:justify-end">
+            <div className="grid min-w-0 grid-cols-1 gap-1.5 sm:flex sm:flex-wrap sm:justify-end">
               {[
                 ["ko", "한글 자막"],
                 ["en", "영문 자막"],
