@@ -337,7 +337,7 @@
     },
     {
       "official_en": "HOLIKA HOLIKA",
-      "aliases": ["홀리카홀리카", "HOLIKA HOLIKA"],
+      "aliases": ["홀리카홀리카", "홀리카", "HOLIKA HOLIKA"],
       "sources": ["https://www.holikaholika.co.kr/"]
     },
     {
@@ -585,6 +585,31 @@
       "official_en": "KISS ME",
       "aliases": ["키스미", "KISS ME"],
       "sources": ["https://www.kissme.co.kr/"]
+    },
+    {
+      "official_en": "Urban Decay",
+      "aliases": ["어반디케이", "Urban Decay", "URBAN DECAY"],
+      "sources": ["https://www.urbandecay.com/"]
+    },
+    {
+      "official_en": "HAMING",
+      "aliases": ["하밍", "HAMING", "Haming"],
+      "sources": ["https://www.oliveyoung.co.kr/"]
+    },
+    {
+      "official_en": "OFRA Cosmetics",
+      "aliases": ["오프라", "OFRA", "OFRA Cosmetics"],
+      "sources": ["https://ofracosmetics.com/"]
+    },
+    {
+      "official_en": "MERZY",
+      "aliases": ["머지", "MERZY", "Merzy"],
+      "sources": ["https://merzy.co.kr/"]
+    },
+    {
+      "official_en": "VIDIVICI",
+      "aliases": ["비디비치", "VIDIVICI"],
+      "sources": ["https://vidivici.com/"]
     },
     {
       "official_en": "CANMAKE",

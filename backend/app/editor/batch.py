@@ -36,27 +36,50 @@ class EditorBatchService:
 
     async def _resolve_line(self, parsed: EditorParsedLine, *, limit: int) -> EditorBatchItem:
         parsed = self._with_resolved_brand_en(parsed)
-        response = await self._search_service.search(
+        candidates = await self._candidates_for_query(
+            parsed,
             parsed.normalized_query,
-            SearchCriteria(limit=max(limit, 1)),
+            limit=limit,
+            require_brand=True,
         )
-        products = [
-            product
-            for product in response.results
-            if _has_source_link(product) and _passes_editor_relevance(parsed, product)
-        ]
-        candidates = [
-            EditorProductCandidate(product=product, match_score=_candidate_score(parsed, product))
-            for product in products
-        ]
-        candidates.sort(key=lambda candidate: candidate.match_score, reverse=True)
-        candidates = candidates[:limit]
+        if not candidates and _should_try_product_fallback(parsed):
+            candidates = await self._candidates_for_query(
+                parsed,
+                parsed.product_query or parsed.normalized_query,
+                limit=limit,
+                require_brand=False,
+            )
         return EditorBatchItem(
             raw_text=parsed.raw_text,
             parsed=parsed,
             status=_status(parsed, candidates),
             candidates=candidates,
         )
+
+    async def _candidates_for_query(
+        self,
+        parsed: EditorParsedLine,
+        query: str,
+        *,
+        limit: int,
+        require_brand: bool,
+    ) -> list[EditorProductCandidate]:
+        response = await self._search_service.search(
+            query,
+            SearchCriteria(limit=max(limit, 1)),
+        )
+        products = [
+            product
+            for product in response.results
+            if _has_source_link(product)
+            and _passes_editor_relevance(parsed, product, require_brand=require_brand)
+        ]
+        candidates = [
+            EditorProductCandidate(product=product, match_score=_candidate_score(parsed, product))
+            for product in products
+        ]
+        candidates.sort(key=lambda candidate: candidate.match_score, reverse=True)
+        return candidates[:limit]
 
     def _with_resolved_brand_en(self, parsed: EditorParsedLine) -> EditorParsedLine:
         if parsed.brand_en or not parsed.brand_query:
@@ -76,7 +99,7 @@ def _status(
 ) -> EditorMatchStatus:
     if not candidates:
         return "수동 확인 필요"
-    if len(candidates) == 1 and _candidate_confirms_shade(parsed, candidates[0].product):
+    if len(candidates) == 1 and _candidate_confirms_identity(parsed, candidates[0].product):
         return "확인됨"
     return "후보 있음"
 
@@ -142,7 +165,12 @@ def _candidate_score(parsed: EditorParsedLine, product: ProductSearchResult) -> 
     return score
 
 
-def _passes_editor_relevance(parsed: EditorParsedLine, product: ProductSearchResult) -> bool:
+def _passes_editor_relevance(
+    parsed: EditorParsedLine,
+    product: ProductSearchResult,
+    *,
+    require_brand: bool,
+) -> bool:
     brand_query = _key(parsed.brand_query)
     product_tokens = [_key(token) for token in _tokens(parsed.product_query)]
 
@@ -160,7 +188,7 @@ def _passes_editor_relevance(parsed: EditorParsedLine, product: ProductSearchRes
     )
     product_text = _product_match_text(product)
 
-    if brand_query and brand_query not in brand_text:
+    if require_brand and brand_query and brand_query not in brand_text:
         return False
 
     if product_tokens:
@@ -176,10 +204,26 @@ def _has_source_link(product: ProductSearchResult) -> bool:
     return bool(product.source_url or any(offer.source_url for offer in product.offers))
 
 
-def _candidate_confirms_shade(
+def _candidate_confirms_identity(
     parsed: EditorParsedLine,
     product: ProductSearchResult,
 ) -> bool:
+    brand_query = _key(parsed.brand_query)
+    if brand_query:
+        brand_text = _key(
+            " ".join(
+                value
+                for value in [
+                    product.brand_ko,
+                    product.brand_en,
+                    product.product_name_ko,
+                    product.product_name_en,
+                ]
+                if value
+            )
+        )
+        if brand_query not in brand_text:
+            return False
     shade_tokens = [_key(value) for value in [parsed.shade_code, parsed.shade_name] if value]
     if not shade_tokens:
         return True
@@ -208,6 +252,11 @@ def _tokens(value: str | None) -> list[str]:
     if not value:
         return []
     return re.findall(r"[0-9A-Za-z가-힣]+", value)
+
+
+def _should_try_product_fallback(parsed: EditorParsedLine) -> bool:
+    product_tokens = [_key(token) for token in _tokens(parsed.product_query)]
+    return len([token for token in product_tokens if token]) >= 2
 
 
 def _key(value: str | None) -> str:

@@ -228,6 +228,7 @@ def _editor_batch_summary(payload: Any) -> dict[str, Any]:
     status_counts = Counter(str(item.get("status") or "") for item in rows)
     candidate_rows = sum(1 for item in rows if item.get("candidates"))
     source_rows = 0
+    brand_en_rows = 0
     product_name_en_rows = 0
     missing_rows: list[str] = []
     for item in rows:
@@ -238,8 +239,12 @@ def _editor_batch_summary(payload: Any) -> dict[str, Any]:
         if isinstance(first_product, dict):
             if first_product.get("source_url") or first_product.get("source_product_id"):
                 source_rows += 1
+            if first_product.get("brand_en"):
+                brand_en_rows += 1
             if first_product.get("product_name_en"):
                 product_name_en_rows += 1
+        elif isinstance(item.get("parsed"), dict) and item["parsed"].get("brand_en"):
+            brand_en_rows += 1
         if not candidates:
             missing_rows.append(str(item.get("raw_text") or ""))
 
@@ -248,6 +253,7 @@ def _editor_batch_summary(payload: Any) -> dict[str, Any]:
         "status_counts": dict(sorted(status_counts.items())),
         "rows_with_candidates": candidate_rows,
         "rows_with_source_reference": source_rows,
+        "rows_with_brand_en": brand_en_rows,
         "rows_with_product_name_en": product_name_en_rows,
         "manual_rows": missing_rows,
     }

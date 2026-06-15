@@ -65,6 +65,13 @@ def test_project_registry_maps_oliveyoung_korean_brand_names() -> None:
     assert resolver.resolve("믹순") == "mixsoon"
     assert resolver.resolve("뮤드") == "mude"
     assert resolver.resolve("비긴스") == "BEGINS BY JUNGSAEMMOOL"
+    assert resolver.resolve("어반디케이") == "Urban Decay"
+    assert resolver.resolve("하밍") == "HAMING"
+    assert resolver.resolve("오프라") == "OFRA Cosmetics"
+    assert resolver.resolve("머지") == "MERZY"
+    assert resolver.resolve("비디비치") == "VIDIVICI"
+    assert resolver.resolve("캔메이크") == "CANMAKE"
+    assert resolver.resolve("홀리카") == "HOLIKA HOLIKA"
     assert (
         resolver.resolve(None, "[기획] 비긴스 바이 정샘물 흔적 세럼")
         == "BEGINS BY JUNGSAEMMOOL"

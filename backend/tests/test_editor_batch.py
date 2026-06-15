@@ -21,6 +21,23 @@ class EditorFakeCollector:
     async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
         if "없는" in keyword:
             return []
+        if "페리페라 포근" in keyword:
+            return []
+        if keyword == "포근 픽싱 틴트":
+            return [
+                ProductSourceRecord(
+                    source_brand_name="에뛰드",
+                    source_brand_name_en="ETUDE",
+                    product_name_ko="에뛰드 포근 픽싱 틴트 17 Colors",
+                    product_name_en=None,
+                    shade=None,
+                    regular_price=16000,
+                    image_url="https://example.test/etude.jpg",
+                    source="oliveyoung",
+                    source_url="https://oliveyoung.example/products/etude-fixing-tint",
+                    source_product_id="etude-fixing-tint-1",
+                )
+            ]
         if "쉐딩" in keyword:
             return [
                 ProductSourceRecord(
@@ -231,6 +248,20 @@ async def test_editor_batch_does_not_confirm_candidate_without_requested_shade(t
 
     assert response.items[0].status == "후보 있음"
     assert response.items[0].candidates[0].product.shade is None
+
+
+@pytest.mark.asyncio
+async def test_editor_batch_uses_product_fallback_without_confirming_brand_mismatch(
+    tmp_path,
+) -> None:
+    service = _editor_service(tmp_path)
+
+    response = await service.batch("페리페라 포근 픽싱 틴트 19호", limit=5)
+
+    assert response.items[0].parsed.brand_query == "페리페라"
+    assert response.items[0].status == "후보 있음"
+    assert response.items[0].candidates[0].product.brand_ko == "에뛰드"
+    assert response.items[0].candidates[0].product.source_url
 
 
 @pytest.mark.asyncio
