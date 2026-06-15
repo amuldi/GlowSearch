@@ -30,10 +30,10 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 
 이번 업데이트는 편집자 일괄 정리의 실제 운영 진단과 브랜드 alias/fallback 정확도를 개선한 변경입니다.
 
-- 백엔드 Render 배포는 `/health`의 `release_sha`로 확인합니다. 2026-06-16 점검 기준 로컬 HEAD와 운영 `release_sha`가 `16054e08425742dc3dae2ba59389d86178506a08`로 일치했습니다.
+- 백엔드 Render 배포는 `/health`의 `release_sha`로 확인합니다. 2026-06-16 점검 기준 로컬 HEAD와 운영 `release_sha`가 `776eeea11dc6031bafacaeeec22177679e546686`로 일치했습니다.
 - 편집자 일괄 정리에서 브랜드 포함 검색이 실패하면 제품명 기반 fallback 검색을 한 번 더 수행합니다. 다만 source 브랜드가 입력 브랜드와 다르면 `확인됨`으로 확정하지 않고 `후보 있음`으로 유지합니다.
 - `Urban Decay`, `HAMING`, `OFRA Cosmetics`, `MERZY`, `VIDIVICI`, `HOLIKA HOLIKA`의 한글 alias/영문 브랜드명 매핑을 보강했습니다.
-- 17개 편집자 샘플 입력의 운영 결과는 `확인됨` 5개, `후보 있음` 7개, `수동 확인 필요` 5개입니다. 브랜드 영문명은 17개 라인 모두에서 확인되지만, 영문 제품명은 샘플 후보 중 source 기반 확인값이 없어 0개입니다.
+- 17개 편집자 샘플 입력의 운영 결과는 `확인됨` 4개, `후보 있음` 8개, `수동 확인 필요` 5개입니다. 브랜드 영문명은 17개 라인 모두에서 확인되지만, 영문 제품명은 샘플 후보 중 source 기반 확인값이 없어 0개입니다.
 - `수동 확인 필요`로 남는 항목은 어반디케이 파우더, 클리오 치즈냥이, 캔메이크 아라 카푸치노, 어반디케이 문더스트 글림락, 아멜리 하이라이터 432입니다. 현재 안전한 source에서 직접 확인된 상품 URL이 없어 임의 catalog 추가를 하지 않았습니다.
 - `페리페라 포근 픽싱 틴트 19호`는 제품명 fallback으로 source 기반 후보가 표시됩니다. 다만 후보 source는 에뛰드 제품으로 확인되어 브랜드 불일치 때문에 `후보 있음`으로 남깁니다.
 - `/diagnostics` 응답에 `verified_catalog`와 `adapter_readiness`를 추가했습니다. 운영자는 verified catalog 총량, source별 개수, `product_name_en` 보유 개수, Musinsa/Olive Young Global/Official adapter의 `disabled` 또는 `missing_base_url` 상태를 바로 확인할 수 있습니다.
