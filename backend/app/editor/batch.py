@@ -51,7 +51,7 @@ class EditorBatchService:
         parsed = self._with_resolved_brand_en(parsed)
         candidates = await self._candidates_for_query(
             parsed,
-            parsed.normalized_query,
+            _primary_search_query(parsed),
             limit=limit,
             require_brand=True,
         )
@@ -300,8 +300,18 @@ def _tokens(value: str | None) -> list[str]:
 
 def _should_try_product_fallback(parsed: EditorParsedLine) -> bool:
     product_tokens = [_key(token) for token in _tokens(parsed.product_query)]
-    return len([token for token in product_tokens if token]) >= 2
+    return bool(parsed.shade_code or parsed.shade_name) or len([token for token in product_tokens if token]) >= 2
 
 
 def _key(value: str | None) -> str:
     return search_key(value)
+
+
+def _primary_search_query(parsed: EditorParsedLine) -> str:
+    parts = [
+        parsed.normalized_query,
+        parsed.shade_code,
+        parsed.shade_name,
+    ]
+    query = " ".join(part.strip() for part in parts if part and part.strip())
+    return query or parsed.raw_text.replace("#", " ").strip()

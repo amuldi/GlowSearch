@@ -154,6 +154,38 @@ class SlowEditorSearchService:
         return "HERA" if brand == "헤라" else None
 
 
+class ShadeAwareEditorSearchService:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    async def search(self, query, criteria):
+        self.queries.append(query)
+        if query != "롬앤 쉐딩 그레이쿨":
+            return SearchResponse(query=query, count=0, results=[])
+        return SearchResponse(
+            query=query,
+            count=1,
+            results=[
+                ProductSearchResult(
+                    canonical_product_id="verified:romand-better-than-shape-shading",
+                    brand_ko="롬앤",
+                    brand_en="rom&nd",
+                    product_name_ko="롬앤 베러 댄 쉐입 쉐딩",
+                    product_name_en=None,
+                    shade=None,
+                    source="oliveyoung",
+                    source_url="https://oliveyoung.example/products/romand-shading",
+                    source_product_id="romand-shading",
+                    quality_score=98,
+                    search_keywords=["그레이쿨"],
+                )
+            ],
+        )
+
+    def resolve_brand_en(self, brand: str) -> str | None:
+        return "rom&nd" if brand == "롬앤" else None
+
+
 @pytest.mark.asyncio
 async def test_editor_batch_api_returns_line_items() -> None:
     app = create_app()
@@ -341,6 +373,18 @@ async def test_editor_batch_returns_manual_item_when_line_times_out(monkeypatch)
     assert response.items[0].status == "수동 확인 필요"
     assert response.items[0].parsed.brand_en == "HERA"
     assert response.items[0].candidates == []
+
+
+@pytest.mark.asyncio
+async def test_editor_batch_searches_with_shade_query_first() -> None:
+    search_service = ShadeAwareEditorSearchService()
+    service = EditorBatchService(search_service)
+
+    response = await service.batch("롬앤 쉐딩 #그레이쿨", limit=3)
+
+    assert search_service.queries == ["롬앤 쉐딩 그레이쿨"]
+    assert response.items[0].status == "확인됨"
+    assert response.items[0].candidates[0].product.source_product_id == "romand-shading"
 
 
 def test_product_index_prepares_editor_confirmed_mappings_table(tmp_path) -> None:
