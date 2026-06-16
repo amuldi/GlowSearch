@@ -22,3 +22,4 @@ class SearchCriteria:
     max_price: int | None = None
     has_shade: bool | None = None
     limit: int = 24
+    record_gaps: bool = True

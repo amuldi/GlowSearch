@@ -1275,7 +1275,7 @@ class SearchService:
         criteria: SearchCriteria,
         response: SearchResponse,
     ) -> None:
-        if self._product_index is None:
+        if self._product_index is None or not criteria.record_gaps:
             return
         threshold = self._search_gap_threshold(criteria)
         if threshold <= 0 or response.count >= threshold:

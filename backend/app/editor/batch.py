@@ -66,7 +66,7 @@ class EditorBatchService:
     ) -> list[EditorProductCandidate]:
         response = await self._search_service.search(
             query,
-            SearchCriteria(limit=max(limit, 1)),
+            SearchCriteria(limit=max(limit, 1), record_gaps=False),
         )
         products = [
             product
