@@ -59,6 +59,7 @@ class EditorBatchService:
             )
             if candidates:
                 break
+        candidates = _only_brand_matched_candidates(parsed, candidates)
         return EditorBatchItem(
             raw_text=parsed.raw_text,
             parsed=parsed,
@@ -120,6 +121,19 @@ def _status(
     if len(candidates) == 1 and _candidate_confirms_identity(parsed, candidates[0].product):
         return "확인됨"
     return "후보 있음"
+
+
+def _only_brand_matched_candidates(
+    parsed: EditorParsedLine,
+    candidates: list[EditorProductCandidate],
+) -> list[EditorProductCandidate]:
+    if not _key(parsed.brand_query):
+        return candidates
+    return [
+        candidate
+        for candidate in candidates
+        if _candidate_brand_matches(parsed, candidate.product)
+    ]
 
 
 def _candidate_score(parsed: EditorParsedLine, product: ProductSearchResult) -> tuple[int, list[str]]:

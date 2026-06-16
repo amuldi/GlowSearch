@@ -249,6 +249,37 @@ class EyelinerAbbreviationEditorSearchService:
         return "CANMAKE" if brand == "캔메이크" else None
 
 
+class BrandMismatchFallbackEditorSearchService:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    async def search(self, query, criteria):
+        self.queries.append(query)
+        if query != "하이라이터":
+            return SearchResponse(query=query, count=0, results=[])
+        return SearchResponse(
+            query=query,
+            count=1,
+            results=[
+                ProductSearchResult(
+                    canonical_product_id="verified:ofra-mini-highlighter",
+                    brand_ko="오프라",
+                    brand_en="OFRA Cosmetics",
+                    product_name_ko="오프라 미니 하이라이터",
+                    product_name_en=None,
+                    shade=None,
+                    source="oliveyoung",
+                    source_url="https://oliveyoung.example/products/ofra-highlighter",
+                    source_product_id="ofra-highlighter",
+                    quality_score=98,
+                )
+            ],
+        )
+
+    def resolve_brand_en(self, brand: str) -> str | None:
+        return "AMELI" if brand == "아멜리" else None
+
+
 @pytest.mark.asyncio
 async def test_editor_batch_api_returns_line_items() -> None:
     app = create_app()
@@ -374,7 +405,7 @@ async def test_editor_batch_does_not_confirm_candidate_without_requested_shade(t
 
 
 @pytest.mark.asyncio
-async def test_editor_batch_uses_product_fallback_without_confirming_brand_mismatch(
+async def test_editor_batch_drops_product_fallback_brand_mismatch_candidates(
     tmp_path,
 ) -> None:
     service = _editor_service(tmp_path)
@@ -383,9 +414,7 @@ async def test_editor_batch_uses_product_fallback_without_confirming_brand_misma
 
     assert response.items[0].parsed.brand_query == "페리페라"
     assert response.items[0].status == "수동 확인 필요"
-    assert response.items[0].candidates[0].product.brand_ko == "에뛰드"
-    assert response.items[0].candidates[0].product.source_url
-    assert "브랜드 불일치" in response.items[0].candidates[0].match_reasons
+    assert response.items[0].candidates == []
 
 
 @pytest.mark.asyncio
@@ -472,6 +501,22 @@ async def test_editor_batch_matches_eyeliner_abbreviation() -> None:
     assert search_service.queries == ["캔메이크 아라 카푸치노", "캔메이크 아라"]
     assert response.items[0].status == "후보 있음"
     assert response.items[0].candidates[0].product.source_product_id == "canmake-liner"
+
+
+@pytest.mark.asyncio
+async def test_editor_batch_drops_brand_mismatch_product_fallback_candidates() -> None:
+    search_service = BrandMismatchFallbackEditorSearchService()
+    service = EditorBatchService(search_service)
+
+    response = await service.batch("아멜리 하이라이터 #432", limit=3)
+
+    assert search_service.queries == [
+        "아멜리 하이라이터 432",
+        "아멜리 하이라이터",
+        "하이라이터",
+    ]
+    assert response.items[0].status == "수동 확인 필요"
+    assert response.items[0].candidates == []
 
 
 def test_product_index_prepares_editor_confirmed_mappings_table(tmp_path) -> None:
