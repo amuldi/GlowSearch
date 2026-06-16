@@ -18,7 +18,8 @@ from app.service.search_service import SearchService
 
 
 class EditorBatchService:
-    _CONCURRENCY = 4
+    _CONCURRENCY = 8
+    _LINE_TIMEOUT_SECONDS = 6.5
 
     def __init__(self, search_service: SearchService):
         self._search_service = search_service
@@ -29,7 +30,19 @@ class EditorBatchService:
 
         async def resolve(parsed: EditorParsedLine) -> EditorBatchItem:
             async with semaphore:
-                return await self._resolve_line(parsed, limit=limit)
+                try:
+                    return await asyncio.wait_for(
+                        self._resolve_line(parsed, limit=limit),
+                        timeout=self._LINE_TIMEOUT_SECONDS,
+                    )
+                except TimeoutError:
+                    parsed_with_brand = self._with_resolved_brand_en(parsed)
+                    return EditorBatchItem(
+                        raw_text=parsed.raw_text,
+                        parsed=parsed_with_brand,
+                        status="수동 확인 필요",
+                        candidates=[],
+                    )
 
         items = await asyncio.gather(*(resolve(parsed) for parsed in parsed_lines))
         return EditorBatchResponse(count=len(items), items=list(items))

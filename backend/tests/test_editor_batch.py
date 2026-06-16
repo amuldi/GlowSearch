@@ -1,3 +1,4 @@
+import asyncio
 import sqlite3
 
 import httpx
@@ -142,6 +143,15 @@ class EditorRouteSearchService:
                 )
             ],
         )
+
+
+class SlowEditorSearchService:
+    async def search(self, query, criteria):
+        await asyncio.sleep(1)
+        return SearchResponse(query=query, count=0, results=[])
+
+    def resolve_brand_en(self, brand: str) -> str | None:
+        return "HERA" if brand == "헤라" else None
 
 
 @pytest.mark.asyncio
@@ -318,6 +328,19 @@ async def test_editor_batch_does_not_record_search_gaps(tmp_path) -> None:
 
     assert response.items[0].status == "수동 확인 필요"
     assert gaps == []
+
+
+@pytest.mark.asyncio
+async def test_editor_batch_returns_manual_item_when_line_times_out(monkeypatch) -> None:
+    monkeypatch.setattr(EditorBatchService, "_LINE_TIMEOUT_SECONDS", 0.01)
+    service = EditorBatchService(SlowEditorSearchService())
+
+    response = await service.batch("헤라 파우더 #13N1", limit=3)
+
+    assert response.count == 1
+    assert response.items[0].status == "수동 확인 필요"
+    assert response.items[0].parsed.brand_en == "HERA"
+    assert response.items[0].candidates == []
 
 
 def test_product_index_prepares_editor_confirmed_mappings_table(tmp_path) -> None:
