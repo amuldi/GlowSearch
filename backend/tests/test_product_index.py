@@ -744,6 +744,67 @@ async def test_search_service_uses_live_source_for_partial_benefit_query(
 
 
 @pytest.mark.asyncio
+async def test_search_service_waits_for_public_api_after_verified_benefit_hit(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+
+    class FastVerifiedMoistureCollector:
+        name = "oliveyoung:verified-cache"
+
+        async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+            return [
+                ProductSourceRecord(
+                    source_brand_name="식물나라",
+                    product_name_ko="식물나라 가벼운 수분 선 젤",
+                    regular_price=25800,
+                    source="oliveyoung",
+                    source_product_id="verified-moisture-1",
+                )
+            ][:limit]
+
+    class SlowPublicMoistureCollector:
+        name = "oliveyoung:public-api"
+
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+            self.calls.append(keyword)
+            await asyncio.sleep(0.02)
+            return [
+                ProductSourceRecord(
+                    source_brand_name=f"브랜드{index}",
+                    product_name_ko=f"브랜드{index} 수분 크림",
+                    regular_price=12000 + index,
+                    source="oliveyoung",
+                    source_product_id=f"public-moisture-{index}",
+                )
+                for index in range(limit)
+            ]
+
+    public = SlowPublicMoistureCollector()
+    service = SearchService(
+        collectors=[FastVerifiedMoistureCollector(), public],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        index_background_refresh_enabled=False,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("수분", SearchCriteria(limit=5))
+    await service.close()
+
+    assert public.calls == ["수분"]
+    assert response.count == 5
+    assert response.results[0].source_product_id == "public-moisture-0"
+
+
+@pytest.mark.asyncio
 async def test_search_service_returns_partial_index_for_specific_single_query(
     tmp_path,
 ) -> None:

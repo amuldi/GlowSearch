@@ -747,7 +747,7 @@ class SearchService:
             or not cls._is_oliveyoung_collector(collector)
             or query != primary_query
             or record_count >= limit
-            or not cls._is_broad_related_query(query)
+            or not cls._is_discovery_query(query)
         ):
             return False
         if any(task_query != primary_query for _collector, task_query, _index in tasks.values()):
@@ -779,7 +779,7 @@ class SearchService:
             return True
         return (
             cls._is_oliveyoung_collector(collector)
-            and cls._is_broad_related_query(primary_query)
+            and cls._is_discovery_query(primary_query)
             and record_count < cls._broad_related_return_threshold(limit)
             and cls._has_pending_primary_oliveyoung_task(pending, tasks, primary_query)
         )
@@ -808,6 +808,10 @@ class SearchService:
     @classmethod
     def _is_broad_related_query(cls, query: str) -> bool:
         return cls._is_single_related_query(query) and bool(cls._related_query_expansions(query))
+
+    @classmethod
+    def _is_discovery_query(cls, query: str) -> bool:
+        return cls._is_broad_related_query(query) or cls._is_benefit_discovery_query(query)
 
     @classmethod
     def _is_benefit_discovery_query(cls, query: str) -> bool:
