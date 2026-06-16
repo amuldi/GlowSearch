@@ -186,6 +186,38 @@ class ShadeAwareEditorSearchService:
         return "rom&nd" if brand == "롬앤" else None
 
 
+class ShadeFallbackEditorSearchService:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    async def search(self, query, criteria):
+        self.queries.append(query)
+        if query != "헤라 파우더":
+            return SearchResponse(query=query, count=0, results=[])
+        return SearchResponse(
+            query=query,
+            count=1,
+            results=[
+                ProductSearchResult(
+                    canonical_product_id="verified:hera-soft-finish-loose-powder-15g",
+                    brand_ko="헤라",
+                    brand_en="HERA",
+                    product_name_ko="헤라 소프트 피니시 루스 파우더 15g",
+                    product_name_en=None,
+                    shade=None,
+                    source="oliveyoung",
+                    source_url="https://oliveyoung.example/products/hera-powder",
+                    source_product_id="hera-powder",
+                    quality_score=98,
+                    search_keywords=["헤라 파우더"],
+                )
+            ],
+        )
+
+    def resolve_brand_en(self, brand: str) -> str | None:
+        return "HERA" if brand == "헤라" else None
+
+
 @pytest.mark.asyncio
 async def test_editor_batch_api_returns_line_items() -> None:
     app = create_app()
@@ -385,6 +417,18 @@ async def test_editor_batch_searches_with_shade_query_first() -> None:
     assert search_service.queries == ["롬앤 쉐딩 그레이쿨"]
     assert response.items[0].status == "확인됨"
     assert response.items[0].candidates[0].product.source_product_id == "romand-shading"
+
+
+@pytest.mark.asyncio
+async def test_editor_batch_falls_back_to_normalized_query_when_shade_query_misses() -> None:
+    search_service = ShadeFallbackEditorSearchService()
+    service = EditorBatchService(search_service)
+
+    response = await service.batch("헤라 파우더 #13N1", limit=3)
+
+    assert search_service.queries == ["헤라 파우더 13N1", "헤라 파우더"]
+    assert response.items[0].status == "후보 있음"
+    assert response.items[0].candidates[0].product.source_product_id == "hera-powder"
 
 
 def test_product_index_prepares_editor_confirmed_mappings_table(tmp_path) -> None:

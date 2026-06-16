@@ -49,19 +49,16 @@ class EditorBatchService:
 
     async def _resolve_line(self, parsed: EditorParsedLine, *, limit: int) -> EditorBatchItem:
         parsed = self._with_resolved_brand_en(parsed)
-        candidates = await self._candidates_for_query(
-            parsed,
-            _primary_search_query(parsed),
-            limit=limit,
-            require_brand=True,
-        )
-        if not candidates and _should_try_product_fallback(parsed):
+        candidates: list[EditorProductCandidate] = []
+        for query, require_brand in _candidate_queries(parsed):
             candidates = await self._candidates_for_query(
                 parsed,
-                parsed.product_query or parsed.normalized_query,
+                query,
                 limit=limit,
-                require_brand=False,
+                require_brand=require_brand,
             )
+            if candidates:
+                break
         return EditorBatchItem(
             raw_text=parsed.raw_text,
             parsed=parsed,
@@ -315,3 +312,23 @@ def _primary_search_query(parsed: EditorParsedLine) -> str:
     ]
     query = " ".join(part.strip() for part in parts if part and part.strip())
     return query or parsed.raw_text.replace("#", " ").strip()
+
+
+def _candidate_queries(parsed: EditorParsedLine) -> list[tuple[str, bool]]:
+    candidates: list[tuple[str, bool]] = [
+        (_primary_search_query(parsed), True),
+        (parsed.normalized_query, True),
+    ]
+    if _should_try_product_fallback(parsed):
+        candidates.append((parsed.product_query or parsed.normalized_query, False))
+
+    deduped: list[tuple[str, bool]] = []
+    seen: set[tuple[str, bool]] = set()
+    for query, require_brand in candidates:
+        cleaned = query.strip()
+        key = (_key(cleaned), require_brand)
+        if not cleaned or not key[0] or key in seen:
+            continue
+        seen.add(key)
+        deduped.append((cleaned, require_brand))
+    return deduped
