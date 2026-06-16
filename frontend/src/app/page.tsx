@@ -747,7 +747,6 @@ function EditorBatchRow({
           <dl className="grid min-w-0 gap-2 text-xs sm:grid-cols-2">
             <Field label="가격" value={selectedOriginalPrice} />
             <Field label="할인가" value={selectedSalePrice} />
-            <Field label="이미지 URL" value={selectedProduct.image_url} />
           </dl>
         </div>
       ) : null}
