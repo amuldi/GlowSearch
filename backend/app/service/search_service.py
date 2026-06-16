@@ -211,7 +211,10 @@ class SearchService:
                 self._collect_index(
                     [cleaned_query, *collect_queries],
                     collect_limit,
-                    mapped_only=True,
+                    mapped_only=not self._should_use_full_index_first(
+                        cleaned_query,
+                        product_query,
+                    ),
                 ),
                 timeout=self._INDEX_READ_TIMEOUT_SECONDS,
             )
@@ -1356,6 +1359,11 @@ class SearchService:
         ):
             return result_count > 0
         return result_count >= self._search_gap_threshold(criteria)
+
+    @classmethod
+    def _should_use_full_index_first(cls, query: str, product_query: str) -> bool:
+        search_text = product_query or query
+        return cls._is_discovery_query(search_text)
 
     def _gap_catalog_queries(self, query: str) -> list[str]:
         candidates = [

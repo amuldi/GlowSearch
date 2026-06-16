@@ -744,6 +744,65 @@ async def test_search_service_uses_live_source_for_partial_benefit_query(
 
 
 @pytest.mark.asyncio
+async def test_search_service_uses_full_index_for_sufficient_benefit_query(
+    tmp_path,
+) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "수분",
+        [
+            ProductSourceRecord(
+                source_brand_name=f"브랜드{index}",
+                product_name_ko=f"브랜드{index} 수분 크림",
+                regular_price=12000 + index,
+                source="oliveyoung",
+                source_product_id=f"indexed-moisture-{index}",
+            )
+            for index in range(5)
+        ],
+    )
+
+    class UnusedCollector:
+        name = "oliveyoung:public-api"
+
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+            self.calls.append(keyword)
+            return []
+
+    collector = UnusedCollector()
+    service = SearchService(
+        collectors=[collector],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        index_min_results=8,
+        index_background_refresh_enabled=False,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("수분", SearchCriteria(limit=5))
+    await service.close()
+
+    assert collector.calls == []
+    assert response.count == 5
+    assert [result.source_product_id for result in response.results] == [
+        "indexed-moisture-0",
+        "indexed-moisture-1",
+        "indexed-moisture-2",
+        "indexed-moisture-3",
+        "indexed-moisture-4",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_search_service_waits_for_public_api_after_verified_benefit_hit(
     tmp_path,
 ) -> None:
