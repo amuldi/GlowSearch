@@ -239,6 +239,8 @@ class SearchService:
                 cleaned_query,
                 criteria,
                 len(indexed_results),
+                brand_match=brand_match,
+                product_query=product_query,
             )
         ):
             await self._cache.set(cache_key, indexed_collected)
@@ -807,6 +809,27 @@ class SearchService:
     def _is_broad_related_query(cls, query: str) -> bool:
         return cls._is_single_related_query(query) and bool(cls._related_query_expansions(query))
 
+    @classmethod
+    def _is_benefit_discovery_query(cls, query: str) -> bool:
+        tokens = cls._tokens(query)
+        if len(tokens) != 1:
+            return False
+        benefit_terms = {
+            "각질",
+            "광채",
+            "미백",
+            "모공",
+            "보습",
+            "브라이트닝",
+            "수분",
+            "장벽",
+            "진정",
+            "탄력",
+            "피지",
+            "쿨링",
+        }
+        return cls._key(tokens[0]) in benefit_terms
+
     @staticmethod
     def _is_brand_only_query(brand_match: BrandMatch | None, product_query: str) -> bool:
         return brand_match is not None and not clean_text(product_query)
@@ -1315,10 +1338,18 @@ class SearchService:
         query: str,
         criteria: SearchCriteria,
         result_count: int,
+        *,
+        brand_match: BrandMatch | None = None,
+        product_query: str = "",
     ) -> bool:
         if result_count >= criteria.limit:
             return True
-        if not self._is_broad_related_query(query):
+        if self._is_brand_only_query(brand_match, product_query):
+            return result_count > 0
+        if not (
+            self._is_broad_related_query(query)
+            or self._is_benefit_discovery_query(product_query or query)
+        ):
             return result_count > 0
         return result_count >= self._search_gap_threshold(criteria)
 
