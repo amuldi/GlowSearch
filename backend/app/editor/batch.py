@@ -146,7 +146,7 @@ def _candidate_score(parsed: EditorParsedLine, product: ProductSearchResult) -> 
         else:
             reasons.append("브랜드 불일치")
 
-    product_tokens = [_key(token) for token in _tokens(parsed.product_query)]
+    product_tokens = [_expanded_product_token_keys(token) for token in _tokens(parsed.product_query)]
     product_text = _key(
         " ".join(
             value
@@ -163,7 +163,11 @@ def _candidate_score(parsed: EditorParsedLine, product: ProductSearchResult) -> 
         )
     )
     if product_tokens:
-        matched = sum(1 for token in product_tokens if token and token in product_text)
+        matched = sum(
+            1
+            for token_keys in product_tokens
+            if any(token_key and token_key in product_text for token_key in token_keys)
+        )
         score += matched * 18
         if matched == len(product_tokens):
             score += 20
@@ -204,7 +208,7 @@ def _passes_editor_relevance(
     require_brand: bool,
 ) -> bool:
     brand_query = _key(parsed.brand_query)
-    product_tokens = [_key(token) for token in _tokens(parsed.product_query)]
+    product_tokens = [_expanded_product_token_keys(token) for token in _tokens(parsed.product_query)]
 
     brand_text = _key(
         " ".join(
@@ -224,7 +228,11 @@ def _passes_editor_relevance(
         return False
 
     if product_tokens:
-        matched_product_tokens = sum(1 for token in product_tokens if token and token in product_text)
+        matched_product_tokens = sum(
+            1
+            for token_keys in product_tokens
+            if any(token_key and token_key in product_text for token_key in token_keys)
+        )
         required_matches = len(product_tokens) if len(product_tokens) <= 2 else max(2, len(product_tokens) - 1)
         if matched_product_tokens < required_matches:
             return False
@@ -293,6 +301,13 @@ def _tokens(value: str | None) -> list[str]:
     if not value:
         return []
     return re.findall(r"[0-9A-Za-z가-힣]+", value)
+
+
+def _expanded_product_token_keys(token: str) -> tuple[str, ...]:
+    token_key = _key(token)
+    if token_key == "아라":
+        return ("아라", "아이라이너", "라이너")
+    return (token_key,) if token_key else ()
 
 
 def _should_try_product_fallback(parsed: EditorParsedLine) -> bool:

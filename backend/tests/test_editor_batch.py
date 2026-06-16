@@ -218,6 +218,37 @@ class ShadeFallbackEditorSearchService:
         return "HERA" if brand == "헤라" else None
 
 
+class EyelinerAbbreviationEditorSearchService:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    async def search(self, query, criteria):
+        self.queries.append(query)
+        if query != "캔메이크 아라":
+            return SearchResponse(query=query, count=0, results=[])
+        return SearchResponse(
+            query=query,
+            count=1,
+            results=[
+                ProductSearchResult(
+                    canonical_product_id="verified:canmake-creamy-touch-liner",
+                    brand_ko="캔메이크",
+                    brand_en="CANMAKE",
+                    product_name_ko="[신상출시/초슬림라이너] 캔메이크 크리미 터치 라이너 10종 택1",
+                    product_name_en=None,
+                    shade=None,
+                    source="oliveyoung",
+                    source_url="https://oliveyoung.example/products/canmake-liner",
+                    source_product_id="canmake-liner",
+                    quality_score=98,
+                )
+            ],
+        )
+
+    def resolve_brand_en(self, brand: str) -> str | None:
+        return "CANMAKE" if brand == "캔메이크" else None
+
+
 @pytest.mark.asyncio
 async def test_editor_batch_api_returns_line_items() -> None:
     app = create_app()
@@ -429,6 +460,18 @@ async def test_editor_batch_falls_back_to_normalized_query_when_shade_query_miss
     assert search_service.queries == ["헤라 파우더 13N1", "헤라 파우더"]
     assert response.items[0].status == "후보 있음"
     assert response.items[0].candidates[0].product.source_product_id == "hera-powder"
+
+
+@pytest.mark.asyncio
+async def test_editor_batch_matches_eyeliner_abbreviation() -> None:
+    search_service = EyelinerAbbreviationEditorSearchService()
+    service = EditorBatchService(search_service)
+
+    response = await service.batch("캔메이크 아라 카푸치노", limit=3)
+
+    assert search_service.queries == ["캔메이크 아라 카푸치노", "캔메이크 아라"]
+    assert response.items[0].status == "후보 있음"
+    assert response.items[0].candidates[0].product.source_product_id == "canmake-liner"
 
 
 def test_product_index_prepares_editor_confirmed_mappings_table(tmp_path) -> None:
