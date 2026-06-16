@@ -500,6 +500,22 @@
       "goods_no": "A000000238762",
       "source": "oliveyoung",
       "keywords": ["비디비치", "틴트밤", "틴트 밤", "카라멜허그", "펩타이드 버터 틴트밤"]
+    },
+    {
+      "canonical_product_id": "verified:canmake-creamy-touch-liner",
+      "brand_en": "CANMAKE",
+      "brand_ko": "캔메이크",
+      "product_name_ko": "[신상출시/초슬림라이너] 캔메이크 크리미 터치 라이너 10종 택1",
+      "price": 9100,
+      "original_price": 13000,
+      "sale_price": 9100,
+      "discount_rate": 30,
+      "shade": null,
+      "image_url": "https://image.oliveyoung.co.kr/uploads/images/goods/10/0000/0023/A00000023254322ko.jpg?l=ko",
+      "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000232543",
+      "goods_no": "A000000232543",
+      "source": "oliveyoung",
+      "keywords": ["CANMAKE", "캔메이크", "아라", "아이라이너", "라이너", "크리미 터치 라이너", "카푸치노"]
     }
   ]
 }
