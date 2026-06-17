@@ -18,8 +18,8 @@ from app.service.search_service import SearchService
 
 
 class EditorBatchService:
-    _CONCURRENCY = 8
-    _LINE_TIMEOUT_SECONDS = 22.0
+    _CONCURRENCY = 3
+    _LINE_TIMEOUT_SECONDS = 35.0
 
     def __init__(self, search_service: SearchService):
         self._search_service = search_service
