@@ -844,6 +844,7 @@ function EditorBatchRow({
       <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
         <Field label="브랜드명" value={brandKo} />
         <Field label="영문 브랜드명" value={brandEn} />
+        <Field label="입력 제품 키워드" value={selectedProduct ? null : item.parsed.product_query} />
         <Field label="제품명" value={selectedProduct?.product_name_ko} />
         <Field label="영문 제품명" value={selectedProduct?.product_name_en} />
         <Field label="호수 번호" value={shadeCode} />
@@ -1349,6 +1350,7 @@ function editorDelimitedPayload(
     "원문 입력",
     "브랜드명",
     "영문 브랜드명",
+    "입력 제품 키워드",
     "제품명",
     "영문 제품명",
     "호수 번호",
@@ -1365,6 +1367,7 @@ function editorDelimitedPayload(
       item.raw_text,
       product?.brand_ko ?? item.parsed.brand_query ?? "",
       product?.brand_en ?? item.parsed.brand_en ?? "",
+      item.parsed.product_query ?? "",
       product?.product_name_ko ?? "",
       product?.product_name_en ?? "",
       item.parsed.shade_code ?? "",
