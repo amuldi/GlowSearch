@@ -33,6 +33,10 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 - 편집자 일괄 정리 UI가 입력을 라인 단위 작은 요청으로 나눠 처리합니다. 운영 백엔드가 느리거나 특정 라인이 실패해도 전체 결과가 깨지지 않고, 완료된 행은 즉시 정리 결과에 누적됩니다.
 - 진행 중에는 `후보를 찾는 중 n/전체` 형태로 진행률을 표시합니다.
 - 개별 라인 요청이 실패하면 source 기반 정보를 임의 생성하지 않고 `수동 확인 필요` 행으로 남깁니다.
+- verified catalog를 39개로 늘렸고, source 기반 영문 제품명 보유 항목은 5개로 늘렸습니다.
+- `페리페라 스키니브로우`는 CLUBCLIO 공식 Shopify JSON/JSON-LD source로 `[PERIPERA] Speedy Skinny Brow` 영문 제품명과 official source offer를 보강했습니다.
+- `캔메이크 아라 카푸치노`는 CANMAKE 공식 상품 페이지의 색상 데이터로 `[15]Cappuccino Pink` 색상명을 보강했습니다. 공식 페이지에서 영문 상품명 본문은 확인되지 않아 `product_name_en`은 만들지 않았습니다.
+- 현재 source로 확인되지 않은 `어반디케이 파우더`, `어반디케이 문더스트 #글림락`, `페리페라 포근 픽싱 틴트 19호`, `아멜리 하이라이터 #432`는 계속 `수동 확인 필요`가 정상입니다.
 
 - 프론트 운영 주소는 `https://frontend-plum-six-32.vercel.app`입니다.
 - 마지막으로 수동 검증한 Vercel 고유 배포 URL은 `https://frontend-j62u2oy4n-amuldis-projects.vercel.app`입니다.

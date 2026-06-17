@@ -374,6 +374,22 @@
       "keywords": ["peripera", "페리페라", "스키니브로우", "스피디 스키니 브로우", "브로우"]
     },
     {
+      "canonical_product_id": "verified:peripera-speedy-skinny-brow",
+      "brand_en": "Peripera",
+      "brand_ko": "페리페라",
+      "product_name_ko": "[6월 올영픽] 페리페라 스피디 스키니 브로우 8 Colors (단품/더블)",
+      "product_name_en": "[PERIPERA] Speedy Skinny Brow",
+      "price": null,
+      "currency": "USD",
+      "shade": null,
+      "image_url": "https://cdn.shopify.com/s/files/1/0310/4925/3001/products/eyebrow_3fe71d3c-8e44-45ac-a6c7-f955decfc437.jpg?v=1665473702",
+      "source_url": "https://clubclio.shop/products/peripera-speedy-skinny-brow",
+      "goods_no": "4601270435977",
+      "source": "official",
+      "options": ["1 Gray Brown", "2 Dark Brown", "3 Natural Brown", "6 Cool Gray", "7 Ash Brown", "8 Taupe Beige", "9 Taupe Brown"],
+      "keywords": ["PERIPERA", "Peripera", "페리페라", "Speedy Skinny Brow", "스키니브로우", "스피디 스키니 브로우", "브로우"]
+    },
+    {
       "canonical_product_id": "verified:kissme-heavy-rotation-coloring-eyebrow-ex",
       "brand_en": "KISS ME",
       "brand_ko": "키스미",
@@ -516,6 +532,19 @@
       "goods_no": "A000000232543",
       "source": "oliveyoung",
       "keywords": ["CANMAKE", "캔메이크", "아라", "아이라이너", "라이너", "크리미 터치 라이너", "카푸치노"]
+    },
+    {
+      "canonical_product_id": "verified:canmake-creamy-touch-liner",
+      "brand_en": "CANMAKE",
+      "brand_ko": "캔메이크",
+      "product_name_ko": "[신상출시/초슬림라이너] 캔메이크 크리미 터치 라이너 10종 택1",
+      "price": null,
+      "shade": "[15]Cappuccino Pink",
+      "image_url": "https://www.canmake.com/wp-content/uploads/2025/08/C05_36_col15_chip_01.jpg",
+      "source_url": "https://www.canmake.com/item/detail/creamy-touch-liner/",
+      "goods_no": "canmake-creamy-touch-liner-15",
+      "source": "official",
+      "keywords": ["CANMAKE", "캔메이크", "아라", "아이라이너", "라이너", "크리미 터치 라이너", "카푸치노", "Cappuccino Pink", "[15]Cappuccino Pink"]
     }
   ]
 }

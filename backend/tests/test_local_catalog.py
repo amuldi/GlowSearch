@@ -131,3 +131,31 @@ async def test_project_catalog_covers_editor_sample_source_verified_items(
     assert records
     assert records[0].product_name_ko == expected_name
     assert records[0].source_url
+
+
+@pytest.mark.asyncio
+async def test_project_catalog_enriches_peripera_skinny_brow_from_official_source() -> None:
+    collector = LocalVerifiedCatalogCollector(PROJECT_CATALOG_PATH)
+
+    records = await collector.search("페리페라 스키니브로우", limit=5)
+
+    assert any(record.product_name_en == "[PERIPERA] Speedy Skinny Brow" for record in records)
+    assert any(record.source == "official" for record in records)
+    assert any(
+        record.source_url == "https://clubclio.shop/products/peripera-speedy-skinny-brow"
+        for record in records
+    )
+
+
+@pytest.mark.asyncio
+async def test_project_catalog_enriches_canmake_cappuccino_shade_from_official_source() -> None:
+    collector = LocalVerifiedCatalogCollector(PROJECT_CATALOG_PATH)
+
+    records = await collector.search("캔메이크 아라 카푸치노", limit=5)
+
+    assert any(record.shade == "[15]Cappuccino Pink" for record in records)
+    assert any(record.source == "official" for record in records)
+    assert any(
+        record.source_url == "https://www.canmake.com/item/detail/creamy-touch-liner/"
+        for record in records
+    )

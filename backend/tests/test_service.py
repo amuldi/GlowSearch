@@ -281,6 +281,7 @@ class MultiSourceSameProductCollector:
                 source_brand_name="BRTC",
                 product_name_ko="제품",
                 regular_price=25000,
+                shade="01 공식 색상",
                 source="official",
                 source_url="https://official.example/products/1",
                 source_product_id="official-1",
@@ -1449,6 +1450,8 @@ async def test_search_service_merges_verified_source_offers_for_same_product(tmp
     assert response.count == 1
     result = response.results[0]
     assert result.source == "oliveyoung"
+    assert result.product_name_en == "Product"
+    assert result.shade == "01 공식 색상"
     assert [offer.source for offer in result.offers] == [
         "oliveyoung",
         "oliveyoung-global",
