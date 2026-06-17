@@ -607,7 +607,7 @@ function EditorBatchWorkspace() {
   };
 
   return (
-    <section className="mx-auto mt-8 max-w-full lg:max-w-6xl" style={{ width: "min(100%, calc(100vw - 2rem))" }}>
+    <section className="mx-auto mt-8 max-w-full lg:max-w-6xl" style={{ width: "min(100%, calc(100vw - 4rem))" }}>
       <div className="grid w-full min-w-0 max-w-full gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <div className="min-w-0 overflow-hidden rounded-lg border border-blush/55 bg-white/92 p-4 shadow-soft">
           <label htmlFor="editor-batch-input" className="text-sm font-bold text-rosewood">
