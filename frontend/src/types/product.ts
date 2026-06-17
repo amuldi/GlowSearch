@@ -81,6 +81,37 @@ export type DiagnosticsResponse = {
     product_name_en?: number;
     source_counts?: Record<string, number>;
   };
+  search_gaps?: Array<{
+    query?: string | null;
+    normalized_query?: string | null;
+    result_count?: number;
+    miss_count?: number;
+    last_reason?: string | null;
+    last_seen_at?: string | null;
+  }>;
+  catalog_jobs?: {
+    stats?: {
+      total?: number;
+      pending?: number;
+      running?: number;
+      completed?: number;
+      failed?: number;
+      skipped?: number;
+      last_finished_at?: string | null;
+      last_error?: string | null;
+    };
+    recent?: Array<{
+      query?: string | null;
+      normalized_query?: string | null;
+      priority?: number;
+      status?: string | null;
+      attempt_count?: number;
+      max_attempts?: number;
+      product_count?: number | null;
+      last_error?: string | null;
+      updated_at?: string | null;
+    }>;
+  };
 };
 
 export type SearchParams = {

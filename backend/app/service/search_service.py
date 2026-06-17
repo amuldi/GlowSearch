@@ -1131,6 +1131,24 @@ class SearchService:
             shade=shade,
         )
 
+    def schedule_editor_search_gap(
+        self,
+        query: str,
+        *,
+        result_count: int = 0,
+        reason: str = "editor_manual_review",
+    ) -> None:
+        if self._product_index is None:
+            return
+        cleaned_query = clean_text(query)
+        if not cleaned_query:
+            return
+        task = asyncio.create_task(
+            self._record_search_gap_safely(cleaned_query, result_count, reason)
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
     async def run_catalog_jobs(
         self,
         *,

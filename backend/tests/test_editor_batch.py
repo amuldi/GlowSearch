@@ -444,14 +444,19 @@ async def test_editor_batch_uses_catalog_keywords_without_exposing_them(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_editor_batch_does_not_record_search_gaps(tmp_path) -> None:
+async def test_editor_batch_records_manual_review_search_gap(tmp_path) -> None:
     service = _editor_service(tmp_path)
 
     response = await service.batch("없는 제품", limit=3)
+    await service._search_service.drain_background_tasks()
     gaps = await service._search_service.recent_search_gaps(limit=10)
+    jobs = await service._search_service.recent_catalog_jobs(limit=10)
 
     assert response.items[0].status == "수동 확인 필요"
-    assert gaps == []
+    assert gaps[0]["query"] == "없는 제품"
+    assert gaps[0]["last_reason"] == "editor_manual_review"
+    assert jobs[0]["query"] == "없는 제품"
+    assert jobs[0]["status"] == "pending"
 
 
 @pytest.mark.asyncio

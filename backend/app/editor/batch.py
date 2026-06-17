@@ -45,6 +45,8 @@ class EditorBatchService:
                     )
 
         items = await asyncio.gather(*(resolve(parsed) for parsed in parsed_lines))
+        for item in items:
+            self._schedule_manual_review_gap(item)
         return EditorBatchResponse(count=len(items), items=list(items))
 
     async def _resolve_line(self, parsed: EditorParsedLine, *, limit: int) -> EditorBatchItem:
@@ -108,6 +110,15 @@ class EditorBatchService:
         if not brand_en:
             return parsed
         return parsed.model_copy(update={"brand_en": brand_en})
+
+    def _schedule_manual_review_gap(self, item: EditorBatchItem) -> None:
+        if item.status != "수동 확인 필요":
+            return
+        schedule_gap = getattr(self._search_service, "schedule_editor_search_gap", None)
+        if schedule_gap is None:
+            return
+        query = _editor_gap_query(item.parsed)
+        schedule_gap(query, result_count=len(item.candidates), reason="editor_manual_review")
 
 
 def _status(
@@ -361,3 +372,8 @@ def _candidate_queries(parsed: EditorParsedLine) -> list[tuple[str, bool]]:
         seen.add(key)
         deduped.append((cleaned, require_brand))
     return deduped
+
+
+def _editor_gap_query(parsed: EditorParsedLine) -> str:
+    query = _primary_search_query(parsed)
+    return query or parsed.normalized_query or parsed.raw_text

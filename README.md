@@ -28,7 +28,7 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 
 ### 2026-06-17
 
-이번 업데이트는 편집자 일괄 정리 모드의 운영 안정성과 배포 URL 혼선을 정리한 변경입니다.
+이번 업데이트는 편집자 일괄 정리 모드의 운영 안정성, 보강 대기 queue, 배포 URL 혼선을 정리한 변경입니다.
 
 - 프론트 canonical 운영 주소는 `https://glow-search.vercel.app`입니다.
 - 마지막으로 수동 검증한 Vercel 고유 배포 URL은 `https://glow-search-8q8gz8wvt-amuldis-projects.vercel.app`입니다.
@@ -38,6 +38,8 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 - 편집자 모드 상단에 verified catalog 총량, 영문 제품명 보유 수, index 수, source adapter 활성 상태를 표시합니다.
 - `/diagnostics` 호출이 실패하면 source adapter를 `비활성`으로 오표시하지 않고 별도 실패 상태를 보여줍니다.
 - `/editor/batch` 호출은 Render cold start, 일시적 5xx, 429, 네트워크 오류에 대해 짧은 backoff로 재시도합니다.
+- 편집자 일괄 정리에서 최종 상태가 `수동 확인 필요`인 입력은 `search_gaps`와 `catalog_jobs`에 `editor_manual_review` 사유로 기록됩니다. 운영자는 `/diagnostics` 또는 편집자 모드 상태 패널에서 최근 보강 대상을 확인하고 source 기반 catalog refresh 대상으로 사용할 수 있습니다.
+- 편집자 모드 상단 상태 패널에 catalog 보강 대기/실행 수와 최근 보강 대상 검색어를 표시합니다.
 - 일반 검색 카드에서는 source 원본 링크 이동과 복사 텍스트의 `출처:` 라인을 제거했습니다. 편집자 모드의 source 링크는 검증/더보기란 복사용 요구사항이므로 유지합니다.
 - 17개 편집자 샘플 입력의 운영 결과는 `확인됨` 10개, `후보 있음` 2개, `수동 확인 필요` 5개입니다.
 - `수동 확인 필요`로 남는 항목은 어반디케이 파우더, 클리오 치즈냥이, 어반디케이 문더스트 글림락, 페리페라 포근 픽싱 틴트 19호, 아멜리 하이라이터 432입니다. 현재 안전한 source에서 직접 확인된 상품 URL이 없어 임의 catalog 추가를 하지 않았습니다.

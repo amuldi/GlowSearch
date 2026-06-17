@@ -742,6 +742,12 @@ function EditorDataStatus({
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([source, count]) => `${source} ${count}`)
     .join(" · ");
+  const pendingJobCount = diagnostics.catalog_jobs?.stats?.pending;
+  const runningJobCount = diagnostics.catalog_jobs?.stats?.running;
+  const recentGapQueries = (diagnostics.search_gaps ?? [])
+    .map((gap) => gap.query?.trim())
+    .filter((query): query is string => Boolean(query))
+    .slice(0, 4);
 
   return (
     <div className="mt-3 rounded-lg border border-line bg-blush-soft/35 px-3 py-2">
@@ -749,6 +755,8 @@ function EditorDataStatus({
         {catalogTotal !== undefined ? <span>verified catalog {catalogTotal.toLocaleString("ko-KR")}</span> : null}
         {productNameEnCount !== undefined ? <span>영문 제품명 {productNameEnCount.toLocaleString("ko-KR")}</span> : null}
         {indexCount !== undefined ? <span>index {indexCount.toLocaleString("ko-KR")}</span> : null}
+        {pendingJobCount !== undefined ? <span>보강 대기 {pendingJobCount.toLocaleString("ko-KR")}</span> : null}
+        {runningJobCount ? <span>보강 실행 {runningJobCount.toLocaleString("ko-KR")}</span> : null}
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {enabledAdapters.map(([label, enabled]) => (
@@ -768,6 +776,16 @@ function EditorDataStatus({
       {sourceCounts ? (
         <div className="mt-2 break-words text-[11px] font-medium text-neutral-500">
           {sourceCounts}
+        </div>
+      ) : null}
+      {recentGapQueries.length ? (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-neutral-500">
+          <span className="font-bold text-neutral-600">최근 보강 대상</span>
+          {recentGapQueries.map((query) => (
+            <span key={query} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-900">
+              {query}
+            </span>
+          ))}
         </div>
       ) : null}
     </div>
