@@ -31,9 +31,9 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 이번 업데이트는 편집자 일괄 정리 모드의 운영 안정성, 보강 대기 queue, 배포 URL 혼선을 정리한 변경입니다.
 
 - 프론트 canonical 운영 주소는 `https://glow-search.vercel.app`입니다.
-- 마지막으로 수동 검증한 Vercel 고유 배포 URL은 `https://glow-search-8q8gz8wvt-amuldis-projects.vercel.app`입니다.
-- 프론트 최신 커밋은 `4aa24a154850d9ba7fdff8d29641ef9a82c0bc68`입니다.
-- 백엔드 Render 운영 `release_sha`는 `1e00ecdeaedd32baa2eb2ab72884146871cbb71b`입니다. 이번 변경은 프론트 안정성 개선이므로 백엔드 SHA는 이전 기능 배포 커밋을 유지합니다.
+- 마지막으로 수동 검증한 Vercel 고유 배포 URL은 `https://glow-search-c7vmo3y76-amuldis-projects.vercel.app`입니다.
+- 프론트 최신 커밋은 `8fc9efc608e0801cfc18ae3e5a315a5803024707`입니다.
+- 백엔드 Render 운영 `release_sha`는 `8fc9efc608e0801cfc18ae3e5a315a5803024707`입니다.
 - `https://glow-search.vercel.app/?mode=editor`에서 편집자 모드가 직접 열리고, 운영 데이터 상태 패널이 표시되는 것을 확인했습니다.
 - 편집자 모드 상단에 verified catalog 총량, 영문 제품명 보유 수, index 수, source adapter 활성 상태를 표시합니다.
 - `/diagnostics` 호출이 실패하면 source adapter를 `비활성`으로 오표시하지 않고 별도 실패 상태를 보여줍니다.
