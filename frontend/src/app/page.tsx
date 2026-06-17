@@ -526,6 +526,7 @@ function EditorBatchWorkspace() {
     () => text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).length,
     [text],
   );
+  const resultStatusCounts = useMemo(() => editorStatusCounts(response), [response]);
   const canSubmit = Boolean(text.trim()) && !isLoading;
 
   useEffect(() => {
@@ -649,6 +650,13 @@ function EditorBatchWorkspace() {
               <p className="mt-1 text-xs font-medium text-neutral-500">
                 source URL이 있는 후보만 표시합니다.
               </p>
+              {response ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <StatusCountChip label="확인됨" count={resultStatusCounts.confirmed} tone="confirmed" />
+                  <StatusCountChip label="후보 있음" count={resultStatusCounts.candidates} tone="candidate" />
+                  <StatusCountChip label="수동 확인 필요" count={resultStatusCounts.manual} tone="manual" />
+                </div>
+              ) : null}
             </div>
             <div className="grid min-w-0 grid-cols-1 gap-1.5 sm:flex sm:flex-wrap sm:justify-end">
               {[
@@ -965,6 +973,27 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function StatusCountChip({
+  label,
+  count,
+  tone,
+}: {
+  label: string;
+  count: number;
+  tone: "confirmed" | "candidate" | "manual";
+}) {
+  const className = tone === "confirmed"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : tone === "candidate"
+      ? "border-amber-200 bg-amber-50 text-amber-800"
+      : "border-neutral-200 bg-neutral-50 text-neutral-600";
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-extrabold ${className}`}>
+      {label} {count.toLocaleString("ko-KR")}
+    </span>
+  );
+}
+
 function SuggestionDropdown({
   suggestions,
   query,
@@ -1256,6 +1285,24 @@ function selectedEditorProduct(
   const selectedIndex = selected[index];
   if (selectedIndex === undefined) return null;
   return item.candidates[selectedIndex]?.product ?? null;
+}
+
+function editorStatusCounts(response: EditorBatchResponse | null) {
+  const counts = {
+    confirmed: 0,
+    candidates: 0,
+    manual: 0,
+  };
+  for (const item of response?.items ?? []) {
+    if (item.status === "확인됨") {
+      counts.confirmed += 1;
+    } else if (item.status === "후보 있음") {
+      counts.candidates += 1;
+    } else {
+      counts.manual += 1;
+    }
+  }
+  return counts;
 }
 
 function editorCopyPayload(
