@@ -55,6 +55,34 @@ export type SuggestionResponse = {
   suggestions: string[];
 };
 
+export type AdapterReadiness = {
+  enabled: boolean;
+  configured: boolean;
+  base_url_configured: boolean;
+  reason: string;
+};
+
+export type DiagnosticsResponse = {
+  adapter_readiness?: Record<string, AdapterReadiness>;
+  config?: {
+    musinsa_api_enabled?: boolean;
+    oliveyoung_global_api_enabled?: boolean;
+    official_brand_api_enabled?: boolean;
+    global_discovery_api_enabled?: boolean;
+  };
+  index?: {
+    product_count?: number;
+    search_gap_count?: number;
+    last_refreshed_at?: string | null;
+  };
+  verified_catalog?: {
+    total?: number;
+    canonical_product_id?: number;
+    product_name_en?: number;
+    source_counts?: Record<string, number>;
+  };
+};
+
 export type SearchParams = {
   query: string;
   limit?: number;

@@ -4,8 +4,15 @@ import { Check, ChevronRight, Copy, ExternalLink, Loader2, Search, X } from "luc
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { confirmEditorCandidate, fetchSearchSuggestions, organizeEditorBatch, searchProducts } from "@/lib/api";
+import {
+  confirmEditorCandidate,
+  fetchDiagnostics,
+  fetchSearchSuggestions,
+  organizeEditorBatch,
+  searchProducts,
+} from "@/lib/api";
 import type {
+  DiagnosticsResponse,
   EditorBatchItem,
   EditorBatchResponse,
   EditorConfirmRequest,
@@ -505,6 +512,8 @@ function EmptySearchState({ onChoose }: { onChoose: (query: string) => void }) {
 function EditorBatchWorkspace() {
   const [text, setText] = useState("");
   const [response, setResponse] = useState<EditorBatchResponse | null>(null);
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsResponse | null>(null);
+  const [diagnosticsStatus, setDiagnosticsStatus] = useState<"loading" | "ready" | "error">("loading");
   const [selected, setSelected] = useState<Record<number, number>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -518,6 +527,21 @@ function EditorBatchWorkspace() {
     [text],
   );
   const canSubmit = Boolean(text.trim()) && !isLoading;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setDiagnosticsStatus("loading");
+    fetchDiagnostics(controller.signal)
+      .then((data) => {
+        setDiagnostics(data);
+        setDiagnosticsStatus("ready");
+      })
+      .catch(() => {
+        setDiagnostics(null);
+        setDiagnosticsStatus("error");
+      });
+    return () => controller.abort();
+  }, []);
 
   const runBatch = async () => {
     const input = text.trim();
@@ -578,6 +602,7 @@ function EditorBatchWorkspace() {
           <label htmlFor="editor-batch-input" className="text-sm font-bold text-rosewood">
             러프 제품 리스트
           </label>
+          <EditorDataStatus diagnostics={diagnostics} status={diagnosticsStatus} />
           <textarea
             id="editor-batch-input"
             value={text}
@@ -678,6 +703,74 @@ function EditorBatchWorkspace() {
         </div>
       </div>
     </section>
+  );
+}
+
+function EditorDataStatus({
+  diagnostics,
+  status,
+}: {
+  diagnostics: DiagnosticsResponse | null;
+  status: "loading" | "ready" | "error";
+}) {
+  if (!diagnostics && status === "loading") {
+    return (
+      <div className="mt-3 rounded-lg border border-line bg-blush-soft/35 px-3 py-2 text-[11px] font-bold text-neutral-500">
+        운영 데이터 상태 확인 중
+      </div>
+    );
+  }
+
+  if (!diagnostics) {
+    return (
+      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-900">
+        운영 데이터 상태를 불러오지 못했습니다.
+      </div>
+    );
+  }
+
+  const catalogTotal = diagnostics?.verified_catalog?.total;
+  const productNameEnCount = diagnostics?.verified_catalog?.product_name_en;
+  const indexCount = diagnostics?.index?.product_count;
+  const enabledAdapters: Array<[string, boolean | undefined]> = [
+    ["Olive Young", diagnostics?.adapter_readiness?.oliveyoung_public_api?.enabled],
+    ["Musinsa", diagnostics?.adapter_readiness?.musinsa?.enabled],
+    ["Olive Young Global", diagnostics?.adapter_readiness?.oliveyoung_global?.enabled],
+    ["Official", diagnostics?.adapter_readiness?.official_brand?.enabled],
+  ];
+  const sourceCounts = Object.entries(diagnostics?.verified_catalog?.source_counts ?? {})
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([source, count]) => `${source} ${count}`)
+    .join(" · ");
+
+  return (
+    <div className="mt-3 rounded-lg border border-line bg-blush-soft/35 px-3 py-2">
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold text-neutral-600">
+        {catalogTotal !== undefined ? <span>verified catalog {catalogTotal.toLocaleString("ko-KR")}</span> : null}
+        {productNameEnCount !== undefined ? <span>영문 제품명 {productNameEnCount.toLocaleString("ko-KR")}</span> : null}
+        {indexCount !== undefined ? <span>index {indexCount.toLocaleString("ko-KR")}</span> : null}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {enabledAdapters.map(([label, enabled]) => (
+          <span
+            key={label}
+            className={[
+              "rounded-full border px-2 py-0.5 text-[11px] font-bold",
+              enabled
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-neutral-200 bg-white text-neutral-500",
+            ].join(" ")}
+          >
+            {label} {enabled ? "활성" : "비활성"}
+          </span>
+        ))}
+      </div>
+      {sourceCounts ? (
+        <div className="mt-2 break-words text-[11px] font-medium text-neutral-500">
+          {sourceCounts}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -983,7 +1076,6 @@ function ProductCard({ product }: { product: Product }) {
     originalPriceText ? `원가: ${originalPriceText}` : null,
     hasDiscount ? `할인가: ${salePriceText}` : null,
     product.shade ? `호수: ${product.shade}` : null,
-    `출처: ${sourceLabel(product)}`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -1030,19 +1122,7 @@ function ProductCard({ product }: { product: Product }) {
 
   return (
     <article className="grid grid-cols-[96px_1fr] gap-4 rounded-lg border border-blush/45 bg-white p-3 shadow-soft transition duration-150 hover:-translate-y-0.5 hover:border-rose/45 hover:shadow-[0_14px_36px_rgba(74,54,63,0.10)]">
-      {product.source_url ? (
-        <a
-          href={product.source_url}
-          target="_blank"
-          rel="noreferrer"
-          className="group block"
-          aria-label={`${product.product_name_ko ?? "상품"} 원본 페이지 열기`}
-        >
-          {image}
-        </a>
-      ) : (
-        image
-      )}
+      {image}
 
       <div className="min-w-0">
         <div className="mb-2 flex items-center justify-between gap-2">
@@ -1080,21 +1160,7 @@ function ProductCard({ product }: { product: Product }) {
             {product.product_name_ko ? (
               <div>
               <dt className="text-[11px] font-medium text-neutral-500">제품명</dt>
-              <dd>
-                {product.source_url ? (
-                  <a
-                    href={product.source_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block underline-offset-2 hover:text-rosewood hover:underline"
-                    aria-label={`${product.product_name_ko ?? "상품"} 원본 페이지 열기`}
-                  >
-                    {name}
-                  </a>
-                ) : (
-                  name
-                )}
-              </dd>
+              <dd>{name}</dd>
               </div>
             ) : null}
             {productNameEn ? (
