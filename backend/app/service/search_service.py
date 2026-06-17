@@ -1846,6 +1846,7 @@ class SearchService:
                     product.shade,
                     product.description,
                     " ".join(product.options or []),
+                    " ".join(product.search_keywords or []),
                 ]
                 if value
             )

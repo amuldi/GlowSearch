@@ -3,10 +3,16 @@ from pathlib import Path
 
 import pytest
 
+from app.cache.ttl import AsyncTTLCache
+from app.data_collector.base import SearchCriteria
 from app.data_collector.local_catalog import LocalVerifiedCatalogCollector
+from app.normalizer.brand import BrandResolver
+from app.normalizer.product import ProductNormalizer
+from app.service.search_service import SearchService, _CollectedResult
 
 
 PROJECT_CATALOG_PATH = Path(__file__).resolve().parents[1] / "data" / "verified_products.json"
+PROJECT_REGISTRY_PATH = Path(__file__).resolve().parents[1] / "data" / "brand_registry.json"
 
 
 @pytest.mark.asyncio
@@ -158,4 +164,30 @@ async def test_project_catalog_enriches_canmake_cappuccino_shade_from_official_s
     assert any(
         record.source_url == "https://www.canmake.com/item/detail/creamy-touch-liner/"
         for record in records
+    )
+
+
+@pytest.mark.asyncio
+async def test_project_catalog_search_service_matches_canmake_editor_abbreviation() -> None:
+    service = SearchService(
+        collectors=[LocalVerifiedCatalogCollector(PROJECT_CATALOG_PATH)],
+        normalizer=ProductNormalizer(
+            BrandResolver(PROJECT_REGISTRY_PATH),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        index_background_refresh_enabled=False,
+    )
+
+    response = await service.search("캔메이크 아라 카푸치노", SearchCriteria(limit=3))
+    await service.close()
+
+    assert response.count == 1
+    result = response.results[0]
+    assert result.brand_ko == "캔메이크"
+    assert result.shade == "[15]Cappuccino Pink"
+    assert any(
+        offer.source == "official"
+        and offer.source_url == "https://www.canmake.com/item/detail/creamy-touch-liner/"
+        for offer in result.offers
     )

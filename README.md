@@ -36,12 +36,13 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 - verified catalog를 39개로 늘렸고, source 기반 영문 제품명 보유 항목은 5개로 늘렸습니다.
 - `페리페라 스키니브로우`는 CLUBCLIO 공식 Shopify JSON/JSON-LD source로 `[PERIPERA] Speedy Skinny Brow` 영문 제품명과 official source offer를 보강했습니다.
 - `캔메이크 아라 카푸치노`는 CANMAKE 공식 상품 페이지의 색상 데이터로 `[15]Cappuccino Pink` 색상명을 보강했습니다. 공식 페이지에서 영문 상품명 본문은 확인되지 않아 `product_name_en`은 만들지 않았습니다.
+- 일반 검색 관련성 판단에 verified catalog의 `search_keywords`를 반영합니다. 이 변경으로 편집자 입력에서 자주 쓰는 `아라` 같은 줄임말과 `카푸치노` 같은 색상 키워드가 검색 결과 필터에서 누락되지 않습니다.
 - 현재 source로 확인되지 않은 `어반디케이 파우더`, `어반디케이 문더스트 #글림락`, `페리페라 포근 픽싱 틴트 19호`, `아멜리 하이라이터 #432`는 계속 `수동 확인 필요`가 정상입니다.
 
 - 프론트 운영 주소는 `https://frontend-plum-six-32.vercel.app`입니다.
 - 마지막으로 수동 검증한 Vercel 고유 배포 URL은 `https://frontend-j62u2oy4n-amuldis-projects.vercel.app`입니다.
 - 프론트 최신 기능 커밋은 `be2b507dd828205ae2aba292be45916c82348b38`입니다.
-- 백엔드 Render 운영 `release_sha`는 `b4e9beadf918d6d42930cdf44722af812dabbe41`입니다.
+- 백엔드 Render 운영 `release_sha`는 `https://glowsearch-backend.onrender.com/health`에서 최신 Git 커밋과 일치하는지 확인합니다.
 - `https://frontend-plum-six-32.vercel.app/?mode=editor`에서 편집자 모드가 직접 열리고, 운영 데이터 상태 패널이 표시되는 것을 확인했습니다.
 - 편집자 모드 상단에 verified catalog 총량, 영문 제품명 보유 수, index 수, source adapter 활성 상태를 표시합니다.
 - `/diagnostics` 호출이 실패하면 source adapter를 `비활성`으로 오표시하지 않고 별도 실패 상태를 보여줍니다.
@@ -53,8 +54,8 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 - 일반 검색 카드에서는 source 원본 링크 이동과 복사 텍스트의 `출처:` 라인을 제거했습니다. 편집자 모드의 source 링크는 검증/더보기란 복사용 요구사항이므로 유지합니다.
 - 17개 편집자 샘플 입력의 운영 결과는 `확인됨` 10개, `후보 있음` 3개, `수동 확인 필요` 4개입니다.
 - `수동 확인 필요`로 남는 항목은 어반디케이 파우더, 어반디케이 문더스트 글림락, 페리페라 포근 픽싱 틴트 19호, 아멜리 하이라이터 432입니다. 현재 안전한 source에서 직접 확인된 상품 URL이 없어 임의 catalog 추가를 하지 않았습니다.
-- 운영 verified catalog는 37개 상품이며, source 기준으로 Olive Young 18개, Musinsa 6개, Official 6개, Hwahae 3개, Glowpick 2개, Coupang 1개, Fude Japan 1개를 포함합니다.
-- 운영 verified catalog에서 source 기반 영문 제품명(`product_name_en`)이 있는 항목은 4개입니다. 영문 제품명은 자동 번역하지 않으므로 source가 제공하지 않은 상품은 빈 값으로 남습니다.
+- 운영 verified catalog는 39개 상품이며, source 기준으로 Olive Young 18개, Musinsa 6개, Official 8개, Hwahae 3개, Glowpick 2개, Coupang 1개, Fude Japan 1개를 포함합니다.
+- 운영 verified catalog에서 source 기반 영문 제품명(`product_name_en`)이 있는 항목은 5개입니다. 영문 제품명은 자동 번역하지 않으므로 source가 제공하지 않은 상품은 빈 값으로 남습니다.
 - 현재 운영 환경에서는 Olive Young public API와 verified catalog cache만 활성화되어 있습니다. Musinsa Beauty, Olive Young Global, Official brand, global discovery, managed search adapter는 provider base URL이 없어 비활성화 상태입니다.
 - 데스크톱 1280px와 모바일 390px에서 편집자 모드의 가로 overflow가 없고, `미확인`, `Unknown`, `N/A`, `가격 정보 없음` 텍스트가 노출되지 않는 것을 확인했습니다.
 
