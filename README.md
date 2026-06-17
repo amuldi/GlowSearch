@@ -17,8 +17,8 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 
 | 항목 | URL |
 | --- | --- |
-| Frontend | [https://glow-search.vercel.app/](https://glow-search.vercel.app/) |
-| Last verified Vercel deployment | [https://glow-search-8q8gz8wvt-amuldis-projects.vercel.app/](https://glow-search-8q8gz8wvt-amuldis-projects.vercel.app/) |
+| Frontend | [https://frontend-plum-six-32.vercel.app/](https://frontend-plum-six-32.vercel.app/) |
+| Last verified Vercel deployment | [https://frontend-j62u2oy4n-amuldis-projects.vercel.app/](https://frontend-j62u2oy4n-amuldis-projects.vercel.app/) |
 | Backend health | [https://glowsearch-backend.onrender.com/health](https://glowsearch-backend.onrender.com/health) |
 | Search API 예시 | [https://glowsearch-backend.onrender.com/search?q=%EB%A1%9C%EC%85%98&limit=4](https://glowsearch-backend.onrender.com/search?q=%EB%A1%9C%EC%85%98&limit=4) |
 
@@ -34,11 +34,11 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 - 진행 중에는 `후보를 찾는 중 n/전체` 형태로 진행률을 표시합니다.
 - 개별 라인 요청이 실패하면 source 기반 정보를 임의 생성하지 않고 `수동 확인 필요` 행으로 남깁니다.
 
-- 프론트 canonical 운영 주소는 `https://glow-search.vercel.app`입니다.
-- 마지막으로 수동 검증한 Vercel 고유 배포 URL은 `https://glow-search-3ptg12wqe-amuldis-projects.vercel.app`입니다.
-- 프론트 최신 기능 커밋은 `96ef4cb3b93b3e0d4b6a4e544ffce34c293b4272`입니다.
+- 프론트 운영 주소는 `https://frontend-plum-six-32.vercel.app`입니다.
+- 마지막으로 수동 검증한 Vercel 고유 배포 URL은 `https://frontend-j62u2oy4n-amuldis-projects.vercel.app`입니다.
+- 프론트 최신 기능 커밋은 `be2b507dd828205ae2aba292be45916c82348b38`입니다.
 - 백엔드 Render 운영 `release_sha`는 `b4e9beadf918d6d42930cdf44722af812dabbe41`입니다.
-- `https://glow-search.vercel.app/?mode=editor`에서 편집자 모드가 직접 열리고, 운영 데이터 상태 패널이 표시되는 것을 확인했습니다.
+- `https://frontend-plum-six-32.vercel.app/?mode=editor`에서 편집자 모드가 직접 열리고, 운영 데이터 상태 패널이 표시되는 것을 확인했습니다.
 - 편집자 모드 상단에 verified catalog 총량, 영문 제품명 보유 수, index 수, source adapter 활성 상태를 표시합니다.
 - `/diagnostics` 호출이 실패하면 source adapter를 `비활성`으로 오표시하지 않고 별도 실패 상태를 보여줍니다.
 - `/editor/batch` 호출은 Render cold start, 일시적 5xx, 429, 네트워크 오류에 대해 짧은 backoff로 재시도합니다.
@@ -71,8 +71,8 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 
 이번 업데이트는 검색 결과의 데이터 품질, 멀티소스 확장 기반, 배포 문서를 정리한 변경입니다.
 
-- 프론트 운영 주소는 `https://glow-search.vercel.app`입니다.
-- 마지막으로 수동 검증한 Vercel 고유 배포 URL은 최신 2026-06-17 섹션을 기준으로 합니다. 실제 사용 주소는 고정 별칭인 `https://glow-search.vercel.app`를 기준으로 합니다.
+- 프론트 운영 주소는 `https://frontend-plum-six-32.vercel.app`입니다.
+- 마지막으로 수동 검증한 Vercel 고유 배포 URL은 최신 2026-06-17 섹션을 기준으로 합니다. 실제 사용 주소는 Vercel production alias인 `https://frontend-plum-six-32.vercel.app`를 기준으로 합니다.
 - 백엔드 Render 배포는 `/health`의 `release_sha`로 확인합니다.
 - 편집자 일괄 정리 화면의 모바일 overflow를 줄이기 위해 입력/복사 버튼 영역을 작은 화면에서 세로로 정렬하도록 수정했습니다.
 - Musinsa Beauty, Olive Young Global, 브랜드 공식몰을 source-specific JSON provider로 연결할 수 있는 설정을 추가했습니다.
