@@ -148,6 +148,12 @@ export type EditorBatchResponse = {
   items: EditorBatchItem[];
 };
 
+export type EditorBatchProgress = {
+  completed: number;
+  total: number;
+  response: EditorBatchResponse;
+};
+
 export type EditorConfirmRequest = {
   raw_text: string;
   normalized_query: string;

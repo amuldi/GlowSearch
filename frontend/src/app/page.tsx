@@ -8,7 +8,7 @@ import {
   confirmEditorCandidate,
   fetchDiagnostics,
   fetchSearchSuggestions,
-  organizeEditorBatch,
+  organizeEditorBatchByLines,
   searchProducts,
 } from "@/lib/api";
 import type {
@@ -520,6 +520,7 @@ function EditorBatchWorkspace() {
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
   const [savedRows, setSavedRows] = useState<Record<number, boolean>>({});
   const [savingRows, setSavingRows] = useState<Record<number, boolean>>({});
+  const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null);
   const requestIdRef = useRef(0);
 
   const lineCount = useMemo(
@@ -550,9 +551,17 @@ function EditorBatchWorkspace() {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     setIsLoading(true);
+    setProgress({ completed: 0, total: lineCount });
     setErrorMessage(null);
     try {
-      const data = await organizeEditorBatch(input);
+      const data = await organizeEditorBatchByLines(input, {
+        onProgress: (partial) => {
+          if (requestIdRef.current !== requestId) return;
+          setProgress({ completed: partial.completed, total: partial.total });
+          setResponse(partial.response);
+          setSelected(initialEditorSelection(partial.response));
+        },
+      });
       if (requestIdRef.current !== requestId) return;
       setResponse(data);
       setSelected(initialEditorSelection(data));
@@ -568,6 +577,7 @@ function EditorBatchWorkspace() {
     } finally {
       if (requestIdRef.current === requestId) {
         setIsLoading(false);
+        setProgress(null);
       }
     }
   };
@@ -684,7 +694,7 @@ function EditorBatchWorkspace() {
             {isLoading ? (
               <div className="flex items-center gap-2 rounded-lg bg-blush-soft px-3 py-4 text-sm font-bold text-rosewood">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                후보를 찾는 중
+                후보를 찾는 중{progress ? ` ${progress.completed}/${progress.total}` : null}
               </div>
             ) : null}
             {!response && !isLoading ? (
