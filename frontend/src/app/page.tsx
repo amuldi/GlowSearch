@@ -775,7 +775,7 @@ function EditorDataStatus({
         {pendingJobCount !== undefined ? <span>보강 대기 {pendingJobCount.toLocaleString("ko-KR")}</span> : null}
         {runningJobCount ? <span>보강 실행 {runningJobCount.toLocaleString("ko-KR")}</span> : null}
       </div>
-      <div className="mt-2 flex flex-wrap gap-1.5">
+      <div className="mt-2 grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap">
         {enabledAdapters.map(([label, enabled]) => (
           <span
             key={label}
@@ -791,9 +791,9 @@ function EditorDataStatus({
         ))}
       </div>
       {sourceCounts.length ? (
-        <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-medium text-neutral-500">
+        <div className="mt-2 grid grid-cols-2 gap-1.5 text-[11px] font-medium text-neutral-500 sm:flex sm:flex-wrap">
           {sourceCounts.map(([source, count]) => (
-            <span key={source} className="rounded-full bg-white/70 px-2 py-0.5 leading-tight">
+            <span key={source} className="min-w-0 rounded-full bg-white/70 px-2 py-0.5 text-center leading-tight">
               {source} {count}
             </span>
           ))}
