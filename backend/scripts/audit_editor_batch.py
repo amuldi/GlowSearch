@@ -233,11 +233,13 @@ def _editor_batch_summary(payload: Any) -> dict[str, Any]:
     brand_en_rows = 0
     product_name_en_rows = 0
     missing_rows: list[str] = []
+    row_summaries: list[dict[str, Any]] = []
     for item in rows:
         candidates = item.get("candidates") if isinstance(item.get("candidates"), list) else []
         first_product = None
         if candidates and isinstance(candidates[0], dict):
             first_product = candidates[0].get("product")
+        parsed = item.get("parsed") if isinstance(item.get("parsed"), dict) else {}
         if isinstance(first_product, dict):
             if first_product.get("source_url") or first_product.get("source_product_id"):
                 source_rows += 1
@@ -245,10 +247,25 @@ def _editor_batch_summary(payload: Any) -> dict[str, Any]:
                 brand_en_rows += 1
             if first_product.get("product_name_en"):
                 product_name_en_rows += 1
-        elif isinstance(item.get("parsed"), dict) and item["parsed"].get("brand_en"):
+        elif parsed.get("brand_en"):
             brand_en_rows += 1
         if not candidates:
             missing_rows.append(str(item.get("raw_text") or ""))
+        row_summaries.append(
+            {
+                "raw_text": item.get("raw_text"),
+                "status": item.get("status"),
+                "candidate_count": len(candidates),
+                "parsed": {
+                    "brand_query": parsed.get("brand_query"),
+                    "brand_en": parsed.get("brand_en"),
+                    "product_query": parsed.get("product_query"),
+                    "shade_code": parsed.get("shade_code"),
+                    "shade_name": parsed.get("shade_name"),
+                },
+                "top_candidate": _candidate_summary(first_product),
+            }
+        )
 
     return {
         "count": payload.get("count"),
@@ -258,6 +275,26 @@ def _editor_batch_summary(payload: Any) -> dict[str, Any]:
         "rows_with_brand_en": brand_en_rows,
         "rows_with_product_name_en": product_name_en_rows,
         "manual_rows": missing_rows,
+        "rows": row_summaries,
+    }
+
+
+def _candidate_summary(product: Any) -> dict[str, Any] | None:
+    if not isinstance(product, dict):
+        return None
+    offers = product.get("offers") if isinstance(product.get("offers"), list) else []
+    return {
+        "brand_ko": product.get("brand_ko"),
+        "brand_en": product.get("brand_en"),
+        "product_name_ko": product.get("product_name_ko"),
+        "product_name_en": product.get("product_name_en"),
+        "shade": product.get("shade"),
+        "source": product.get("source"),
+        "source_url": product.get("source_url"),
+        "offer_sources": [
+            offer.get("source") for offer in offers if isinstance(offer, dict) and offer.get("source")
+        ],
+        "enrichment_missing_fields": product.get("enrichment_missing_fields"),
     }
 
 

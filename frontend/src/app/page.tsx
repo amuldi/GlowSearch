@@ -781,7 +781,7 @@ function EditorDataStatus({
           <span
             key={label}
             className={[
-              "rounded-full border px-2 py-0.5 text-[11px] font-bold",
+              "min-w-0 max-w-full whitespace-normal break-words rounded-full border px-2 py-0.5 text-center text-[11px] font-bold leading-tight",
               enabled
                 ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                 : "border-neutral-200 bg-white text-neutral-500",
@@ -800,7 +800,10 @@ function EditorDataStatus({
         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-neutral-500">
           <span className="font-bold text-neutral-600">최근 보강 대상</span>
           {recentGapQueries.map((query) => (
-            <span key={query} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-900">
+            <span
+              key={query}
+              className="min-w-0 max-w-full whitespace-normal break-words rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-center leading-tight text-amber-900"
+            >
               {query}
             </span>
           ))}
