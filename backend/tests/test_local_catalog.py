@@ -117,6 +117,7 @@ async def test_project_catalog_returns_mixsoon_hyalraebae_cream() -> None:
         ("머지 더블 글레이즈 브레이브미", "[NEW단독기획/김서영PICK] 머지 더블 글레이즈 락커 글로스 12종 단품/기획"),
         ("비디비치 틴트밤 카라멜허그", "[미니틴트 증정기획] 비디비치 펩타이드 버터 틴트밤 기획/단품"),
         ("포근 픽싱 틴트 19호", "에뛰드 포근 픽싱 틴트 (단품/기획) 17 Colors"),
+        ("클리오 치즈냥이", "(클리오X국가유산청) 프로 아이 팔레트 에어"),
     ],
 )
 async def test_project_catalog_covers_editor_sample_source_verified_items(
