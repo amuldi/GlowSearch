@@ -753,13 +753,12 @@ function EditorDataStatus({
   const enabledAdapters: Array<[string, boolean | undefined]> = [
     ["Olive Young", diagnostics?.adapter_readiness?.oliveyoung_public_api?.enabled],
     ["Musinsa", diagnostics?.adapter_readiness?.musinsa?.enabled],
-    ["Olive Young Global", diagnostics?.adapter_readiness?.oliveyoung_global?.enabled],
+    ["OY Global", diagnostics?.adapter_readiness?.oliveyoung_global?.enabled],
     ["Official", diagnostics?.adapter_readiness?.official_brand?.enabled],
   ];
-  const sourceCounts = Object.entries(diagnostics?.verified_catalog?.source_counts ?? {})
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([source, count]) => `${source} ${count}`)
-    .join(" · ");
+  const sourceCounts = Object.entries(diagnostics?.verified_catalog?.source_counts ?? {}).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
   const pendingJobCount = diagnostics.catalog_jobs?.stats?.pending;
   const runningJobCount = diagnostics.catalog_jobs?.stats?.running;
   const recentGapQueries = (diagnostics.search_gaps ?? [])
@@ -791,9 +790,13 @@ function EditorDataStatus({
           </span>
         ))}
       </div>
-      {sourceCounts ? (
-        <div className="mt-2 break-words text-[11px] font-medium text-neutral-500">
-          {sourceCounts}
+      {sourceCounts.length ? (
+        <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-medium text-neutral-500">
+          {sourceCounts.map(([source, count]) => (
+            <span key={source} className="rounded-full bg-white/70 px-2 py-0.5 leading-tight">
+              {source} {count}
+            </span>
+          ))}
         </div>
       ) : null}
       {recentGapQueries.length ? (
