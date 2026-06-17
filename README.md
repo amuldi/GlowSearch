@@ -18,7 +18,7 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 | 항목 | URL |
 | --- | --- |
 | Frontend | [https://glow-search.vercel.app/](https://glow-search.vercel.app/) |
-| Last verified Vercel deployment | [https://glow-search-jl9qf2nxa-amuldis-projects.vercel.app/](https://glow-search-jl9qf2nxa-amuldis-projects.vercel.app/) |
+| Last verified Vercel deployment | [https://glow-search-8q8gz8wvt-amuldis-projects.vercel.app/](https://glow-search-8q8gz8wvt-amuldis-projects.vercel.app/) |
 | Backend health | [https://glowsearch-backend.onrender.com/health](https://glowsearch-backend.onrender.com/health) |
 | Search API 예시 | [https://glowsearch-backend.onrender.com/search?q=%EB%A1%9C%EC%85%98&limit=4](https://glowsearch-backend.onrender.com/search?q=%EB%A1%9C%EC%85%98&limit=4) |
 
@@ -26,16 +26,35 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 
 ## 최근 업데이트
 
+### 2026-06-17
+
+이번 업데이트는 편집자 일괄 정리 모드의 운영 안정성과 배포 URL 혼선을 정리한 변경입니다.
+
+- 프론트 canonical 운영 주소는 `https://glow-search.vercel.app`입니다.
+- 마지막으로 수동 검증한 Vercel 고유 배포 URL은 `https://glow-search-8q8gz8wvt-amuldis-projects.vercel.app`입니다.
+- 프론트 최신 커밋은 `4aa24a154850d9ba7fdff8d29641ef9a82c0bc68`입니다.
+- 백엔드 Render 운영 `release_sha`는 `1e00ecdeaedd32baa2eb2ab72884146871cbb71b`입니다. 이번 변경은 프론트 안정성 개선이므로 백엔드 SHA는 이전 기능 배포 커밋을 유지합니다.
+- `https://glow-search.vercel.app/?mode=editor`에서 편집자 모드가 직접 열리고, 운영 데이터 상태 패널이 표시되는 것을 확인했습니다.
+- 편집자 모드 상단에 verified catalog 총량, 영문 제품명 보유 수, index 수, source adapter 활성 상태를 표시합니다.
+- `/diagnostics` 호출이 실패하면 source adapter를 `비활성`으로 오표시하지 않고 별도 실패 상태를 보여줍니다.
+- `/editor/batch` 호출은 Render cold start, 일시적 5xx, 429, 네트워크 오류에 대해 짧은 backoff로 재시도합니다.
+- 일반 검색 카드에서는 source 원본 링크 이동과 복사 텍스트의 `출처:` 라인을 제거했습니다. 편집자 모드의 source 링크는 검증/더보기란 복사용 요구사항이므로 유지합니다.
+- 17개 편집자 샘플 입력의 운영 결과는 `확인됨` 10개, `후보 있음` 2개, `수동 확인 필요` 5개입니다.
+- `수동 확인 필요`로 남는 항목은 어반디케이 파우더, 클리오 치즈냥이, 어반디케이 문더스트 글림락, 페리페라 포근 픽싱 틴트 19호, 아멜리 하이라이터 432입니다. 현재 안전한 source에서 직접 확인된 상품 URL이 없어 임의 catalog 추가를 하지 않았습니다.
+- 운영 verified catalog는 37개 상품이며, source 기준으로 Olive Young 18개, Musinsa 6개, Official 6개, Hwahae 3개, Glowpick 2개, Coupang 1개, Fude Japan 1개를 포함합니다.
+- 운영 verified catalog에서 source 기반 영문 제품명(`product_name_en`)이 있는 항목은 4개입니다. 영문 제품명은 자동 번역하지 않으므로 source가 제공하지 않은 상품은 빈 값으로 남습니다.
+- 현재 운영 환경에서는 Olive Young public API와 verified catalog cache만 활성화되어 있습니다. Musinsa Beauty, Olive Young Global, Official brand, global discovery, managed search adapter는 provider base URL이 없어 비활성화 상태입니다.
+- 데스크톱 1280px와 모바일 390px에서 편집자 모드의 가로 overflow가 없고, `미확인`, `Unknown`, `N/A`, `가격 정보 없음` 텍스트가 노출되지 않는 것을 확인했습니다.
+
 ### 2026-06-16
 
 이번 업데이트는 편집자 일괄 정리의 실제 운영 진단과 브랜드 alias/fallback 정확도를 개선한 변경입니다.
 
-- 백엔드 Render 배포는 `/health`의 `release_sha`로 확인합니다. 2026-06-16 점검 기준 운영 `release_sha`는 기능/데이터 변경 커밋 `776eeea11dc6031bafacaeeec22177679e546686`입니다.
+- 백엔드 Render 배포는 `/health`의 `release_sha`로 확인합니다. 2026-06-16 점검 기준 운영 `release_sha`는 기능/데이터 변경 커밋 `1e00ecdeaedd32baa2eb2ab72884146871cbb71b`입니다.
 - 편집자 일괄 정리에서 브랜드 포함 검색이 실패하면 제품명 기반 fallback 검색을 한 번 더 수행합니다. 다만 source 브랜드가 입력 브랜드와 다르면 `확인됨`으로 확정하지 않고 `후보 있음`으로 유지합니다.
 - `Urban Decay`, `HAMING`, `OFRA Cosmetics`, `MERZY`, `VIDIVICI`, `HOLIKA HOLIKA`의 한글 alias/영문 브랜드명 매핑을 보강했습니다.
-- 17개 편집자 샘플 입력의 운영 결과는 `확인됨` 4개, `후보 있음` 8개, `수동 확인 필요` 5개입니다. 브랜드 영문명은 17개 라인 모두에서 확인되지만, 영문 제품명은 샘플 후보 중 source 기반 확인값이 없어 0개입니다.
-- `수동 확인 필요`로 남는 항목은 어반디케이 파우더, 클리오 치즈냥이, 캔메이크 아라 카푸치노, 어반디케이 문더스트 글림락, 아멜리 하이라이터 432입니다. 현재 안전한 source에서 직접 확인된 상품 URL이 없어 임의 catalog 추가를 하지 않았습니다.
-- `페리페라 포근 픽싱 틴트 19호`는 제품명 fallback으로 source 기반 후보가 표시됩니다. 다만 후보 source는 에뛰드 제품으로 확인되어 브랜드 불일치 때문에 `후보 있음`으로 남깁니다.
+- 17개 편집자 샘플 입력의 운영 결과는 이후 2026-06-17 업데이트에서 다시 개선했습니다.
+- source 브랜드가 입력 브랜드와 다르면 제품명 fallback 후보라도 사용자에게 표시하지 않고 `수동 확인 필요`로 남깁니다.
 - `/diagnostics` 응답에 `verified_catalog`와 `adapter_readiness`를 추가했습니다. 운영자는 verified catalog 총량, source별 개수, `product_name_en` 보유 개수, Musinsa/Olive Young Global/Official adapter의 `disabled` 또는 `missing_base_url` 상태를 바로 확인할 수 있습니다.
 - 현재 운영 환경에서는 Olive Young public API와 verified catalog cache만 활성화되어 있습니다. Musinsa Beauty, Olive Young Global, Official brand, global discovery, managed search adapter는 provider base URL이 없어 비활성화 상태입니다.
 - `수분` 같은 넓은 키워드가 Olive Young 실제 페이지보다 훨씬 적게 나오는 원인은 최신 배포 문제가 아니라 운영 index/source 커버리지 부족입니다. persistent disk 또는 외부 검색 저장소와 source provider 연결이 다음 병목입니다.
@@ -45,14 +64,14 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 이번 업데이트는 검색 결과의 데이터 품질, 멀티소스 확장 기반, 배포 문서를 정리한 변경입니다.
 
 - 프론트 운영 주소는 `https://glow-search.vercel.app`입니다.
-- 마지막으로 수동 검증한 Vercel 고유 배포 URL은 `https://glow-search-jl9qf2nxa-amuldis-projects.vercel.app`입니다. 실제 사용 주소는 고정 별칭인 `https://glow-search.vercel.app`를 기준으로 합니다.
+- 마지막으로 수동 검증한 Vercel 고유 배포 URL은 최신 2026-06-17 섹션을 기준으로 합니다. 실제 사용 주소는 고정 별칭인 `https://glow-search.vercel.app`를 기준으로 합니다.
 - 백엔드 Render 배포는 `/health`의 `release_sha`로 확인합니다.
 - 편집자 일괄 정리 화면의 모바일 overflow를 줄이기 위해 입력/복사 버튼 영역을 작은 화면에서 세로로 정렬하도록 수정했습니다.
 - Musinsa Beauty, Olive Young Global, 브랜드 공식몰을 source-specific JSON provider로 연결할 수 있는 설정을 추가했습니다.
 - `GLOWSEARCH_MUSINSA_API_ENABLED`, `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED`, `GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED`가 켜지고 각 provider base URL이 설정되면 해당 source가 live collector에 포함됩니다.
 - 현재 운영 환경에서는 위 provider URL이 아직 설정되지 않아 Musinsa Beauty, Olive Young Global, 브랜드 공식몰, global discovery, managed search adapter는 비활성화 상태입니다. 무단 scraping이나 추측 URL 생성은 사용하지 않습니다.
 - verified catalog 항목에 내부 `canonical_product_id`를 보강해 같은 상품의 여러 source offer를 한 카드로 병합할 수 있는 기반을 넓혔습니다.
-- verified catalog는 36개 상품이며, source 기준으로 Olive Young 17개, Musinsa 6개, Official 6개, Hwahae 3개, Glowpick 2개, Coupang 1개, Fude Japan 1개를 포함합니다.
+- verified catalog는 이후 37개 상품으로 확장되었으며, 최신 source별 개수는 2026-06-17 섹션을 기준으로 합니다.
 - verified catalog에서 source 기반 영문 제품명(`product_name_en`)이 있는 항목은 4개입니다. 영문 제품명은 자동 번역하지 않으므로 source가 제공하지 않은 상품은 빈 값으로 남습니다.
 - 검색 결과 카드는 `offers` 배열을 통해 Olive Young, Musinsa, Olive Young Global, Official 등 여러 source offer를 병합할 수 있습니다. 현재 UI에서는 별도 출처 링크 버튼을 표시하지 않고 source badge만 표시합니다.
 - 영문 제품명은 source, verified catalog, 공식/공개 API 등에서 확인된 경우에만 표시합니다. 자동 번역이나 추측 매핑은 하지 않습니다.
@@ -70,12 +89,12 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 - Render 재배포 직후 운영 index가 비어 시작할 수 있음을 확인했습니다. 즉 배포 SHA가 최신이어도 index가 차갑게 시작하면 결과가 적게 보일 수 있습니다. 이를 줄이기 위해 `GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP=true`, `GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT=24`로 시작 시 작은 warmup을 켰습니다.
 - 장기적으로는 Render persistent disk를 `/var/data`에 붙이거나 Postgres/Typesense 같은 외부 저장소로 index를 옮겨야 합니다. Render persistent disk는 비용이 발생할 수 있으므로 실제 계정 적용 전 요금 확인이 필요합니다.
 
-검증 결과:
+최근 검증 결과:
 
-- 백엔드 전체 테스트: `151 passed`
+- 백엔드 전체 테스트: `162 passed`
 - Ruff: 통과
 - 프론트 production build: 통과
-- 검색 백테스트: `383/391`, `98.0%`
+- 운영 편집자 샘플 audit: `확인됨` 10개, `후보 있음` 2개, `수동 확인 필요` 5개
 
 운영 점검 예시:
 
