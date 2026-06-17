@@ -933,6 +933,10 @@ function EditorBatchRow({
             </button>
           ))}
         </div>
+      ) : status === "수동 확인 필요" ? (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">
+          source URL이 있는 후보를 찾지 못했습니다. 이 입력은 보강 대상으로 기록됩니다.
+        </div>
       ) : null}
     </article>
   );
