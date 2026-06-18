@@ -26,6 +26,19 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 
 ## 최근 업데이트
 
+### 2026-06-19
+
+이번 업데이트는 verified catalog를 계속 서비스 수준으로 다듬기 위한 반복 점검 도구와 표시명 품질 기준을 추가한 변경입니다.
+
+- `backend/scripts/audit_catalog_quality.py`를 추가했습니다. 운영자는 verified catalog의 필수 필드 결손, 지저분한 표시용 상품명, 영문 제품명/이미지/가격 enrichment backlog를 JSON으로 확인할 수 있습니다.
+- catalog 품질 audit는 `--fail-on-required`, `--fail-on-dirty-display` 옵션을 지원합니다. CI나 배포 전 점검에서 필수 필드가 없거나 `[기획]`, `단품`, `Colors`, 괄호형 프로모션 문구가 표시용 상품명에 남으면 실패시킬 수 있습니다.
+- 현재 verified catalog는 39개 상품이며, source별로 Olive Young 18개, Musinsa 6개, Official 8개, Hwahae 3개, Glowpick 2개, Coupang 1개, Fude Japan 1개를 포함합니다.
+- 현재 catalog 품질 audit 기준 필수 필드 결손은 0건, 표시용 상품명 오염은 0건입니다.
+- 현재 source 기반 영문 제품명(`product_name_en`) 보유 항목은 9개입니다. 나머지 30개는 source가 영문 제품명을 제공하지 않았거나 아직 verified catalog에 확인값이 없어 enrichment backlog로 남습니다.
+- 표시용 상품명 정제 규칙을 보강했습니다. 예를 들어 `(클리오X국가유산청) 프로 아이 팔레트 에어`는 `프로 아이 팔레트 에어`, `포뷰트 두피 타투15g 블랙/브라운 단품/기획`은 `두피 타투`로 표시됩니다.
+- catalog 전체를 정규화했을 때 `[ ]`, `기획`, `단품`, `택1`, `Colors`, 괄호형 프로모션 문구가 표시용 상품명에 남는 케이스가 없도록 테스트를 추가했습니다.
+- 공식/source에서 확인 가능한 신규 영문 제품명이 없는 항목은 임의 번역하지 않았습니다. 영문 제품명 결손은 audit 결과의 `missing_product_name_en`으로 추적합니다.
+
 ### 2026-06-17
 
 이번 업데이트는 편집자 일괄 정리 모드의 운영 안정성, 보강 대기 queue, 배포 URL 혼선을 정리한 변경입니다.
@@ -115,6 +128,10 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 cd backend
 .venv/bin/python scripts/audit_editor_batch.py \
   --base-url https://glowsearch-backend.onrender.com
+
+.venv/bin/python scripts/audit_catalog_quality.py \
+  --fail-on-required \
+  --fail-on-dirty-display
 ```
 
 ## 프로젝트 목표
@@ -271,8 +288,7 @@ GlowSearch는 뷰티 유튜버 편집자가 영상 원고, 자막, YouTube 더�
 2. 유튜버가 보낸 제품 리스트를 여러 줄로 붙여넣습니다.
 3. `정리하기`를 누르면 각 줄을 파싱하고 후보 상품을 3~5개까지 찾습니다.
 4. 후보가 여러 개면 편집자가 하나를 선택합니다.
-5. 선택한 후보를 `정답 저장`으로 기록해 이후 랭킹/학습 데이터로 누적합니다.
-6. 한글 자막, 영문 자막, 더보기란, TSV 형식으로 클립보드 복사합니다.
+5. 한글 자막, 영문 자막, 더보기란, TSV 형식으로 클립보드 복사합니다.
 
 API:
 
@@ -282,7 +298,7 @@ curl -X POST https://glowsearch-backend.onrender.com/editor/batch \
   -d '{"text":"헤라 파우더 #13N1\n롬앤 쉐딩 #그레이쿨","limit":5}'
 ```
 
-편집자가 후보를 확정하면 `POST /editor/confirm`으로 `editor_confirmed_mappings`에 원문 입력, 정규화 query, 선택 상품/source 정보를 저장합니다. 이 기록은 즉시 상품명을 생성하거나 번역하는 데 쓰지 않고, 추후 랭킹 보정과 모델 학습용 정답 데이터로 사용합니다.
+백엔드에는 `POST /editor/confirm`과 `editor_confirmed_mappings` 저장 구조가 준비되어 있습니다. 현재 프론트 화면에서는 확정 저장 버튼을 노출하지 않으며, 이 기록은 추후 랭킹 보정과 모델 학습용 정답 데이터로만 사용합니다. 즉시 상품명을 생성하거나 번역하는 데 쓰지 않습니다.
 
 응답은 줄별로 다음 정보를 포함합니다.
 
@@ -331,6 +347,8 @@ GlowSearch/
       service/        # SearchService orchestration
     scripts/
       ingest_oliveyoung.py
+      audit_catalog_quality.py
+      audit_editor_batch.py
       benchmark_search.py
     tests/
 ```
