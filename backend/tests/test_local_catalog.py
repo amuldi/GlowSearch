@@ -178,6 +178,22 @@ async def test_project_catalog_enriches_canmake_cappuccino_shade_from_official_s
 
 
 @pytest.mark.asyncio
+async def test_project_catalog_enriches_hera_powder_from_official_source() -> None:
+    collector = LocalVerifiedCatalogCollector(PROJECT_CATALOG_PATH)
+
+    records = await collector.search("헤라 파우더", limit=1)
+
+    assert [record.source for record in records] == ["oliveyoung", "official"]
+    assert any(record.product_name_en == "SOFT FINISH LOOSE POWDER" for record in records)
+    assert any(record.product_name_display_ko == "소프트 피니시 루스 파우더" for record in records)
+    assert any(record.product_name_display_en == "SOFT FINISH LOOSE POWDER" for record in records)
+    assert any(
+        record.source_url == "https://int.hera.com/products/soft-finish-loose-powder"
+        for record in records
+    )
+
+
+@pytest.mark.asyncio
 async def test_project_catalog_search_service_matches_canmake_editor_abbreviation() -> None:
     service = SearchService(
         collectors=[LocalVerifiedCatalogCollector(PROJECT_CATALOG_PATH)],
@@ -203,6 +219,37 @@ async def test_project_catalog_search_service_matches_canmake_editor_abbreviatio
         and offer.source_url == "https://www.canmake.com/item/detail/creamy-touch-liner/"
         for offer in result.offers
     )
+
+
+@pytest.mark.asyncio
+async def test_project_catalog_search_service_merges_hera_official_english_name() -> None:
+    service = SearchService(
+        collectors=[LocalVerifiedCatalogCollector(PROJECT_CATALOG_PATH)],
+        normalizer=ProductNormalizer(
+            BrandResolver(PROJECT_REGISTRY_PATH),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        index_background_refresh_enabled=False,
+    )
+
+    response = await service.search("헤라 파우더", SearchCriteria(limit=1))
+    await service.close()
+
+    assert response.count == 1
+    result = response.results[0]
+    assert result.canonical_product_id == "verified:hera-soft-finish-loose-powder-15g"
+    assert result.product_name_display_ko == "소프트 피니시 루스 파우더"
+    assert result.product_name_en == "SOFT FINISH LOOSE POWDER"
+    assert result.product_name_display_en == "SOFT FINISH LOOSE POWDER"
+    assert [offer.source for offer in result.offers] == ["oliveyoung", "official"]
+    assert any(
+        offer.source == "official"
+        and offer.source_url == "https://int.hera.com/products/soft-finish-loose-powder"
+        for offer in result.offers
+    )
+    assert "product_name_en" not in result.enrichment_missing_fields
+    assert "official_source" not in result.enrichment_missing_fields
 
 
 @pytest.mark.asyncio

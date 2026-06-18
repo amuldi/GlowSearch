@@ -347,7 +347,9 @@
       "brand_en": "HERA",
       "brand_ko": "헤라",
       "product_name_ko": "헤라 소프트 피니시 루스 파우더 15g",
+      "product_name_en": "SOFT FINISH LOOSE POWDER",
       "product_name_display_ko": "소프트 피니시 루스 파우더",
+      "product_name_display_en": "SOFT FINISH LOOSE POWDER",
       "price": 54000,
       "original_price": 60000,
       "sale_price": 54000,
@@ -358,6 +360,22 @@
       "goods_no": "A000000169938",
       "source": "oliveyoung",
       "keywords": ["HERA", "헤라", "파우더", "루스 파우더", "소프트 피니시 루스 파우더", "헤라 파우더"]
+    },
+    {
+      "canonical_product_id": "verified:hera-soft-finish-loose-powder-15g",
+      "brand_en": "HERA",
+      "brand_ko": "헤라",
+      "product_name_ko": "헤라 소프트 피니시 루스 파우더 15g",
+      "product_name_en": "SOFT FINISH LOOSE POWDER",
+      "product_name_display_ko": "소프트 피니시 루스 파우더",
+      "product_name_display_en": "SOFT FINISH LOOSE POWDER",
+      "price": null,
+      "shade": null,
+      "image_url": null,
+      "source_url": "https://int.hera.com/products/soft-finish-loose-powder",
+      "goods_no": "hera-soft-finish-loose-powder",
+      "source": "official",
+      "keywords": ["HERA", "헤라", "SOFT FINISH LOOSE POWDER", "소프트 피니시 루스 파우더", "루스 파우더", "파우더"]
     },
     {
       "canonical_product_id": "verified:romand-better-than-shape-shading",

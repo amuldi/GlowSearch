@@ -32,11 +32,12 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 
 - `backend/scripts/audit_catalog_quality.py`를 추가했습니다. 운영자는 verified catalog의 필수 필드 결손, 지저분한 표시용 상품명, 영문 제품명/이미지/가격 enrichment backlog를 JSON으로 확인할 수 있습니다.
 - catalog 품질 audit는 `--fail-on-required`, `--fail-on-dirty-display` 옵션을 지원합니다. CI나 배포 전 점검에서 필수 필드가 없거나 `[기획]`, `단품`, `Colors`, 괄호형 프로모션 문구가 표시용 상품명에 남으면 실패시킬 수 있습니다.
-- 현재 verified catalog는 39개 상품이며, source별로 Olive Young 18개, Musinsa 6개, Official 8개, Hwahae 3개, Glowpick 2개, Coupang 1개, Fude Japan 1개를 포함합니다.
+- 현재 verified catalog는 40개 상품이며, source별로 Olive Young 18개, Musinsa 6개, Official 9개, Hwahae 3개, Glowpick 2개, Coupang 1개, Fude Japan 1개를 포함합니다.
 - 현재 catalog 품질 audit 기준 필수 필드 결손은 0건, 표시용 상품명 오염은 0건입니다.
-- 현재 source 기반 영문 제품명(`product_name_en`) 보유 항목은 9개입니다. 나머지 30개는 source가 영문 제품명을 제공하지 않았거나 아직 verified catalog에 확인값이 없어 enrichment backlog로 남습니다.
+- 현재 source 기반 영문 제품명(`product_name_en`) 보유 항목은 11개입니다. 나머지 29개는 source가 영문 제품명을 제공하지 않았거나 아직 verified catalog에 확인값이 없어 enrichment backlog로 남습니다.
 - `ProductSourceRecord`와 verified catalog에 `product_name_display_ko`, `product_name_display_en` override를 추가했습니다. raw source 상품명은 보존하되, 카드/복사/export에는 검증된 표시용 상품명을 우선 사용합니다.
-- 현재 catalog에는 표시용 한글 상품명 override 26개, 표시용 영문 상품명 override 4개가 들어 있습니다.
+- 현재 catalog에는 표시용 한글 상품명 override 27개, 표시용 영문 상품명 override 6개가 들어 있습니다.
+- HERA 공식 상품 페이지에서 `SOFT FINISH LOOSE POWDER` 영문 제품명을 확인해 `헤라 소프트 피니시 루스 파우더 15g`에 official source offer와 영문 표시명을 보강했습니다.
 - 표시용 상품명 정제 규칙을 보강했습니다. 예를 들어 `(클리오X국가유산청) 프로 아이 팔레트 에어`는 `프로 아이 팔레트 에어`, `포뷰트 두피 타투15g 블랙/브라운 단품/기획`은 `두피 타투`로 표시됩니다.
 - catalog 전체를 정규화했을 때 `[ ]`, `기획`, `단품`, `택1`, `Colors`, 괄호형 프로모션 문구가 표시용 상품명에 남는 케이스가 없도록 테스트를 추가했습니다.
 - 공식/source에서 확인 가능한 신규 영문 제품명이 없는 항목은 임의 번역하지 않았습니다. 영문 제품명 결손은 audit 결과의 `missing_product_name_en`으로 추적합니다.
