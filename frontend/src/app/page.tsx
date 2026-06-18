@@ -5,7 +5,6 @@ import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  confirmEditorCandidate,
   fetchDiagnostics,
   fetchSearchSuggestions,
   organizeEditorBatchByLines,
@@ -15,7 +14,6 @@ import type {
   DiagnosticsResponse,
   EditorBatchItem,
   EditorBatchResponse,
-  EditorConfirmRequest,
   Product,
   ProductOffer,
   SearchResponse,
@@ -498,8 +496,6 @@ function EditorBatchWorkspace() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
-  const [savedRows, setSavedRows] = useState<Record<number, boolean>>({});
-  const [savingRows, setSavingRows] = useState<Record<number, boolean>>({});
   const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null);
   const requestIdRef = useRef(0);
 
@@ -544,15 +540,11 @@ function EditorBatchWorkspace() {
       if (requestIdRef.current !== requestId) return;
       setResponse(data);
       setSelected(initialEditorSelection(data));
-      setSavedRows({});
-      setSavingRows({});
     } catch (error) {
       if (requestIdRef.current !== requestId) return;
       setErrorMessage("일괄 정리 중 문제가 발생했습니다.");
       setResponse(null);
       setSelected({});
-      setSavedRows({});
-      setSavingRows({});
     } finally {
       if (requestIdRef.current === requestId) {
         setIsLoading(false);
@@ -568,21 +560,6 @@ function EditorBatchWorkspace() {
     await copyToClipboard(payload);
     setCopiedFormat(format);
     window.setTimeout(() => setCopiedFormat(null), 1200);
-  };
-
-  const confirmSelection = async (index: number) => {
-    const item = response?.items[index];
-    const product = item ? selectedEditorProduct(item, selected, index) : null;
-    if (!item || !product || savingRows[index]) return;
-    setSavingRows((current) => ({ ...current, [index]: true }));
-    try {
-      await confirmEditorCandidate(editorConfirmPayload(item, product));
-      setSavedRows((current) => ({ ...current, [index]: true }));
-    } catch {
-      setErrorMessage("저장 중 문제가 발생했습니다.");
-    } finally {
-      setSavingRows((current) => ({ ...current, [index]: false }));
-    }
   };
 
   return (
@@ -629,7 +606,7 @@ function EditorBatchWorkspace() {
             <div>
               <h2 className="text-base font-extrabold text-rosewood">정리 결과</h2>
               <p className="mt-1 text-xs font-medium text-neutral-500">
-                source URL이 있는 후보만 표시합니다.
+                source URL이 있는 결과만 표시합니다.
               </p>
             </div>
             <div className="grid min-w-0 grid-cols-1 gap-1.5 sm:flex sm:flex-wrap sm:justify-end">
@@ -658,12 +635,12 @@ function EditorBatchWorkspace() {
             {isLoading ? (
               <div className="flex items-center gap-2 rounded-lg bg-blush-soft px-3 py-4 text-sm font-bold text-rosewood">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                후보를 찾는 중{progress ? ` ${progress.completed}/${progress.total}` : null}
+                결과를 찾는 중{progress ? ` ${progress.completed}/${progress.total}` : null}
               </div>
             ) : null}
             {!response && !isLoading ? (
               <div className="rounded-lg border border-dashed border-blush/70 px-4 py-8 text-center text-sm font-medium text-neutral-500">
-                제품 리스트를 붙여넣고 정리하면 행별 후보가 표시됩니다.
+                제품 리스트를 붙여넣고 정리하면 행별 결과가 표시됩니다.
               </div>
             ) : null}
             {response?.items.map((item, index) => (
@@ -672,13 +649,9 @@ function EditorBatchWorkspace() {
                 item={item}
                 index={index}
                 selectedIndex={selected[index]}
-                isSaved={Boolean(savedRows[index])}
-                isSaving={Boolean(savingRows[index])}
                 onSelect={(candidateIndex) => {
                   setSelected((current) => ({ ...current, [index]: candidateIndex }));
-                  setSavedRows((current) => ({ ...current, [index]: false }));
                 }}
-                onConfirm={() => confirmSelection(index)}
               />
             ))}
           </div>
@@ -784,22 +757,16 @@ function EditorBatchRow({
   item,
   index,
   selectedIndex,
-  isSaved,
-  isSaving,
   onSelect,
-  onConfirm,
 }: {
   item: EditorBatchItem;
   index: number;
   selectedIndex?: number;
-  isSaved: boolean;
-  isSaving: boolean;
   onSelect: (candidateIndex: number) => void;
-  onConfirm: () => void;
 }) {
   const selectedCandidate = selectedIndex !== undefined ? item.candidates[selectedIndex] : undefined;
   const selectedProduct = selectedCandidate?.product;
-  const status = isSaved ? "확인됨" : item.status;
+  const status = item.status;
   const shadeCode = item.parsed.shade_code;
   const shadeName = selectedProduct?.shade ?? item.parsed.shade_name;
   const selectedProductNameKo = productNameKo(selectedProduct);
@@ -846,9 +813,9 @@ function EditorBatchRow({
               />
             </div>
           ) : null}
-          <dl className="grid min-w-0 gap-2 text-xs sm:grid-cols-2">
-            <Field label="가격" value={selectedOriginalPrice} valueClassName="whitespace-nowrap text-base font-extrabold tabular-nums text-neutral-900" />
-            <Field label="할인가" value={selectedSalePrice} valueClassName="whitespace-nowrap text-base font-extrabold tabular-nums text-rosewood" />
+          <dl className="grid min-w-0 gap-2 text-xs min-[420px]:grid-cols-2">
+            <Field label="가격" value={selectedOriginalPrice} valueClassName="inline-block min-w-max whitespace-nowrap break-normal text-base font-extrabold tabular-nums text-neutral-900 [overflow-wrap:normal] [word-break:keep-all]" />
+            <Field label="할인가" value={selectedSalePrice} valueClassName="inline-block min-w-max whitespace-nowrap break-normal text-base font-extrabold tabular-nums text-rosewood [overflow-wrap:normal] [word-break:keep-all]" />
           </dl>
         </div>
       ) : null}
@@ -867,22 +834,11 @@ function EditorBatchRow({
               <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
             </a>
           ))}
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={isSaving || isSaved}
-            className="inline-flex max-w-full items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 transition hover:border-emerald-300 hover:bg-white disabled:cursor-default disabled:opacity-70"
-            aria-label={isSaved ? "선택 저장 완료" : "선택 저장"}
-            title={isSaved ? "선택 저장 완료" : "선택 저장"}
-          >
-            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <Check className="h-3 w-3" aria-hidden="true" />}
-          </button>
         </div>
       ) : null}
 
       {item.candidates.length ? (
         <div className="mt-3 space-y-2">
-          <div className="text-[11px] font-bold text-neutral-500">후보</div>
           {item.candidates.map((candidate, candidateIndex) => (
             <button
               key={`${candidate.product.source}-${candidate.product.source_product_id ?? candidateIndex}`}
@@ -899,15 +855,22 @@ function EditorBatchRow({
                 <span className="break-words text-sm font-bold text-ink">
                   {[candidate.product.brand_ko, productNameKo(candidate.product)].filter(Boolean).join(" / ")}
                 </span>
-                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-neutral-600">
-                  후보 {candidateIndex + 1} · {candidate.match_score}
+                <span
+                  className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-neutral-600"
+                  aria-label={`${candidateIndex + 1}번째 선택지 점수 ${candidate.match_score}`}
+                >
+                  {candidateIndex + 1} · {candidate.match_score}
                 </span>
               </div>
               <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-neutral-600">
                 {candidate.product.brand_en ? <span>{candidate.product.brand_en}</span> : null}
                 {productNameEn(candidate.product) ? <span>{productNameEn(candidate.product)}</span> : null}
                 {candidate.product.shade ? <span>{candidate.product.shade}</span> : null}
-                {candidatePriceText(candidate.product) ? <span>{candidatePriceText(candidate.product)}</span> : null}
+                {candidatePriceText(candidate.product) ? (
+                  <span className="whitespace-nowrap break-normal tabular-nums [overflow-wrap:normal] [word-break:keep-all]">
+                    {candidatePriceText(candidate.product)}
+                  </span>
+                ) : null}
                 <span>{sourceLabel(candidate.product)}</span>
               </div>
               {candidate.match_reasons?.length ? (
@@ -927,7 +890,7 @@ function EditorBatchRow({
         </div>
       ) : status === "수동 확인 필요" ? (
         <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">
-          source URL이 있는 후보를 찾지 못했습니다. 이 입력은 보강 대상으로 기록됩니다.
+          source URL이 있는 결과를 찾지 못했습니다. 이 입력은 보강 대상으로 기록됩니다.
         </div>
       ) : null}
     </article>
@@ -959,9 +922,7 @@ function StatusBadge({ status }: { status: string }) {
       ? "border-amber-200 bg-amber-50 text-amber-800"
       : "border-neutral-200 bg-neutral-50 text-neutral-600";
   return (
-    <span className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full border ${className}`} aria-label="상태 표시">
-      <span className="sr-only">{status}</span>
-    </span>
+    <span className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full border ${className}`} aria-hidden="true" />
   );
 }
 
@@ -1270,24 +1231,6 @@ function selectedEditorProduct(
   return item.candidates[selectedIndex]?.product ?? null;
 }
 
-function editorStatusCounts(response: EditorBatchResponse | null) {
-  const counts = {
-    confirmed: 0,
-    candidates: 0,
-    manual: 0,
-  };
-  for (const item of response?.items ?? []) {
-    if (item.status === "확인됨") {
-      counts.confirmed += 1;
-    } else if (item.status === "후보 있음") {
-      counts.candidates += 1;
-    } else {
-      counts.manual += 1;
-    }
-  }
-  return counts;
-}
-
 function editorCopyPayload(
   items: EditorBatchItem[],
   selected: Record<number, number>,
@@ -1371,22 +1314,6 @@ function editorDelimitedRow(values: string[], delimiter: "\t" | ",") {
 function csvEscape(value: string) {
   if (!/[",\n\r]/.test(value)) return value;
   return `"${value.replaceAll("\"", "\"\"")}"`;
-}
-
-function editorConfirmPayload(item: EditorBatchItem, product: Product): EditorConfirmRequest {
-  return {
-    raw_text: item.raw_text,
-    normalized_query: item.parsed.normalized_query,
-    canonical_product_id: product.canonical_product_id,
-    source: product.source,
-    source_url: bestEditorSourceUrl(product),
-    source_product_id: product.source_product_id,
-    brand_ko: product.brand_ko,
-    brand_en: product.brand_en ?? item.parsed.brand_en,
-    product_name_ko: productNameKo(product),
-    product_name_en: productNameEn(product),
-    shade: product.shade ?? item.parsed.shade_name ?? item.parsed.shade_code,
-  };
 }
 
 async function copyToClipboard(value: string) {
