@@ -320,6 +320,61 @@ def test_product_normalizer_does_not_translate_display_name_without_source_engli
     assert result.product_name_display_en is None
 
 
+def test_product_normalizer_cleans_canmake_retail_name_with_verified_english(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"CANMAKE","aliases":["캔메이크","CANMAKE"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    normalizer = ProductNormalizer(
+        BrandResolver(registry_path),
+        base_url="https://www.oliveyoung.co.kr",
+    )
+
+    result = normalizer.normalize(
+        ProductSourceRecord(
+            source_brand_name="캔메이크",
+            product_name_ko="[신상출시/초슬림라이너] 캔메이크 크리미 터치 라이너 10종 택1",
+            product_name_en="Creamy Touch Liner",
+            source="oliveyoung",
+            source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000232543",
+            source_product_id="A000000232543",
+        )
+    )
+
+    assert result.product_name_ko == "[신상출시/초슬림라이너] 캔메이크 크리미 터치 라이너 10종 택1"
+    assert result.product_name_en == "Creamy Touch Liner"
+    assert result.product_name_display_ko == "크리미 터치 라이너"
+    assert result.product_name_display_en == "Creamy Touch Liner"
+
+
+def test_product_normalizer_preserves_the_saem_verified_english_display_name(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"the SAEM","aliases":["더샘","the SAEM"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    normalizer = ProductNormalizer(
+        BrandResolver(registry_path),
+        base_url="https://www.thesaemcosmetic.com",
+    )
+
+    result = normalizer.normalize(
+        ProductSourceRecord(
+            source_brand_name="더샘",
+            product_name_ko="커버 퍼펙션 팁 컨실러",
+            product_name_en="Cover Perfection Tip Concealer",
+            source="official",
+            source_url="https://www.thesaemcosmetic.com/product/item.php?it_id=1768801816",
+            source_product_id="1768801816",
+        )
+    )
+
+    assert result.product_name_display_ko == "커버 퍼펙션 팁 컨실러"
+    assert result.product_name_en == "Cover Perfection Tip Concealer"
+    assert result.product_name_display_en == "Cover Perfection Tip Concealer"
+
+
 def test_product_normalizer_expands_short_korean_subbrand_alias(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text(
