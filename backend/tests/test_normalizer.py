@@ -315,7 +315,59 @@ def test_product_normalizer_does_not_translate_display_name_without_source_engli
         )
     )
 
-    assert result.product_name_display_ko == "가벼운 수분 선 젤 60ml"
+    assert result.product_name_display_ko == "가벼운 수분 선 젤"
+    assert result.product_name_en is None
+    assert result.product_name_display_en is None
+
+
+def test_product_normalizer_removes_trailing_size_and_option_counts(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"Heart Percent","aliases":["하트퍼센트"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    normalizer = ProductNormalizer(
+        BrandResolver(registry_path),
+        base_url="https://www.oliveyoung.co.kr",
+    )
+
+    result = normalizer.normalize(
+        ProductSourceRecord(
+            source_brand_name="하트퍼센트",
+            product_name_ko="[이한 PICK] 하트퍼센트 도트 온 무드 올 커버 립 베이스 4.1g 9종",
+            source="oliveyoung",
+            source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000221612",
+            source_product_id="A000000221612",
+        )
+    )
+
+    assert result.product_name_display_ko == "도트 온 무드 올 커버 립 베이스"
+    assert result.product_name_en is None
+    assert result.product_name_display_en is None
+
+
+def test_product_normalizer_removes_parenthesized_option_lists(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"MEDIHEAL","aliases":["메디힐"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    normalizer = ProductNormalizer(
+        BrandResolver(registry_path),
+        base_url="https://www.musinsa.com",
+    )
+
+    result = normalizer.normalize(
+        ProductSourceRecord(
+            source_brand_name="메디힐",
+            product_name_ko="더마 토너 패드 100매 8종 (티트리/마데카소사이드/피디알엔/콜라겐/워터마이드/비타/피토엔자임/레티놀)",
+            source="musinsa",
+            source_url="https://www.musinsa.com/products/3020375",
+            source_product_id="3020375",
+        )
+    )
+
+    assert result.product_name_display_ko == "더마 토너 패드"
     assert result.product_name_en is None
     assert result.product_name_display_en is None
 

@@ -10,6 +10,7 @@
       "image_url": "https://image.oliveyoung.co.kr/cfimages/cf-goods/uploads/images/thumbnails/10/0000/0024/A00000024121067ko.jpg?l=ko",
       "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000241210&dispCatNo=1000001000200060003&trackingCd=Result_1",
       "goods_no": "A000000241210",
+      "source": "oliveyoung",
       "keywords": ["romand", "rom&nd", "롬앤", "틴트", "립"]
     },
     {
@@ -22,6 +23,7 @@
       "image_url": "https://image.oliveyoung.co.kr/cfimages/cf-goods/uploads/images/thumbnails/10/0000/0019/A00000019723190ko.jpg?l=ko",
       "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000197231&dispCatNo=1000001000200060002&trackingCd=Result_2",
       "goods_no": "A000000197231",
+      "source": "oliveyoung",
       "keywords": ["romand", "rom&nd", "롬앤", "글로스", "립"]
     },
     {
@@ -34,6 +36,7 @@
       "image_url": "https://image.oliveyoung.co.kr/cfimages/cf-goods/uploads/images/thumbnails/10/0000/0023/A00000023246211ko.jpg?l=ko",
       "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000232462&dispCatNo=1000001000400110002,1000001000700090013&trackingCd=Result_1",
       "goods_no": "A000000232462",
+      "source": "oliveyoung",
       "keywords": ["FOR BEAUT", "포뷰트", "헤어", "스프레이"]
     },
     {
@@ -46,6 +49,7 @@
       "image_url": "https://image.oliveyoung.co.kr/cfimages/cf-goods/uploads/images/thumbnails/10/0000/0022/A00000022355214ko.jpg?l=ko",
       "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000223552&dispCatNo=1000001000400100007,1000001000700090012&trackingCd=Result_2",
       "goods_no": "A000000223552",
+      "source": "oliveyoung",
       "keywords": ["FOR BEAUT", "포뷰트", "두피", "헤어"]
     },
     {
@@ -58,6 +62,7 @@
       "image_url": "https://image.oliveyoung.co.kr/uploads/images/goods/10/0000/0022/A00000022522401ko.jpg",
       "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000225224",
       "goods_no": "A000000225224",
+      "source": "oliveyoung",
       "keywords": ["SHINGMULNARA", "식물나라", "선크림", "선 젤", "수분 선 젤"]
     },
     {

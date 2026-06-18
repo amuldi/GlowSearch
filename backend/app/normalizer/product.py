@@ -260,6 +260,7 @@ def _display_product_name(name: str | None, brand_aliases: list[str]) -> str | N
         text = _strip_leading_delimiters(text)
         text = _strip_packaging_parentheses(text)
         text = _strip_packaging_suffix(text)
+        text = _strip_size_and_variant_suffix(text)
         text = clean_text(text) or ""
 
     return text or clean_text(name)
@@ -292,7 +293,7 @@ def _strip_leading_delimiters(text: str) -> str:
 
 def _strip_packaging_parentheses(text: str) -> str:
     return re.sub(
-        r"\s*[\(\（][^\)\）]*(?:기획|단품|더블|세트|증정|택\s*1|컬러|colors?|\+|리필|본품|대용량|한정)[^\)\）]*[\)\）]",
+        r"\s*[\(\（][^\)\）]*(?:기획|단품|더블|세트|증정|택\s*1|컬러|colors?|\+|리필|본품|대용량|한정|/)[^\)\）]*[\)\）]",
         "",
         text,
         flags=re.IGNORECASE,
@@ -306,6 +307,17 @@ def _strip_packaging_suffix(text: str) -> str:
         r"\s+(?:단품|더블|기획|기획세트|단독기획|세트|택\s*1|본품|리필|증정기획)(?:[/\s].*)?$",
         r"\s+블랙/브라운\s*(?:단품|기획).*$",
         r"\s+기획/단품$",
+    ]
+    for pattern in suffix_patterns:
+        current = re.sub(pattern, "", current, flags=re.IGNORECASE)
+    return current
+
+
+def _strip_size_and_variant_suffix(text: str) -> str:
+    current = text
+    suffix_patterns = [
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|매|개)\s+\d+\s*(?:colors?|컬러|종)$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|매|개)$",
     ]
     for pattern in suffix_patterns:
         current = re.sub(pattern, "", current, flags=re.IGNORECASE)
