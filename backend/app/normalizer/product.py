@@ -15,6 +15,9 @@ class ProductNormalizer:
         brand_en = self._brand_en(record)
         product_name_ko = clean_text(record.product_name_ko)
         product_name_en = self._product_name_en(record)
+        brand_aliases = self._display_brand_aliases(brand_ko, brand_en, record)
+        product_name_display_ko = _display_product_name(product_name_ko, brand_aliases)
+        product_name_display_en = _display_product_name(product_name_en, brand_aliases)
         original_price = record.original_price or record.regular_price
         sale_price = record.sale_price
         display_price = sale_price if sale_price is not None else original_price
@@ -43,6 +46,8 @@ class ProductNormalizer:
             brand_en=brand_en,
             product_name_ko=product_name_ko,
             product_name_en=product_name_en,
+            product_name_display_ko=product_name_display_ko,
+            product_name_display_en=product_name_display_en,
             category=clean_text(record.category),
             price=display_price,
             original_price=original_price,
@@ -123,6 +128,21 @@ class ProductNormalizer:
         if product_name and has_latin(product_name) and not has_hangul(product_name):
             return product_name
         return None
+
+    def _display_brand_aliases(
+        self,
+        brand_ko: str | None,
+        brand_en: str | None,
+        record: ProductSourceRecord,
+    ) -> list[str]:
+        aliases = [
+            brand_ko,
+            brand_en,
+            record.source_brand_name,
+            record.source_brand_name_en,
+        ]
+        aliases.extend(self._brand_resolver.aliases_for(brand_en))
+        return _dedupe_texts(aliases)
 
     def _offers(
         self,
@@ -225,3 +245,83 @@ class ProductNormalizer:
 def _clean_options(options: list[str] | None) -> list[str] | None:
     cleaned = [text for option in options or [] if (text := clean_text(option))]
     return cleaned or None
+
+
+def _display_product_name(name: str | None, brand_aliases: list[str]) -> str | None:
+    text = clean_text(name)
+    if not text:
+        return None
+
+    previous = None
+    while previous != text:
+        previous = text
+        text = _strip_leading_bracket_tags(text)
+        text = _strip_leading_brand(text, brand_aliases)
+        text = _strip_leading_delimiters(text)
+        text = _strip_packaging_parentheses(text)
+        text = _strip_packaging_suffix(text)
+        text = clean_text(text) or ""
+
+    return text or clean_text(name)
+
+
+def _strip_leading_bracket_tags(text: str) -> str:
+    current = text
+    while True:
+        stripped = re.sub(r"^\s*[\[\【][^\]\】]+[\]\】]\s*", "", current)
+        if stripped == current:
+            return current
+        current = stripped
+
+
+def _strip_leading_brand(text: str, brand_aliases: list[str]) -> str:
+    current = text
+    for alias in sorted(brand_aliases, key=len, reverse=True):
+        alias_text = clean_text(alias)
+        if not alias_text:
+            continue
+        pattern = rf"^\s*{re.escape(alias_text)}(?:\s*\|\s*|\s+|$)"
+        current = re.sub(pattern, "", current, count=1, flags=re.IGNORECASE)
+        current = _strip_leading_delimiters(current)
+    return current
+
+
+def _strip_leading_delimiters(text: str) -> str:
+    return re.sub(r"^\s*[\|/·ㆍ:：,\-]+\s*", "", text)
+
+
+def _strip_packaging_parentheses(text: str) -> str:
+    return re.sub(
+        r"\s*[\(\（][^\)\）]*(?:기획|단품|더블|세트|증정|택\s*1|컬러|colors?|\+|리필|본품|대용량|한정)[^\)\）]*[\)\）]",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+
+def _strip_packaging_suffix(text: str) -> str:
+    current = text
+    suffix_patterns = [
+        r"\s+\d+\s*(?:colors?|컬러|종)(?:\s*(?:택\s*1|단품|기획|세트).*)?$",
+        r"\s+(?:단품|더블|기획|기획세트|단독기획|세트|택\s*1|본품|리필|증정기획)(?:[/\s].*)?$",
+        r"\s+블랙/브라운\s*(?:단품|기획).*$",
+        r"\s+기획/단품$",
+    ]
+    for pattern in suffix_patterns:
+        current = re.sub(pattern, "", current, flags=re.IGNORECASE)
+    return current
+
+
+def _dedupe_texts(values: list[str | None]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = clean_text(value)
+        if not text:
+            continue
+        key = re.sub(r"[\s\-_./&|]+", "", text).casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(text)
+    return deduped

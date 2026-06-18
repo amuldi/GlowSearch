@@ -1623,6 +1623,8 @@ class SearchService:
             "canonical_product_id",
             "product_name_ko",
             "product_name_en",
+            "product_name_display_ko",
+            "product_name_display_en",
             "shade",
             "category",
             "rating",

@@ -48,6 +48,8 @@ class ProductSearchResult(BaseModel):
     brand_en: str | None = Field(default=None)
     product_name_ko: str | None = Field(default=None)
     product_name_en: str | None = Field(default=None)
+    product_name_display_ko: str | None = Field(default=None)
+    product_name_display_en: str | None = Field(default=None)
     category: str | None = Field(default=None)
     price: int | None = Field(default=None)
     original_price: int | None = Field(default=None)

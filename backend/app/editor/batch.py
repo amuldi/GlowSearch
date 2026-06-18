@@ -178,6 +178,8 @@ def _candidate_score(parsed: EditorParsedLine, product: ProductSearchResult) -> 
             for value in [
                 product.product_name_ko,
                 product.product_name_en,
+                product.product_name_display_ko,
+                product.product_name_display_en,
                 product.category,
                 product.description,
                 product.shade,
@@ -209,6 +211,8 @@ def _candidate_score(parsed: EditorParsedLine, product: ProductSearchResult) -> 
                     product.shade,
                     product.product_name_ko,
                     product.product_name_en,
+                    product.product_name_display_ko,
+                    product.product_name_display_en,
                     " ".join(product.options or []),
                     " ".join(product.search_keywords or []),
                 ]
@@ -243,6 +247,8 @@ def _passes_editor_relevance(
                 product.brand_en,
                 product.product_name_ko,
                 product.product_name_en,
+                product.product_name_display_ko,
+                product.product_name_display_en,
             ]
             if value
         )
@@ -297,6 +303,8 @@ def _candidate_brand_matches(
                 product.brand_en,
                 product.product_name_ko,
                 product.product_name_en,
+                product.product_name_display_ko,
+                product.product_name_display_en,
             ]
             if value
         )
@@ -311,6 +319,8 @@ def _product_match_text(product: ProductSearchResult) -> str:
             for value in [
                 product.product_name_ko,
                 product.product_name_en,
+                product.product_name_display_ko,
+                product.product_name_display_en,
                 product.category,
                 product.description,
                 product.shade,

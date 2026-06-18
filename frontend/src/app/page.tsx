@@ -802,6 +802,8 @@ function EditorBatchRow({
   const status = isSaved ? "확인됨" : item.status;
   const shadeCode = item.parsed.shade_code;
   const shadeName = selectedProduct?.shade ?? item.parsed.shade_name;
+  const selectedProductNameKo = productNameKo(selectedProduct);
+  const selectedProductNameEn = productNameEn(selectedProduct);
   const brandKo = selectedProduct?.brand_ko ?? item.parsed.brand_query;
   const brandEn = selectedProduct?.brand_en ?? item.parsed.brand_en;
   const selectedOriginalPrice = selectedProduct
@@ -825,8 +827,8 @@ function EditorBatchRow({
         <Field label="브랜드명" value={brandKo} />
         <Field label="영문 브랜드명" value={brandEn} />
         <Field label="입력 제품 키워드" value={selectedProduct ? null : item.parsed.product_query} />
-        <Field label="제품명" value={selectedProduct?.product_name_ko} />
-        <Field label="영문 제품명" value={selectedProduct?.product_name_en} />
+        <Field label="제품명" value={selectedProductNameKo} />
+        <Field label="영문 제품명" value={selectedProductNameEn} />
         <Field label="호수 번호" value={shadeCode} />
         <Field label="호수명 / 컬러명" value={shadeName} />
       </dl>
@@ -838,7 +840,7 @@ function EditorBatchRow({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={selectedProduct.image_url}
-                alt={selectedProduct.product_name_ko ?? item.raw_text}
+                alt={selectedProductNameKo ?? item.raw_text}
                 className="h-full w-full object-cover"
                 loading="lazy"
               />
@@ -895,7 +897,7 @@ function EditorBatchRow({
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="break-words text-sm font-bold text-ink">
-                  {[candidate.product.brand_ko, candidate.product.product_name_ko].filter(Boolean).join(" / ")}
+                  {[candidate.product.brand_ko, productNameKo(candidate.product)].filter(Boolean).join(" / ")}
                 </span>
                 <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-neutral-600">
                   후보 {candidateIndex + 1} · {candidate.match_score}
@@ -903,7 +905,7 @@ function EditorBatchRow({
               </div>
               <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-neutral-600">
                 {candidate.product.brand_en ? <span>{candidate.product.brand_en}</span> : null}
-                {candidate.product.product_name_en ? <span>{candidate.product.product_name_en}</span> : null}
+                {productNameEn(candidate.product) ? <span>{productNameEn(candidate.product)}</span> : null}
                 {candidate.product.shade ? <span>{candidate.product.shade}</span> : null}
                 {candidatePriceText(candidate.product) ? <span>{candidatePriceText(candidate.product)}</span> : null}
                 <span>{sourceLabel(candidate.product)}</span>
@@ -1076,7 +1078,8 @@ function Pagination({
 
 function ProductCard({ product }: { product: Product }) {
   const [copied, setCopied] = useState(false);
-  const productNameEn = distinctText(product.product_name_en, product.product_name_ko);
+  const displayProductNameKo = productNameKo(product);
+  const displayProductNameEn = productNameEn(product);
   const originalPriceText = formatPrice(product.original_price ?? product.price, product.currency);
   const hasDiscount = Boolean(
     product.sale_price !== null
@@ -1091,8 +1094,8 @@ function ProductCard({ product }: { product: Product }) {
   const copyText = [
     product.brand_ko ? `브랜드명: ${product.brand_ko}` : null,
     product.brand_en ? `영문 브랜드명: ${product.brand_en}` : null,
-    product.product_name_ko ? `제품명: ${product.product_name_ko}` : null,
-    productNameEn ? `영문 제품명: ${productNameEn}` : null,
+    displayProductNameKo ? `제품명: ${displayProductNameKo}` : null,
+    displayProductNameEn ? `영문 제품명: ${displayProductNameEn}` : null,
     originalPriceText ? `원가: ${originalPriceText}` : null,
     hasDiscount ? `할인가: ${salePriceText}` : null,
     product.shade ? `호수: ${product.shade}` : null,
@@ -1124,7 +1127,7 @@ function ProductCard({ product }: { product: Product }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={product.image_url}
-          alt={product.product_name_ko ?? "상품 이미지"}
+          alt={displayProductNameKo ?? "상품 이미지"}
           className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.04]"
           loading="lazy"
         />
@@ -1136,7 +1139,7 @@ function ProductCard({ product }: { product: Product }) {
 
   const name = (
     <h2 className="line-clamp-2 text-sm font-semibold leading-5 text-ink">
-      {product.product_name_ko}
+      {displayProductNameKo}
     </h2>
   );
 
@@ -1177,16 +1180,16 @@ function ProductCard({ product }: { product: Product }) {
             </div>
           ) : null}
           <dl className="min-w-0 space-y-1">
-            {product.product_name_ko ? (
+            {displayProductNameKo ? (
               <div>
               <dt className="text-[11px] font-medium text-neutral-500">제품명</dt>
               <dd>{name}</dd>
               </div>
             ) : null}
-            {productNameEn ? (
+            {displayProductNameEn ? (
               <div>
                 <dt className="text-[11px] font-medium text-neutral-500">영문 제품명</dt>
-                <dd className="whitespace-normal break-words text-xs font-medium leading-4 text-neutral-700">{productNameEn}</dd>
+                <dd className="whitespace-normal break-words text-xs font-medium leading-4 text-neutral-700">{displayProductNameEn}</dd>
               </div>
             ) : null}
             {originalPriceText ? (
@@ -1227,6 +1230,17 @@ function distinctText(value?: string | null, compareTo?: string | null) {
   if (!value) return null;
   if (!compareTo) return value;
   return value.trim().toLocaleLowerCase() === compareTo.trim().toLocaleLowerCase() ? null : value;
+}
+
+function productNameKo(product?: Product | null) {
+  return product?.product_name_display_ko ?? product?.product_name_ko ?? null;
+}
+
+function productNameEn(product?: Product | null) {
+  return distinctText(
+    product?.product_name_display_en ?? product?.product_name_en,
+    productNameKo(product),
+  );
 }
 
 function SourceBadge({ product }: { product: Product }) {
@@ -1297,12 +1311,12 @@ function editorCopyPayload(
       if (!product) return null;
       const shade = product.shade ?? item.parsed.shade_name ?? item.parsed.shade_code;
       if (format === "ko") {
-        return [product.brand_ko, product.product_name_ko, shade].filter(Boolean).join(" / ");
+        return [product.brand_ko, productNameKo(product), shade].filter(Boolean).join(" / ");
       }
       if (format === "en") {
-        return [product.brand_en ?? item.parsed.brand_en, product.product_name_en, shade].filter(Boolean).join(" / ");
+        return [product.brand_en ?? item.parsed.brand_en, productNameEn(product), shade].filter(Boolean).join(" / ");
       }
-      const title = [product.brand_ko, product.product_name_ko, shade].filter(Boolean).join(" - ");
+      const title = [product.brand_ko, productNameKo(product), shade].filter(Boolean).join(" - ");
       const link = bestEditorSourceUrl(product);
       return [title, link].filter(Boolean).join("\n");
     })
@@ -1336,8 +1350,8 @@ function editorDelimitedPayload(
       product?.brand_ko ?? item.parsed.brand_query ?? "",
       product?.brand_en ?? item.parsed.brand_en ?? "",
       item.parsed.product_query ?? "",
-      product?.product_name_ko ?? "",
-      product?.product_name_en ?? "",
+      productNameKo(product) ?? "",
+      productNameEn(product) ?? "",
       item.parsed.shade_code ?? "",
       product?.shade ?? item.parsed.shade_name ?? "",
       formatPrice(product?.original_price ?? product?.price ?? null, product?.currency) ?? "",
@@ -1369,8 +1383,8 @@ function editorConfirmPayload(item: EditorBatchItem, product: Product): EditorCo
     source_product_id: product.source_product_id,
     brand_ko: product.brand_ko,
     brand_en: product.brand_en ?? item.parsed.brand_en,
-    product_name_ko: product.product_name_ko,
-    product_name_en: product.product_name_en,
+    product_name_ko: productNameKo(product),
+    product_name_en: productNameEn(product),
     shade: product.shade ?? item.parsed.shade_name ?? item.parsed.shade_code,
   };
 }

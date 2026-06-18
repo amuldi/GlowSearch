@@ -19,6 +19,8 @@ export type Product = {
   brand_en: string | null;
   product_name_ko: string | null;
   product_name_en: string | null;
+  product_name_display_ko?: string | null;
+  product_name_display_en?: string | null;
   category?: string | null;
   price: number | null;
   original_price?: number | null;
