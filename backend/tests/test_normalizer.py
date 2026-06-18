@@ -372,6 +372,58 @@ def test_product_normalizer_removes_parenthesized_option_lists(tmp_path) -> None
     assert result.product_name_display_en is None
 
 
+def test_product_normalizer_removes_leading_collaboration_parenthetical_tag(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"CLIO","aliases":["클리오"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    normalizer = ProductNormalizer(
+        BrandResolver(registry_path),
+        base_url="https://glowpick.co.kr",
+    )
+
+    result = normalizer.normalize(
+        ProductSourceRecord(
+            source_brand_name="클리오",
+            product_name_ko="(클리오X국가유산청) 프로 아이 팔레트 에어",
+            source="glowpick",
+            source_url="https://glowpick.co.kr/product/183245",
+            source_product_id="183245",
+        )
+    )
+
+    assert result.product_name_display_ko == "프로 아이 팔레트 에어"
+    assert result.product_name_en is None
+    assert result.product_name_display_en is None
+
+
+def test_product_normalizer_removes_stuck_size_and_color_option_suffix(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"FOR BEAUT","aliases":["포뷰트"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    normalizer = ProductNormalizer(
+        BrandResolver(registry_path),
+        base_url="https://www.oliveyoung.co.kr",
+    )
+
+    result = normalizer.normalize(
+        ProductSourceRecord(
+            source_brand_name="포뷰트",
+            product_name_ko="포뷰트 두피 타투15g 블랙/브라운 단품/기획",
+            source="oliveyoung",
+            source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000223552",
+            source_product_id="A000000223552",
+        )
+    )
+
+    assert result.product_name_display_ko == "두피 타투"
+    assert result.product_name_en is None
+    assert result.product_name_display_en is None
+
+
 def test_product_normalizer_cleans_canmake_retail_name_with_verified_english(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text(

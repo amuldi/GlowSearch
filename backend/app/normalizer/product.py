@@ -256,6 +256,7 @@ def _display_product_name(name: str | None, brand_aliases: list[str]) -> str | N
     while previous != text:
         previous = text
         text = _strip_leading_bracket_tags(text)
+        text = _strip_leading_parenthetical_tags(text)
         text = _strip_leading_brand(text, brand_aliases)
         text = _strip_leading_delimiters(text)
         text = _strip_packaging_parentheses(text)
@@ -273,6 +274,10 @@ def _strip_leading_bracket_tags(text: str) -> str:
         if stripped == current:
             return current
         current = stripped
+
+
+def _strip_leading_parenthetical_tags(text: str) -> str:
+    return re.sub(r"^\s*[\(\（][^\)\）]+[\)\）]\s*", "", text)
 
 
 def _strip_leading_brand(text: str, brand_aliases: list[str]) -> str:
@@ -317,6 +322,7 @@ def _strip_size_and_variant_suffix(text: str) -> str:
     current = text
     suffix_patterns = [
         r"\s+\d+(?:\.\d+)?\s*(?:g|ml|매|개)\s+\d+\s*(?:colors?|컬러|종)$",
+        r"\s*\d+(?:\.\d+)?\s*(?:g|ml|매|개)\s+[A-Za-z가-힣]+/[A-Za-z가-힣]+$",
         r"\s+\d+(?:\.\d+)?\s*(?:g|ml|매|개)$",
     ]
     for pattern in suffix_patterns:
