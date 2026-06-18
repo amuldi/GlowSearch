@@ -102,6 +102,10 @@ async def test_local_catalog_expands_verified_canonical_source_group(tmp_path) -
     assert {record.canonical_product_id for record in records} == {"verified-romand-tint"}
     assert records[1].product_name_en == "rom&nd tint"
 
+    limited_records = await collector.search("global-only-keyword", limit=1)
+
+    assert [record.source for record in limited_records] == ["oliveyoung", "oliveyoung-global"]
+
 
 @pytest.mark.asyncio
 async def test_project_catalog_returns_mixsoon_hyalraebae_cream() -> None:

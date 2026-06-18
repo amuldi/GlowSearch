@@ -592,6 +592,61 @@ class VerifiedCacheCollector:
         ]
 
 
+class FastOliveYoungPublicApiPeriperaCollector:
+    name = "oliveyoung:public-api"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        if keyword != "페리페라 스키니브로우":
+            return []
+        return [
+            ProductSourceRecord(
+                source_brand_name="페리페라",
+                source_brand_name_en="peripera",
+                product_name_ko="[6월 올영픽] 페리페라 스피디 스키니 브로우 8 Colors (단품/더블)",
+                regular_price=5700,
+                source="oliveyoung",
+                source_url="https://oliveyoung.example/products/peripera-brow",
+                source_product_id="A000000138671",
+            )
+        ][:limit]
+
+
+class SlowVerifiedCachePeriperaCollector:
+    name = "oliveyoung:verified-cache"
+
+    async def search(self, keyword: str, limit: int) -> list[ProductSourceRecord]:
+        if keyword != "페리페라 스키니브로우":
+            return []
+        await asyncio.sleep(0.01)
+        return [
+            ProductSourceRecord(
+                canonical_product_id="verified:peripera-speedy-skinny-brow",
+                source_brand_name="페리페라",
+                source_brand_name_en="peripera",
+                product_name_ko="[6월 올영픽] 페리페라 스피디 스키니 브로우 8 Colors (단품/더블)",
+                product_name_en="[PERIPERA] Speedy Skinny Brow",
+                product_name_display_ko="스피디 스키니 브로우",
+                product_name_display_en="Speedy Skinny Brow",
+                regular_price=5700,
+                source="oliveyoung",
+                source_url="https://oliveyoung.example/products/peripera-brow",
+                source_product_id="A000000138671",
+            ),
+            ProductSourceRecord(
+                canonical_product_id="verified:peripera-speedy-skinny-brow",
+                source_brand_name="페리페라",
+                source_brand_name_en="Peripera",
+                product_name_ko="[6월 올영픽] 페리페라 스피디 스키니 브로우 8 Colors (단품/더블)",
+                product_name_en="[PERIPERA] Speedy Skinny Brow",
+                product_name_display_ko="스피디 스키니 브로우",
+                product_name_display_en="Speedy Skinny Brow",
+                source="official",
+                source_url="https://clubclio.shop/products/peripera-speedy-skinny-brow",
+                source_product_id="4601270435977",
+            ),
+        ]
+
+
 class RecordingNetworkCollector:
     name = "network"
 
@@ -1472,6 +1527,39 @@ async def test_search_service_merges_verified_source_offers_for_same_product(tmp
     assert "미확인" not in result.model_dump_json()
     assert "Unknown" not in result.model_dump_json()
     assert "N/A" not in result.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_search_service_waits_for_verified_cache_before_returning_fast_live_result(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"peripera","aliases":["페리페라","peripera"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    service = SearchService(
+        collectors=[
+            FastOliveYoungPublicApiPeriperaCollector(),
+            SlowVerifiedCachePeriperaCollector(),
+        ],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        live_first_result_grace_seconds=0.2,
+    )
+
+    response = await service.search("페리페라 스키니브로우", SearchCriteria(limit=1))
+
+    assert response.count == 1
+    result = response.results[0]
+    assert result.source == "oliveyoung"
+    assert result.product_name_en == "[PERIPERA] Speedy Skinny Brow"
+    assert result.product_name_display_ko == "스피디 스키니 브로우"
+    assert result.product_name_display_en == "Speedy Skinny Brow"
+    assert [offer.source for offer in result.offers] == ["oliveyoung", "official"]
+    assert "official_source" not in result.enrichment_missing_fields
+    assert "product_name_en" not in result.enrichment_missing_fields
 
 
 @pytest.mark.asyncio

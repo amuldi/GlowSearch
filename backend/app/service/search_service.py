@@ -749,9 +749,17 @@ class SearchService:
             collector.name == "oliveyoung"
             or not cls._is_oliveyoung_collector(collector)
             or query != primary_query
-            or record_count >= limit
             or not cls._is_discovery_query(query)
         ):
+            if (
+                cls._is_oliveyoung_collector(collector)
+                and query == primary_query
+                and collector.name != "oliveyoung:verified-cache"
+                and cls._has_pending_verified_cache_task(pending, tasks, primary_query)
+            ):
+                return True
+            return False
+        if record_count >= limit:
             return False
         if any(task_query != primary_query for _collector, task_query, _index in tasks.values()):
             return True
@@ -801,6 +809,22 @@ class SearchService:
             task in pending
             and task_query == primary_query
             and cls._is_oliveyoung_collector(collector)
+            for task, (collector, task_query, _index) in tasks.items()
+        )
+
+    @staticmethod
+    def _has_pending_verified_cache_task(
+        pending: set[asyncio.Task[tuple[list[ProductSourceRecord], str | None, bool]]],
+        tasks: dict[
+            asyncio.Task[tuple[list[ProductSourceRecord], str | None, bool]],
+            tuple[ProductCollector, str, int],
+        ],
+        primary_query: str,
+    ) -> bool:
+        return any(
+            task in pending
+            and task_query == primary_query
+            and collector.name == "oliveyoung:verified-cache"
             for task, (collector, task_query, _index) in tasks.items()
         )
 
@@ -1499,6 +1523,9 @@ class SearchService:
     ) -> ProductSourceRecord:
         return existing.model_copy(
             update={
+                "canonical_product_id": (
+                    existing.canonical_product_id or incoming.canonical_product_id
+                ),
                 "category": incoming.category or existing.category,
                 "source_brand_name": incoming.source_brand_name or existing.source_brand_name,
                 "source_brand_name_en": (
@@ -1506,6 +1533,12 @@ class SearchService:
                 ),
                 "product_name_ko": existing.product_name_ko or incoming.product_name_ko,
                 "product_name_en": existing.product_name_en or incoming.product_name_en,
+                "product_name_display_ko": (
+                    existing.product_name_display_ko or incoming.product_name_display_ko
+                ),
+                "product_name_display_en": (
+                    existing.product_name_display_en or incoming.product_name_display_en
+                ),
                 "regular_price": (
                     incoming.regular_price
                     if incoming.regular_price is not None

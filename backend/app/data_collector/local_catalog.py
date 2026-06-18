@@ -51,8 +51,6 @@ class LocalVerifiedCatalogCollector:
                     continue
                 seen.add(key)
                 records.append(record)
-                if len(records) >= limit:
-                    break
             if len(records) >= limit:
                 break
         return records
