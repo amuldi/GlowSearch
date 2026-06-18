@@ -591,8 +591,15 @@ class SearchService:
                                 tasks,
                             ):
                                 continue
+                            records = self._dedupe_records(
+                                [
+                                    *official_primary_records,
+                                    *official_fallback_records,
+                                    *supplemental_records,
+                                ]
+                            )
                             return _CollectedResult(
-                                records=official_primary_records[: max(limit, 1) * 2],
+                                records=records[: max(limit, 1) * 2],
                                 errors=[],
                                 has_official_records=True,
                             )
@@ -881,15 +888,17 @@ class SearchService:
         primary_query: str,
     ) -> int:
         is_primary_query = query == primary_query
-        if is_primary_query and collector.name == "oliveyoung":
+        if is_primary_query and collector.name == "oliveyoung:verified-cache":
             return 0
-        if is_primary_query and cls._is_oliveyoung_collector(collector):
+        if is_primary_query and collector.name == "oliveyoung":
             return 1
-        if collector.name == "oliveyoung":
+        if is_primary_query and cls._is_oliveyoung_collector(collector):
             return 2
-        if cls._is_oliveyoung_collector(collector):
+        if collector.name == "oliveyoung":
             return 3
-        return 4
+        if cls._is_oliveyoung_collector(collector):
+            return 4
+        return 5
 
     async def _collect_verified_cache(self, queries: list[str], limit: int) -> _CollectedResult:
         records: list[ProductSourceRecord] = []
