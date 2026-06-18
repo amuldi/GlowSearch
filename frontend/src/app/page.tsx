@@ -45,26 +45,6 @@ const MAX_RESULT_LIMIT = 480;
 const MAX_PAGE_COUNT = MAX_RESULT_LIMIT / RESULT_PAGE_SIZE;
 const MIN_LOADING_MS = 180;
 const EMPTY_SEARCH_SUGGESTIONS = ["선크림", "틴트", "쿠션", "롬앤", "too cool", "정샘물"];
-const EDITOR_SAMPLE_TEXT = [
-  "헤라 파우더 #13N1",
-  "어반디케이 파우더",
-  "롬앤 쉐딩 #그레이쿨",
-  "페리페라 스키니브로우",
-  "클리오 치즈냥이",
-  "키스미 아이브로우",
-  "뮤드 브로우카라",
-  "하밍 젤리 에어 치크 7호",
-  "캔메이크 아라 카푸치노",
-  "홀리카 팔레트 #핑크올로지",
-  "어반디케이 문더스트 #글림락",
-  "하트퍼센트 립베이스",
-  "페리페라 포근 픽싱 틴트 19호",
-  "아멜리 하이라이터 #432",
-  "오프라 하이라이터",
-  "머지 더블 글레이즈 #브레이브미",
-  "비디비치 틴트밤 #카라멜허그",
-].join("\n");
-
 export default function Home() {
   const [mode, setMode] = useState<"search" | "editor">("search");
   const [query, setQuery] = useState("");
@@ -527,7 +507,6 @@ function EditorBatchWorkspace() {
     () => text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).length,
     [text],
   );
-  const resultStatusCounts = useMemo(() => editorStatusCounts(response), [response]);
   const canSubmit = Boolean(text.trim()) && !isLoading;
 
   useEffect(() => {
@@ -600,7 +579,7 @@ function EditorBatchWorkspace() {
       await confirmEditorCandidate(editorConfirmPayload(item, product));
       setSavedRows((current) => ({ ...current, [index]: true }));
     } catch {
-      setErrorMessage("정답 저장 중 문제가 발생했습니다.");
+      setErrorMessage("저장 중 문제가 발생했습니다.");
     } finally {
       setSavingRows((current) => ({ ...current, [index]: false }));
     }
@@ -619,7 +598,6 @@ function EditorBatchWorkspace() {
             value={text}
             onChange={(event) => setText(event.target.value)}
             rows={14}
-            placeholder={EDITOR_SAMPLE_TEXT}
             className="mt-3 min-h-72 w-full resize-y rounded-lg border border-line bg-white p-3 text-sm font-medium leading-6 text-ink outline-none transition placeholder:text-neutral-400 focus:border-rose"
             aria-label="편집자 일괄 정리 입력"
           />
@@ -628,13 +606,6 @@ function EditorBatchWorkspace() {
               {lineCount ? `${lineCount.toLocaleString("ko-KR")}개 라인` : "여러 줄을 붙여넣으세요"}
             </span>
             <div className="flex min-w-0 flex-wrap gap-2 sm:justify-end">
-              <button
-                type="button"
-                onClick={() => setText(EDITOR_SAMPLE_TEXT)}
-                className="min-w-0 rounded-full border border-line bg-white px-3 py-2 text-xs font-bold text-neutral-700 transition hover:border-rose hover:bg-blush-soft hover:text-rosewood"
-              >
-                예시 넣기
-              </button>
               <button
                 type="button"
                 onClick={runBatch}
@@ -660,13 +631,6 @@ function EditorBatchWorkspace() {
               <p className="mt-1 text-xs font-medium text-neutral-500">
                 source URL이 있는 후보만 표시합니다.
               </p>
-              {response ? (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <StatusCountChip label="확인됨" count={resultStatusCounts.confirmed} tone="confirmed" />
-                  <StatusCountChip label="후보 있음" count={resultStatusCounts.candidates} tone="candidate" />
-                  <StatusCountChip label="수동 확인 필요" count={resultStatusCounts.manual} tone="manual" />
-                </div>
-              ) : null}
             </div>
             <div className="grid min-w-0 grid-cols-1 gap-1.5 sm:flex sm:flex-wrap sm:justify-end">
               {[
@@ -881,8 +845,8 @@ function EditorBatchRow({
             </div>
           ) : null}
           <dl className="grid min-w-0 gap-2 text-xs sm:grid-cols-2">
-            <Field label="가격" value={selectedOriginalPrice} />
-            <Field label="할인가" value={selectedSalePrice} />
+            <Field label="가격" value={selectedOriginalPrice} valueClassName="whitespace-nowrap text-base font-extrabold tabular-nums text-neutral-900" />
+            <Field label="할인가" value={selectedSalePrice} valueClassName="whitespace-nowrap text-base font-extrabold tabular-nums text-rosewood" />
           </dl>
         </div>
       ) : null}
@@ -906,9 +870,10 @@ function EditorBatchRow({
             onClick={onConfirm}
             disabled={isSaving || isSaved}
             className="inline-flex max-w-full items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 transition hover:border-emerald-300 hover:bg-white disabled:cursor-default disabled:opacity-70"
+            aria-label={isSaved ? "선택 저장 완료" : "선택 저장"}
+            title={isSaved ? "선택 저장 완료" : "선택 저장"}
           >
             {isSaving ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <Check className="h-3 w-3" aria-hidden="true" />}
-            {isSaved ? "저장됨" : "정답 저장"}
           </button>
         </div>
       ) : null}
@@ -967,12 +932,20 @@ function EditorBatchRow({
   );
 }
 
-function Field({ label, value }: { label: string; value?: string | null }) {
+function Field({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value?: string | null;
+  valueClassName?: string;
+}) {
   if (!value) return null;
   return (
     <div className="min-w-0">
       <dt className="font-bold text-neutral-500">{label}</dt>
-      <dd className="break-words font-semibold text-neutral-800">{value}</dd>
+      <dd className={valueClassName ?? "break-words font-semibold text-neutral-800"}>{value}</dd>
     </div>
   );
 }
@@ -984,29 +957,8 @@ function StatusBadge({ status }: { status: string }) {
       ? "border-amber-200 bg-amber-50 text-amber-800"
       : "border-neutral-200 bg-neutral-50 text-neutral-600";
   return (
-    <span className={`rounded-full border px-2.5 py-1 text-xs font-extrabold ${className}`}>
-      {status}
-    </span>
-  );
-}
-
-function StatusCountChip({
-  label,
-  count,
-  tone,
-}: {
-  label: string;
-  count: number;
-  tone: "confirmed" | "candidate" | "manual";
-}) {
-  const className = tone === "confirmed"
-    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-    : tone === "candidate"
-      ? "border-amber-200 bg-amber-50 text-amber-800"
-      : "border-neutral-200 bg-neutral-50 text-neutral-600";
-  return (
-    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-extrabold ${className}`}>
-      {label} {count.toLocaleString("ko-KR")}
+    <span className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full border ${className}`} aria-label="상태 표시">
+      <span className="sr-only">{status}</span>
     </span>
   );
 }
@@ -1240,7 +1192,7 @@ function ProductCard({ product }: { product: Product }) {
             {originalPriceText ? (
               <div>
                 <dt className="text-[11px] font-medium text-neutral-500">원가</dt>
-                <dd className={hasDiscount ? "text-xs text-neutral-500 line-through" : "text-sm font-semibold"}>
+                <dd className={hasDiscount ? "whitespace-nowrap text-xs text-neutral-500 line-through" : "whitespace-nowrap text-sm font-semibold tabular-nums"}>
                   {originalPriceText}
                 </dd>
               </div>
@@ -1248,7 +1200,7 @@ function ProductCard({ product }: { product: Product }) {
             {hasDiscount ? (
               <div>
                 <dt className="text-[11px] font-medium text-neutral-500">할인가</dt>
-                <dd className="text-sm font-bold text-rosewood">
+                <dd className="whitespace-nowrap text-sm font-bold tabular-nums text-rosewood">
                   {salePriceText}
                   {product.discount_rate ? (
                     <span className="ml-1 rounded-full bg-blush-soft px-1.5 py-0.5 text-[11px] font-bold text-rosewood">
