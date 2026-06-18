@@ -8,6 +8,8 @@ class ProductSourceRecord(BaseModel):
     source_brand_name_en: str | None = None
     product_name_ko: str | None = None
     product_name_en: str | None = None
+    product_name_display_ko: str | None = None
+    product_name_display_en: str | None = None
     regular_price: int | None = None
     original_price: int | None = None
     sale_price: int | None = None

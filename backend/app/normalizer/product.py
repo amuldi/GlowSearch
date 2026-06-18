@@ -16,8 +16,14 @@ class ProductNormalizer:
         product_name_ko = clean_text(record.product_name_ko)
         product_name_en = self._product_name_en(record)
         brand_aliases = self._display_brand_aliases(brand_ko, brand_en, record)
-        product_name_display_ko = _display_product_name(product_name_ko, brand_aliases)
-        product_name_display_en = _display_product_name(product_name_en, brand_aliases)
+        product_name_display_ko = clean_text(record.product_name_display_ko) or _display_product_name(
+            product_name_ko,
+            brand_aliases,
+        )
+        product_name_display_en = clean_text(record.product_name_display_en) or _display_product_name(
+            product_name_en,
+            brand_aliases,
+        )
         original_price = record.original_price or record.regular_price
         sale_price = record.sale_price
         display_price = sale_price if sale_price is not None else original_price

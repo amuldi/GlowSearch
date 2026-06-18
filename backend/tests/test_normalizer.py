@@ -294,6 +294,46 @@ def test_product_normalizer_exposes_display_name_without_retail_promo_terms(tmp_
     assert result.product_name_display_en == "Speedy Skinny Brow"
 
 
+def test_product_normalizer_prefers_verified_display_name_over_rule_cleanup(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        """
+        {
+          "entries": [
+            {
+              "official_en": "peripera",
+              "aliases": ["페리페라", "peripera", "PERIPERA"],
+              "sources": []
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+    normalizer = ProductNormalizer(
+        BrandResolver(registry_path),
+        base_url="https://www.oliveyoung.co.kr",
+    )
+
+    result = normalizer.normalize(
+        ProductSourceRecord(
+            source_brand_name="페리페라",
+            product_name_ko="[6월 올영픽] 페리페라 스피디 스키니 브로우 8 Colors (단품/더블)",
+            product_name_en="[PERIPERA] Speedy Skinny Brow",
+            product_name_display_ko="스피디 스키니 브로우",
+            product_name_display_en="Speedy Skinny Brow",
+            source="oliveyoung",
+            source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000138671",
+            source_product_id="A000000138671",
+        )
+    )
+
+    assert result.product_name_ko == "[6월 올영픽] 페리페라 스피디 스키니 브로우 8 Colors (단품/더블)"
+    assert result.product_name_en == "[PERIPERA] Speedy Skinny Brow"
+    assert result.product_name_display_ko == "스피디 스키니 브로우"
+    assert result.product_name_display_en == "Speedy Skinny Brow"
+
+
 def test_product_normalizer_does_not_translate_display_name_without_source_english(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text(

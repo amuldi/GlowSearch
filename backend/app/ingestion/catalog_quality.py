@@ -50,6 +50,8 @@ class CatalogQualityReport:
     display_issue_count: int
     product_name_en_count: int
     display_cleaned_count: int
+    product_name_display_ko_override_count: int
+    product_name_display_en_override_count: int
     average_quality_score: float
     enrichment_missing_fields: dict[str, int]
     issues: list[CatalogQualityIssue]
@@ -76,6 +78,8 @@ async def build_catalog_quality_report(
         issues: list[CatalogQualityIssue] = []
         product_name_en_count = 0
         display_cleaned_count = 0
+        product_name_display_ko_override_count = 0
+        product_name_display_en_override_count = 0
         quality_score_total = 0
 
         for record in records:
@@ -90,6 +94,10 @@ async def build_catalog_quality_report(
                 and product.product_name_ko != product.product_name_display_ko
             ):
                 display_cleaned_count += 1
+            if record.product_name_display_ko:
+                product_name_display_ko_override_count += 1
+            if record.product_name_display_en:
+                product_name_display_en_override_count += 1
             enrichment_missing_fields.update(product.enrichment_missing_fields)
             issues.extend(_required_issues(product))
             issues.extend(_display_issues(product))
@@ -108,6 +116,8 @@ async def build_catalog_quality_report(
             display_issue_count=sum(1 for issue in issues if issue.severity == "display"),
             product_name_en_count=product_name_en_count,
             display_cleaned_count=display_cleaned_count,
+            product_name_display_ko_override_count=product_name_display_ko_override_count,
+            product_name_display_en_override_count=product_name_display_en_override_count,
             average_quality_score=round(quality_score_total / total, 2) if total else 0.0,
             enrichment_missing_fields=dict(sorted(enrichment_missing_fields.items())),
             issues=sorted_issues,

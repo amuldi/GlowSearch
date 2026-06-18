@@ -39,6 +39,8 @@ async def test_catalog_quality_report_splits_required_display_and_enrichment_iss
                         "brand_en": "peripera",
                         "product_name_ko": "[6월 올영픽] 페리페라 스피디 스키니 브로우 8 Colors (단품/더블)",
                         "product_name_en": "[PERIPERA] Speedy Skinny Brow",
+                        "product_name_display_ko": "스피디 스키니 브로우",
+                        "product_name_display_en": "Speedy Skinny Brow",
                         "source": "oliveyoung",
                         "source_url": "https://oliveyoung.example/peripera",
                         "goods_no": "A001",
@@ -76,6 +78,8 @@ async def test_catalog_quality_report_splits_required_display_and_enrichment_iss
     assert report.source_counts == {"glowpick": 1, "official": 1, "oliveyoung": 1}
     assert report.product_name_en_count == 1
     assert report.display_cleaned_count == 2
+    assert report.product_name_display_ko_override_count == 1
+    assert report.product_name_display_en_override_count == 1
     assert report.required_issue_count == 1
     assert report.display_issue_count == 1
     assert report.enrichment_missing_fields["product_name_en"] == 2

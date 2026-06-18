@@ -27,6 +27,8 @@ async def test_local_catalog_returns_verified_matching_products(tmp_path) -> Non
                         "brand_ko": "롬앤",
                         "product_name_ko": "롬앤 틴트",
                         "price": 13000,
+                        "product_name_display_ko": "틴트",
+                        "product_name_display_en": "Tint",
                         "image_url": "https://example.com/image.jpg",
                         "source_url": "https://example.com/product",
                         "goods_no": "A000",
@@ -44,6 +46,8 @@ async def test_local_catalog_returns_verified_matching_products(tmp_path) -> Non
     assert len(records) == 1
     assert records[0].source_brand_name == "롬앤"
     assert records[0].product_name_ko == "롬앤 틴트"
+    assert records[0].product_name_display_ko == "틴트"
+    assert records[0].product_name_display_en == "Tint"
     assert records[0].regular_price == 13000
     assert records[0].source_url == "https://example.com/product"
     assert records[0].search_keywords == ["romand", "틴트"]
@@ -146,6 +150,8 @@ async def test_project_catalog_enriches_peripera_skinny_brow_from_official_sourc
     records = await collector.search("페리페라 스키니브로우", limit=5)
 
     assert any(record.product_name_en == "[PERIPERA] Speedy Skinny Brow" for record in records)
+    assert any(record.product_name_display_ko == "스피디 스키니 브로우" for record in records)
+    assert any(record.product_name_display_en == "Speedy Skinny Brow" for record in records)
     assert any(record.source == "official" for record in records)
     assert any(
         record.source_url == "https://clubclio.shop/products/peripera-speedy-skinny-brow"
@@ -185,9 +191,34 @@ async def test_project_catalog_search_service_matches_canmake_editor_abbreviatio
     assert response.count == 1
     result = response.results[0]
     assert result.brand_ko == "캔메이크"
+    assert result.product_name_display_ko == "크리미 터치 라이너"
+    assert result.product_name_display_en == "Creamy Touch Liner"
     assert result.shade == "[15]Cappuccino Pink"
     assert any(
         offer.source == "official"
         and offer.source_url == "https://www.canmake.com/item/detail/creamy-touch-liner/"
         for offer in result.offers
     )
+
+
+@pytest.mark.asyncio
+async def test_project_catalog_search_service_uses_verified_display_names_for_editor_sample() -> None:
+    service = SearchService(
+        collectors=[LocalVerifiedCatalogCollector(PROJECT_CATALOG_PATH)],
+        normalizer=ProductNormalizer(
+            BrandResolver(PROJECT_REGISTRY_PATH),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        index_background_refresh_enabled=False,
+    )
+
+    response = await service.search("페리페라 스키니브로우", SearchCriteria(limit=3))
+    await service.close()
+
+    assert response.count == 1
+    result = response.results[0]
+    assert result.product_name_ko == "[6월 올영픽] 페리페라 스피디 스키니 브로우 8 Colors (단품/더블)"
+    assert result.product_name_en == "[PERIPERA] Speedy Skinny Brow"
+    assert result.product_name_display_ko == "스피디 스키니 브로우"
+    assert result.product_name_display_en == "Speedy Skinny Brow"
