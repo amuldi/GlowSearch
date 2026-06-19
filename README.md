@@ -39,6 +39,7 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 - 현재 catalog에는 표시용 한글 상품명 override 28개, 표시용 영문 상품명 override 8개가 들어 있습니다.
 - HERA 공식 상품 페이지에서 `SOFT FINISH LOOSE POWDER` 영문 제품명을 확인해 `헤라 소프트 피니시 루스 파우더 15g`에 official source offer와 영문 표시명을 보강했습니다.
 - HOURGLASS 공식 상품 페이지에서 `Vanish™ Airbrush Concealer` 영문 제품명을 확인해 `아워글래스 배니쉬 에어브러쉬 컨실러`에 official source offer와 영문 표시명을 보강했습니다. 기존 Musinsa verified record의 한글 shade `스톤`은 유지하고, 공식 record는 영문 상품명 보강 source로만 병합합니다.
+- 표시용 상품명 정제에 verified shade suffix 분리 규칙을 추가했습니다. 예를 들어 `글로이 티어 원데이 그레이`는 제품명 `글로이 티어 원데이`, 호수/컬러명 `그레이`로 분리됩니다.
 - 표시용 상품명 정제 규칙을 보강했습니다. 예를 들어 `(클리오X국가유산청) 프로 아이 팔레트 에어`는 `프로 아이 팔레트 에어`, `포뷰트 두피 타투15g 블랙/브라운 단품/기획`은 `두피 타투`로 표시됩니다.
 - catalog 전체를 정규화했을 때 `[ ]`, `기획`, `단품`, `택1`, `Colors`, 괄호형 프로모션 문구가 표시용 상품명에 남는 케이스가 없도록 테스트를 추가했습니다.
 - 공식/source에서 확인 가능한 신규 영문 제품명이 없는 항목은 임의 번역하지 않았습니다. 영문 제품명 결손은 audit 결과의 `missing_product_name_en`으로 추적합니다.

@@ -492,6 +492,62 @@ def test_product_normalizer_cleans_canmake_retail_name_with_verified_english(tmp
     assert result.product_name_display_en == "Creamy Touch Liner"
 
 
+def test_product_normalizer_removes_verified_shade_suffix_from_display_name(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"OLENS","aliases":["오렌즈","OLENS"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    normalizer = ProductNormalizer(
+        BrandResolver(registry_path),
+        base_url="https://glowpick.co.kr",
+    )
+
+    result = normalizer.normalize(
+        ProductSourceRecord(
+            source_brand_name="오렌즈",
+            product_name_ko="글로이 티어 원데이 그레이",
+            shade="그레이",
+            source="glowpick",
+            source_url="https://glowpick.co.kr/product/183668",
+            source_product_id="183668",
+        )
+    )
+
+    assert result.product_name_ko == "글로이 티어 원데이 그레이"
+    assert result.product_name_display_ko == "글로이 티어 원데이"
+    assert result.shade == "그레이"
+    assert result.product_name_en is None
+    assert result.product_name_display_en is None
+
+
+def test_product_normalizer_removes_numbered_shade_suffix_from_display_name(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"rom&nd","aliases":["롬앤","rom&nd"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    normalizer = ProductNormalizer(
+        BrandResolver(registry_path),
+        base_url="https://www.oliveyoung.co.kr",
+    )
+
+    result = normalizer.normalize(
+        ProductSourceRecord(
+            source_brand_name="롬앤",
+            product_name_ko="롬앤 베러 댄 쉐입 쉐딩 02 그레이쿨",
+            shade="02 그레이쿨",
+            source="oliveyoung",
+            source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000000001",
+            source_product_id="A000000000001",
+        )
+    )
+
+    assert result.product_name_display_ko == "베러 댄 쉐입 쉐딩"
+    assert result.shade == "02 그레이쿨"
+    assert result.product_name_en is None
+
+
 def test_product_normalizer_preserves_the_saem_verified_english_display_name(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text(

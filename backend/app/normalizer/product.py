@@ -19,10 +19,12 @@ class ProductNormalizer:
         product_name_display_ko = clean_text(record.product_name_display_ko) or _display_product_name(
             product_name_ko,
             brand_aliases,
+            variant_values=[record.shade],
         )
         product_name_display_en = clean_text(record.product_name_display_en) or _display_product_name(
             product_name_en,
             brand_aliases,
+            variant_values=[record.shade],
         )
         original_price = record.original_price or record.regular_price
         sale_price = record.sale_price
@@ -253,11 +255,17 @@ def _clean_options(options: list[str] | None) -> list[str] | None:
     return cleaned or None
 
 
-def _display_product_name(name: str | None, brand_aliases: list[str]) -> str | None:
+def _display_product_name(
+    name: str | None,
+    brand_aliases: list[str],
+    *,
+    variant_values: list[str | None] | None = None,
+) -> str | None:
     text = clean_text(name)
     if not text:
         return None
 
+    variants = _dedupe_texts(variant_values or [])
     previous = None
     while previous != text:
         previous = text
@@ -268,6 +276,7 @@ def _display_product_name(name: str | None, brand_aliases: list[str]) -> str | N
         text = _strip_packaging_parentheses(text)
         text = _strip_packaging_suffix(text)
         text = _strip_size_and_variant_suffix(text)
+        text = _strip_known_variant_suffix(text, variants)
         text = clean_text(text) or ""
 
     return text or clean_text(name)
@@ -336,6 +345,30 @@ def _strip_size_and_variant_suffix(text: str) -> str:
     return current
 
 
+def _strip_known_variant_suffix(text: str, variant_values: list[str]) -> str:
+    current = text
+    for variant in sorted(variant_values, key=len, reverse=True):
+        if len(variant) < 2:
+            continue
+        stripped = re.sub(
+            rf"(?:\s+|[\s/#\-_·ㆍ:：,\(\[]+){re.escape(variant)}[\)\]]?\s*$",
+            "",
+            current,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+        if stripped != current and len(_key(stripped)) >= 4:
+            current = stripped
+    return current
+
+
+def _key(value: str | None) -> str:
+    text = clean_text(value)
+    if text is None:
+        return ""
+    return re.sub(r"[\s\-_./&|#·ㆍ:：,\(\)\[\]]+", "", text).casefold()
+
+
 def _dedupe_texts(values: list[str | None]) -> list[str]:
     deduped: list[str] = []
     seen: set[str] = set()
@@ -343,7 +376,7 @@ def _dedupe_texts(values: list[str | None]) -> list[str]:
         text = clean_text(value)
         if not text:
             continue
-        key = re.sub(r"[\s\-_./&|]+", "", text).casefold()
+        key = _key(text)
         if key in seen:
             continue
         seen.add(key)
