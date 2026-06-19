@@ -787,7 +787,6 @@ function EditorBatchRow({
           <div className="text-[11px] font-bold text-neutral-500">원문 입력</div>
           <div className="break-words text-sm font-bold text-ink">{item.raw_text}</div>
         </div>
-        <StatusBadge status={status} />
       </div>
 
       <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
@@ -813,9 +812,9 @@ function EditorBatchRow({
               />
             </div>
           ) : null}
-          <dl className="grid min-w-0 gap-2 text-xs min-[420px]:grid-cols-2">
-            <Field label="가격" value={selectedOriginalPrice} valueClassName="inline-block min-w-max whitespace-nowrap break-normal text-base font-extrabold tabular-nums text-neutral-900 [overflow-wrap:normal] [word-break:keep-all]" />
-            <Field label="할인가" value={selectedSalePrice} valueClassName="inline-block min-w-max whitespace-nowrap break-normal text-base font-extrabold tabular-nums text-rosewood [overflow-wrap:normal] [word-break:keep-all]" />
+          <dl className="flex min-w-0 flex-wrap gap-x-5 gap-y-2 text-xs">
+            <PriceField label="가격" value={selectedOriginalPrice} />
+            <PriceField label="할인가" value={selectedSalePrice} valueClassName="text-rosewood" />
           </dl>
         </div>
       ) : null}
@@ -855,11 +854,8 @@ function EditorBatchRow({
                 <span className="break-words text-sm font-bold text-ink">
                   {[candidate.product.brand_ko, productNameKo(candidate.product)].filter(Boolean).join(" / ")}
                 </span>
-                <span
-                  className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-neutral-600"
-                  aria-label={`${candidateIndex + 1}번째 선택지 점수 ${candidate.match_score}`}
-                >
-                  {candidateIndex + 1} · {candidate.match_score}
+                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-neutral-500">
+                  {candidateIndex + 1}
                 </span>
               </div>
               <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-neutral-600">
@@ -867,30 +863,18 @@ function EditorBatchRow({
                 {productNameEn(candidate.product) ? <span>{productNameEn(candidate.product)}</span> : null}
                 {candidate.product.shade ? <span>{candidate.product.shade}</span> : null}
                 {candidatePriceText(candidate.product) ? (
-                  <span className="whitespace-nowrap break-normal tabular-nums [overflow-wrap:normal] [word-break:keep-all]">
+                  <span className="inline-block whitespace-nowrap tabular-nums [overflow-wrap:normal] [word-break:normal]">
                     {candidatePriceText(candidate.product)}
                   </span>
                 ) : null}
                 <span>{sourceLabel(candidate.product)}</span>
               </div>
-              {candidate.match_reasons?.length ? (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {candidate.match_reasons.map((reason) => (
-                    <span
-                      key={reason}
-                      className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-bold text-neutral-500"
-                    >
-                      {reason}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
             </button>
           ))}
         </div>
       ) : status === "수동 확인 필요" ? (
         <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">
-          source URL이 있는 결과를 찾지 못했습니다. 이 입력은 보강 대상으로 기록됩니다.
+          source URL이 있는 결과를 찾지 못했습니다.
         </div>
       ) : null}
     </article>
@@ -915,14 +899,27 @@ function Field({
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const className = status === "확인됨"
-    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-    : status === "후보 있음"
-      ? "border-amber-200 bg-amber-50 text-amber-800"
-      : "border-neutral-200 bg-neutral-50 text-neutral-600";
+function PriceField({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value?: string | null;
+  valueClassName?: string;
+}) {
+  if (!value) return null;
   return (
-    <span className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full border ${className}`} aria-hidden="true" />
+    <div className="min-w-[5.75rem] shrink-0">
+      <dt className="font-bold text-neutral-500">{label}</dt>
+      <dd className={[
+        "inline-block whitespace-nowrap text-base font-extrabold tabular-nums text-neutral-900 [overflow-wrap:normal] [word-break:normal]",
+        valueClassName ?? "",
+      ].join(" ")}
+      >
+        {value}
+      </dd>
+    </div>
   );
 }
 
@@ -1156,7 +1153,7 @@ function ProductCard({ product }: { product: Product }) {
             {originalPriceText ? (
               <div>
                 <dt className="text-[11px] font-medium text-neutral-500">원가</dt>
-                <dd className={hasDiscount ? "whitespace-nowrap text-xs text-neutral-500 line-through" : "whitespace-nowrap text-sm font-semibold tabular-nums"}>
+                <dd className={hasDiscount ? "inline-block whitespace-nowrap text-xs text-neutral-500 line-through [overflow-wrap:normal] [word-break:normal]" : "inline-block whitespace-nowrap text-sm font-semibold tabular-nums [overflow-wrap:normal] [word-break:normal]"}>
                   {originalPriceText}
                 </dd>
               </div>
@@ -1164,7 +1161,7 @@ function ProductCard({ product }: { product: Product }) {
             {hasDiscount ? (
               <div>
                 <dt className="text-[11px] font-medium text-neutral-500">할인가</dt>
-                <dd className="whitespace-nowrap text-sm font-bold tabular-nums text-rosewood">
+                <dd className="inline-block whitespace-nowrap text-sm font-bold tabular-nums text-rosewood [overflow-wrap:normal] [word-break:normal]">
                   {salePriceText}
                   {product.discount_rate ? (
                     <span className="ml-1 rounded-full bg-blush-soft px-1.5 py-0.5 text-[11px] font-bold text-rosewood">
@@ -1284,7 +1281,6 @@ function editorDelimitedPayload(
     "할인가",
     "이미지 URL",
     "source 링크",
-    "상태",
   ];
   return [
     editorDelimitedRow(header, delimiter),
@@ -1301,7 +1297,6 @@ function editorDelimitedPayload(
       product?.sale_price != null ? formatPrice(product.sale_price, product.currency) ?? "" : "",
       product?.image_url ?? "",
       bestEditorSourceUrl(product) ?? "",
-      item.status,
     ], delimiter)),
   ].join("\n");
 }
