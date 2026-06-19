@@ -1659,6 +1659,23 @@ class SearchService:
             "offers": offers,
             "quality_score": max(existing.quality_score, incoming.quality_score),
         }
+        priced_offer = cls._first_priced_offer(offers)
+        if priced_offer is not None:
+            price_updated = False
+            if representative.price is None and priced_offer.price is not None:
+                update["price"] = priced_offer.price
+                price_updated = True
+            if representative.original_price is None and priced_offer.original_price is not None:
+                update["original_price"] = priced_offer.original_price
+                price_updated = True
+            if representative.sale_price is None and priced_offer.sale_price is not None:
+                update["sale_price"] = priced_offer.sale_price
+                price_updated = True
+            if price_updated and priced_offer.currency:
+                update["currency"] = priced_offer.currency
+        image_offer = cls._first_image_offer(offers)
+        if representative.image_url is None and image_offer is not None:
+            update["image_url"] = image_offer.image_url
         for field in [
             "brand_ko",
             "brand_en",
@@ -1673,6 +1690,7 @@ class SearchService:
             "review_count",
             "description",
             "options",
+            "sold_out",
             "search_keywords",
             "updated_at",
         ]:
@@ -1762,6 +1780,20 @@ class SearchService:
             if value is not None:
                 score += 1
         return score
+
+    @staticmethod
+    def _first_priced_offer(offers: list[ProductOffer]) -> ProductOffer | None:
+        for offer in offers:
+            if any(
+                value is not None
+                for value in [offer.price, offer.original_price, offer.sale_price]
+            ):
+                return offer
+        return None
+
+    @staticmethod
+    def _first_image_offer(offers: list[ProductOffer]) -> ProductOffer | None:
+        return next((offer for offer in offers if offer.image_url), None)
 
     @classmethod
     def _source_coverage_missing_fields(cls, product: ProductSearchResult) -> list[str]:

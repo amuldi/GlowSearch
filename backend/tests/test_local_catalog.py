@@ -290,6 +290,9 @@ async def test_project_catalog_search_service_merges_hourglass_official_english_
     assert result.product_name_en == "Vanish™ Airbrush Concealer"
     assert result.product_name_display_en == "Vanish™ Airbrush Concealer"
     assert result.shade == "스톤"
+    assert result.price == 60000
+    assert result.original_price == 60000
+    assert result.image_url == "https://image.msscdn.net/images/goods_img/20250519/5125220/5125220_17757043401908_500.jpg"
     assert [offer.source for offer in result.offers] == ["official", "musinsa"]
     assert any(
         offer.source == "official"
@@ -297,6 +300,8 @@ async def test_project_catalog_search_service_merges_hourglass_official_english_
         for offer in result.offers
     )
     assert "product_name_en" not in result.enrichment_missing_fields
+    assert "price" not in result.enrichment_missing_fields
+    assert "image_url" not in result.enrichment_missing_fields
     assert "official_source" not in result.enrichment_missing_fields
 
 
