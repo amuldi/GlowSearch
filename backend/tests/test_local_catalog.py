@@ -194,6 +194,22 @@ async def test_project_catalog_enriches_hera_powder_from_official_source() -> No
 
 
 @pytest.mark.asyncio
+async def test_project_catalog_enriches_hourglass_concealer_from_official_source() -> None:
+    collector = LocalVerifiedCatalogCollector(PROJECT_CATALOG_PATH)
+
+    records = await collector.search("아워글래스 컨실러 스톤", limit=1)
+
+    assert [record.source for record in records] == ["musinsa", "official"]
+    assert any(record.product_name_en == "Vanish™ Airbrush Concealer" for record in records)
+    assert any(record.product_name_display_ko == "배니쉬 에어브러쉬 컨실러" for record in records)
+    assert any(record.product_name_display_en == "Vanish™ Airbrush Concealer" for record in records)
+    assert any(
+        record.source_url == "https://www.hourglasscosmetics.com/products/vanish-airbrush-concealer"
+        for record in records
+    )
+
+
+@pytest.mark.asyncio
 async def test_project_catalog_search_service_matches_canmake_editor_abbreviation() -> None:
     service = SearchService(
         collectors=[LocalVerifiedCatalogCollector(PROJECT_CATALOG_PATH)],
@@ -246,6 +262,38 @@ async def test_project_catalog_search_service_merges_hera_official_english_name(
     assert any(
         offer.source == "official"
         and offer.source_url == "https://int.hera.com/products/soft-finish-loose-powder"
+        for offer in result.offers
+    )
+    assert "product_name_en" not in result.enrichment_missing_fields
+    assert "official_source" not in result.enrichment_missing_fields
+
+
+@pytest.mark.asyncio
+async def test_project_catalog_search_service_merges_hourglass_official_english_name() -> None:
+    service = SearchService(
+        collectors=[LocalVerifiedCatalogCollector(PROJECT_CATALOG_PATH)],
+        normalizer=ProductNormalizer(
+            BrandResolver(PROJECT_REGISTRY_PATH),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        index_background_refresh_enabled=False,
+    )
+
+    response = await service.search("아워글래스 컨실러 스톤", SearchCriteria(limit=1))
+    await service.close()
+
+    assert response.count == 1
+    result = response.results[0]
+    assert result.canonical_product_id == "verified:hourglass-vanish-airbrush-concealer-stone"
+    assert result.product_name_display_ko == "배니쉬 에어브러쉬 컨실러"
+    assert result.product_name_en == "Vanish™ Airbrush Concealer"
+    assert result.product_name_display_en == "Vanish™ Airbrush Concealer"
+    assert result.shade == "스톤"
+    assert [offer.source for offer in result.offers] == ["official", "musinsa"]
+    assert any(
+        offer.source == "official"
+        and offer.source_url == "https://www.hourglasscosmetics.com/products/vanish-airbrush-concealer"
         for offer in result.offers
     )
     assert "product_name_en" not in result.enrichment_missing_fields

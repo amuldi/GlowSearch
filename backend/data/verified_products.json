@@ -88,7 +88,9 @@
       "brand_en": "HOURGLASS",
       "brand_ko": "아워글래스",
       "product_name_ko": "배니쉬 에어브러쉬 컨실러 6ml (17colors)",
+      "product_name_en": "Vanish™ Airbrush Concealer",
       "product_name_display_ko": "배니쉬 에어브러쉬 컨실러",
+      "product_name_display_en": "Vanish™ Airbrush Concealer",
       "price": 60000,
       "shade": "스톤",
       "image_url": "https://image.msscdn.net/images/goods_img/20250519/5125220/5125220_17757043401908_500.jpg",
@@ -96,6 +98,22 @@
       "goods_no": "5125220",
       "source": "musinsa",
       "keywords": ["HOURGLASS", "아워글래스", "배니쉬 에어브러쉬 컨실러", "컨실러 스톤", "스톤"]
+    },
+    {
+      "canonical_product_id": "verified:hourglass-vanish-airbrush-concealer-stone",
+      "brand_en": "HOURGLASS",
+      "brand_ko": "아워글래스",
+      "product_name_ko": "배니쉬 에어브러쉬 컨실러",
+      "product_name_en": "Vanish™ Airbrush Concealer",
+      "product_name_display_ko": "배니쉬 에어브러쉬 컨실러",
+      "product_name_display_en": "Vanish™ Airbrush Concealer",
+      "price": null,
+      "shade": null,
+      "image_url": null,
+      "source_url": "https://www.hourglasscosmetics.com/products/vanish-airbrush-concealer",
+      "goods_no": "hourglass-vanish-airbrush-concealer",
+      "source": "official",
+      "keywords": ["HOURGLASS", "아워글래스", "Vanish Airbrush Concealer", "Vanish™ Airbrush Concealer", "배니쉬 에어브러쉬 컨실러", "컨실러", "Stone"]
     },
     {
       "canonical_product_id": "verified:ameli-yeoback-macaron-shading-1319",
