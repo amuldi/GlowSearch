@@ -333,7 +333,7 @@ export default function Home() {
             ].join(" ")}
             aria-pressed={mode === "editor"}
           >
-            편집자 일괄 정리
+            일괄 검색
           </button>
         </div>
 
@@ -620,7 +620,7 @@ function EditorBatchWorkspace() {
       setSelected(initialEditorSelection(data));
     } catch (error) {
       if (requestIdRef.current !== requestId) return;
-      setErrorMessage("일괄 정리 중 문제가 발생했습니다.");
+      setErrorMessage("검색 중 문제가 발생했습니다.");
       setResponse(null);
       setSelected({});
     } finally {
@@ -643,32 +643,28 @@ function EditorBatchWorkspace() {
     <section className="mx-auto mt-8 w-full max-w-[326px] sm:max-w-2xl lg:max-w-6xl">
       <div className="grid w-full min-w-0 max-w-full gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <div className="min-w-0 overflow-hidden rounded-lg border border-blush/55 bg-white/92 p-4 shadow-soft">
-          <label htmlFor="editor-batch-input" className="sr-only">
-            편집자 일괄 정리 입력
-          </label>
           <textarea
             id="editor-batch-input"
             value={text}
             onChange={(event) => setText(event.target.value)}
             rows={14}
-            className="mt-3 min-h-72 w-full resize-y rounded-lg border border-line bg-white p-3 text-sm font-medium leading-6 text-ink outline-none transition placeholder:text-neutral-400 focus:border-rose"
-            aria-label="편집자 일괄 정리 입력"
+            placeholder={"헤라 파우더 #13N1\n롬앤 쉐딩 #그레이쿨\n페리페라 스키니브로우"}
+            className="min-h-72 w-full resize-y rounded-lg border border-line bg-white p-3 text-sm font-medium leading-6 text-ink outline-none transition placeholder:text-neutral-400 focus:border-rose"
+            aria-label="제품 목록 입력"
           />
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-xs font-semibold text-neutral-500">
-              {`${lineCount.toLocaleString("ko-KR")}개 라인`}
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <span className="text-xs text-neutral-400">
+              {lineCount > 0 ? `${lineCount}개 항목` : "한 줄에 제품 하나씩 입력하세요"}
             </span>
-            <div className="flex min-w-0 flex-wrap gap-2 sm:justify-end">
-              <button
-                type="button"
-                onClick={runBatch}
-                disabled={!canSubmit}
-                className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-rosewood px-4 py-2 text-sm font-bold text-white transition hover:bg-[#873247] disabled:cursor-not-allowed disabled:bg-neutral-300"
-              >
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Search className="h-4 w-4" aria-hidden="true" />}
-                정리하기
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={runBatch}
+              disabled={!canSubmit}
+              className="inline-flex items-center gap-1.5 rounded-full bg-rosewood px-4 py-2 text-sm font-bold text-white transition hover:bg-[#873247] disabled:cursor-not-allowed disabled:bg-neutral-300"
+            >
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Search className="h-4 w-4" aria-hidden="true" />}
+              검색
+            </button>
           </div>
           {errorMessage ? (
             <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -679,7 +675,7 @@ function EditorBatchWorkspace() {
 
         <div className="min-w-0 overflow-hidden rounded-lg border border-blush/55 bg-white/92 p-4 shadow-soft">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-base font-extrabold text-rosewood">정리 결과</h2>
+            <h2 className="text-base font-extrabold text-rosewood">검색 결과</h2>
             {response && response.items.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 <button
@@ -710,12 +706,12 @@ function EditorBatchWorkspace() {
             {isLoading ? (
               <div className="flex items-center gap-2 rounded-lg bg-blush-soft px-3 py-4 text-sm font-bold text-rosewood">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                결과를 찾는 중{progress ? ` ${progress.completed}/${progress.total}` : null}
+                검색 중{progress ? ` (${progress.completed}/${progress.total})` : null}
               </div>
             ) : null}
             {!response && !isLoading ? (
               <div className="rounded-lg border border-dashed border-blush/70 px-4 py-8 text-center text-sm font-medium text-neutral-500">
-                정리 결과가 여기에 표시됩니다.
+                제품 목록을 입력하고 검색해보세요.
               </div>
             ) : null}
             {response?.items.map((item, index) => (
@@ -761,21 +757,15 @@ function EditorBatchRow({
 
   return (
     <article className="rounded-lg border border-line bg-white p-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-[11px] font-bold text-neutral-500">원문 입력</div>
-          <div className="break-words text-sm font-bold text-ink">{item.raw_text}</div>
-        </div>
-      </div>
+      <div className="break-words text-sm font-bold text-ink">{item.raw_text}</div>
 
-      <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-        <Field label="브랜드명" value={brandKo} />
-        <Field label="영문 브랜드명" value={brandEn} />
-        <Field label="입력 제품 키워드" value={selectedProduct ? null : item.parsed.product_query} />
+      <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+        <Field label="브랜드" value={brandKo} />
+        <Field label="영문 브랜드" value={brandEn} />
         <Field label="제품명" value={selectedProductName} />
         <Field label="영문 제품명" value={selectedProductNameEn} />
-        <Field label="호수 번호" value={shadeCode} />
-        <Field label="호수명 / 컬러명" value={shadeName} />
+        <Field label="호수" value={shadeCode} />
+        <Field label="컬러" value={shadeName} />
       </dl>
 
       {selectedProduct ? (
