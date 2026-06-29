@@ -330,6 +330,14 @@ async def run_catalog_jobs(
     max_jobs: Annotated[int, Query(ge=1, le=100, description="처리할 catalog job 수")] = 20,
     limit: Annotated[int, Query(ge=1, le=480, description="검색어별 수집 개수")] = 48,
     kind: Annotated[str, Query(description="catalog job kind")] = "oliveyoung-search",
+    reset_stale_running_minutes: Annotated[
+        int,
+        Query(
+            ge=0,
+            le=1440,
+            description="N분보다 오래 running 상태인 catalog job을 실행 전 복구합니다. 0이면 비활성화.",
+        ),
+    ] = 0,
     token: Annotated[str | None, Query(description="GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN")] = None,
     service: SearchService = Depends(get_search_service),
 ) -> dict[str, object]:
@@ -338,6 +346,7 @@ async def run_catalog_jobs(
         max_jobs=max_jobs,
         limit_per_query=limit,
         kind=kind,
+        reset_stale_running_minutes=reset_stale_running_minutes,
     )
     return asdict(summary)
 

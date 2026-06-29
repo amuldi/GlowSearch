@@ -4,9 +4,11 @@ from app.cache.ttl import AsyncTTLCache
 from app.core.config import Settings, get_settings
 from app.data_collector.apify import ApifyOliveYoungCollector
 from app.data_collector.base import ProductCollector
+from app.data_collector.brand_shopify import BrandShopifyCollector
 from app.data_collector.browser_oliveyoung import BrowserOliveYoungCollector
 from app.data_collector.json_api import JsonApiProductCollector
 from app.data_collector.local_catalog import LocalVerifiedCatalogCollector
+from app.data_collector.musinsa import MusinsaBeautyCollector
 from app.data_collector.oliveyoung import OliveYoungCollector
 from app.data_collector.oliveyoung_api import OliveYoungPublicApiCollector
 from app.indexing.agents import (
@@ -47,7 +49,7 @@ def get_search_service() -> SearchService:
         else None
     )
     ingestion_agent = (
-        ProductIngestionAgent(index_store, detail_enricher=detail_enricher)
+        ProductIngestionAgent(index_store, normalizer=normalizer, detail_enricher=detail_enricher)
         if index_store
         else None
     )
@@ -86,6 +88,8 @@ def get_search_service() -> SearchService:
             "oliveyoung:browser": settings.browser_timeout_seconds,
             settings.managed_search_api_source: settings.managed_search_api_timeout_seconds,
             settings.musinsa_api_source: settings.musinsa_api_timeout_seconds,
+            "musinsa": settings.musinsa_direct_timeout_seconds,
+            "official": settings.brand_shopify_timeout_seconds,
             settings.oliveyoung_global_api_source: settings.oliveyoung_global_api_timeout_seconds,
             settings.official_brand_api_source: settings.official_brand_api_timeout_seconds,
             settings.global_discovery_api_source: settings.global_discovery_api_timeout_seconds,
@@ -146,6 +150,20 @@ def _build_collectors(settings: Settings) -> list[ProductCollector]:
                 name=settings.musinsa_api_source,
                 base_url=settings.musinsa_api_base_url,
                 timeout_seconds=settings.musinsa_api_timeout_seconds,
+            )
+        )
+    if settings.musinsa_direct_enabled:
+        collectors.append(
+            MusinsaBeautyCollector(
+                timeout_seconds=settings.musinsa_direct_timeout_seconds,
+                page_size=settings.musinsa_direct_page_size,
+            )
+        )
+    if settings.brand_shopify_enabled:
+        collectors.append(
+            BrandShopifyCollector(
+                settings.brand_registry_path,
+                timeout_seconds=settings.brand_shopify_timeout_seconds,
             )
         )
     if settings.oliveyoung_global_api_enabled and settings.oliveyoung_global_api_base_url:

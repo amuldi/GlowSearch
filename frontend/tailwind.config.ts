@@ -13,6 +13,13 @@ const config: Config = {
         "mint-soft": "#e8f6f0",
         rose: "#d76580",
         rosewood: "#9f3f55",
+        // 소스별 브랜드 컬러
+        "oy-green": "#00a862",
+        "oy-green-soft": "#e6f7f0",
+        "ms-black": "#161616",
+        "ms-soft": "#f2f2f2",
+        "official-gold": "#b07d3a",
+        "official-soft": "#fdf6ec",
       },
       boxShadow: {
         glow: "0 18px 60px rgba(74, 54, 63, 0.12)",

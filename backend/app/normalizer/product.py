@@ -1,8 +1,15 @@
 import re
 
-from app.models.product import ProductOffer, ProductSearchResult, ProductSourceRecord
+from app.models.product import PriceValue, ProductOffer, ProductSearchResult, ProductSourceRecord
 from app.normalizer.brand import BrandAlias, BrandMatch, BrandResolver
 from app.normalizer.text import clean_text, has_hangul, has_latin, normalize_image_url
+
+
+_SOURCE_BRAND_NOISE = {
+    "(NEW",
+    "NEW",
+    "뿌리는",
+}
 
 
 class ProductNormalizer:
@@ -103,7 +110,7 @@ class ProductNormalizer:
     def _brand_ko(self, record: ProductSourceRecord) -> str | None:
         source_brand = clean_text(record.source_brand_name)
         product_brand_match = self._brand_resolver.match_text(record.product_name_ko)
-        if source_brand and has_hangul(source_brand):
+        if source_brand and has_hangul(source_brand) and not _is_source_brand_noise(source_brand):
             if (
                 product_brand_match
                 and has_hangul(product_brand_match.matched_alias)
@@ -149,15 +156,20 @@ class ProductNormalizer:
             record.source_brand_name,
             record.source_brand_name_en,
         ]
-        aliases.extend(self._brand_resolver.aliases_for(brand_en))
-        return _dedupe_texts(aliases)
+        return _dedupe_alias_texts(
+            [
+                *_compact_korean_aliases(aliases),
+                *aliases,
+                *self._brand_resolver.aliases_for(brand_en),
+            ]
+        )
 
     def _offers(
         self,
         record: ProductSourceRecord,
         *,
-        display_price: int | None,
-        original_price: int | None,
+        display_price: PriceValue | None,
+        original_price: PriceValue | None,
     ) -> list[ProductOffer]:
         source_url = normalize_image_url(record.source_url, self._base_url)
         if not source_url:
@@ -184,7 +196,7 @@ class ProductNormalizer:
         brand_en: str | None,
         product_name_ko: str | None,
         product_name_en: str | None,
-        price: int | None,
+        price: PriceValue | None,
         image_url: str | None,
         rating: float | None,
         review_count: int | None,
@@ -193,7 +205,7 @@ class ProductNormalizer:
         source_product_id: str | None,
     ) -> int:
         score = 0
-        if product_name_ko:
+        if product_name_ko or product_name_en:
             score += 30
         if source:
             score += 20
@@ -218,7 +230,7 @@ class ProductNormalizer:
         *,
         brand_en: str | None,
         product_name_en: str | None,
-        price: int | None,
+        price: PriceValue | None,
         image_url: str | None,
     ) -> list[str]:
         missing: list[str] = []
@@ -271,15 +283,23 @@ def _display_product_name(
         previous = text
         text = _strip_leading_bracket_tags(text)
         text = _strip_leading_parenthetical_tags(text)
+        text = _strip_leading_retail_prefix(text)
+        text = _strip_leading_noise_before_brand(text, brand_aliases)
         text = _strip_leading_brand(text, brand_aliases)
+        text = _strip_leading_option_count(text)
         text = _strip_leading_delimiters(text)
+        text = _normalize_option_count_phrase(text)
         text = _strip_packaging_parentheses(text)
+        text = _strip_packaging_brackets(text)
         text = _strip_packaging_suffix(text)
         text = _strip_size_and_variant_suffix(text)
         text = _strip_known_variant_suffix(text, variants)
         text = clean_text(text) or ""
 
-    return text or clean_text(name)
+    text = _normalize_residual_grouping_punctuation(text)
+    text = _strip_flattened_packaging_suffix(text)
+    text = _strip_size_and_variant_suffix(text)
+    return clean_text(text) or clean_text(name)
 
 
 def _strip_leading_bracket_tags(text: str) -> str:
@@ -295,13 +315,41 @@ def _strip_leading_parenthetical_tags(text: str) -> str:
     return re.sub(r"^\s*[\(\（][^\)\）]+[\)\）]\s*", "", text)
 
 
+def _strip_leading_retail_prefix(text: str) -> str:
+    return re.sub(
+        r"^\s*(?:NEW\s*컬러|신규\s*컬러|올영\s*단독|OY\s*단독|신상|NEW)\s+",
+        "",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+
+
 def _strip_leading_brand(text: str, brand_aliases: list[str]) -> str:
     current = text
     for alias in sorted(brand_aliases, key=len, reverse=True):
         alias_text = clean_text(alias)
         if not alias_text:
             continue
-        pattern = rf"^\s*{re.escape(alias_text)}(?:\s*\|\s*|\s+|$)"
+        pattern = rf"^\s*{_brand_alias_pattern(alias_text)}(?:\s*\|\s*|\s+|$)"
+        current = re.sub(pattern, "", current, count=1, flags=re.IGNORECASE)
+        current = _strip_leading_delimiters(current)
+    return current
+
+
+def _strip_leading_noise_before_brand(text: str, brand_aliases: list[str]) -> str:
+    current = text
+    for alias in sorted(brand_aliases, key=len, reverse=True):
+        alias_text = clean_text(alias)
+        if not alias_text:
+            continue
+        pattern = rf"^\s*(?P<prefix>[^()\[\]{{}}]{{1,24}}?)\s+{_brand_alias_pattern(alias_text)}(?:\s*\|\s*|\s+|$)"
+        match = re.search(pattern, current, flags=re.IGNORECASE)
+        if not match:
+            continue
+        prefix = clean_text(match.group("prefix")) or ""
+        if not _is_leading_brand_noise(prefix):
+            continue
         current = re.sub(pattern, "", current, count=1, flags=re.IGNORECASE)
         current = _strip_leading_delimiters(current)
     return current
@@ -311,9 +359,55 @@ def _strip_leading_delimiters(text: str) -> str:
     return re.sub(r"^\s*[\|/·ㆍ:：,\-]+\s*", "", text)
 
 
+def _brand_alias_pattern(alias: str) -> str:
+    if has_hangul(alias) and " " not in alias:
+        return r"\s*".join(re.escape(char) for char in alias)
+    return re.escape(alias)
+
+
+def _strip_leading_option_count(text: str) -> str:
+    stripped = re.sub(r"^\s*\d+\s*종\s+", "", text)
+    return stripped if len(_key(stripped)) >= 4 else text
+
+
+def _normalize_option_count_phrase(text: str) -> str:
+    current = re.sub(r"\s+\d+\s*종\s+키트$", " 키트", text)
+    current = re.sub(r"\s+\d+\s*종\s+피부\s*고민별\s*골라담기$", "", current)
+    current = re.sub(r"\s+\d+\s*종\s+골라담기$", "", current)
+    return current
+
+
 def _strip_packaging_parentheses(text: str) -> str:
+    current = re.sub(
+        r"\s*[\(\（][^\)\）]*(?:기획|단품|더블|세트|증정|택\s*1|컬러|colors?|선택|\+|리필|본품|대용량|한정|/)[^\)\）]*[\)\）]",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    current = re.sub(
+        r"\s*[\(\（]\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML|ea|EA|매|개|개입)\s*(?:[*xX]\s*\d+\s*(?:ea|EA|매|개|개입)?)?\s*[\)\）]",
+        "",
+        current,
+        flags=re.IGNORECASE,
+    )
+    current = re.sub(
+        r"\s*[\(\（][^()\[\]{}]*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*[xX]\s*\d+[^()\[\]{}]*[\)\）]",
+        "",
+        current,
+        flags=re.IGNORECASE,
+    )
+    current = re.sub(
+        r"\s*[\(\（][^()\[\]{}]*(?:OY\s*단독|노워시|클렌징\s*밀크|애교살|섀도우|브로우펜슬|브로우마스카라|속눈썹\s*영양제|무향|라벤더향|첫단계\s*진정\s*앰플|컵팩|^\s*온\s*$|호\s*,|26AD|AD|NEW|립밤$)[^()\[\]{}]*[\)\）]\s*$",
+        "",
+        current,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r"\s*[\(\（]\s*온\s*[\)\）]\s*$", "", current)
+
+
+def _strip_packaging_brackets(text: str) -> str:
     return re.sub(
-        r"\s*[\(\（][^\)\）]*(?:기획|단품|더블|세트|증정|택\s*1|컬러|colors?|\+|리필|본품|대용량|한정|/)[^\)\）]*[\)\）]",
+        r"\s*[\[\【][^\]\】]*(?:기획|단품|한정|증정|리필|본품|\+|/)[^\]\】]*[\]\】](?:_?올영픽)?",
         "",
         text,
         flags=re.IGNORECASE,
@@ -323,10 +417,68 @@ def _strip_packaging_parentheses(text: str) -> str:
 def _strip_packaging_suffix(text: str) -> str:
     current = text
     suffix_patterns = [
-        r"\s+\d+\s*(?:colors?|컬러|종)(?:\s*(?:택\s*1|단품|기획|세트).*)?$",
-        r"\s+(?:단품|더블|기획|기획세트|단독기획|세트|택\s*1|본품|리필|증정기획)(?:[/\s].*)?$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s+\d+\s*(?:colors?|컬러)\s+SPF\s*\d+.*$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*(?:SPF\s*\d+\+?(?:\s*/\s*PA\+{1,4}|\s+PA\+{1,4})?|PA\+{1,4}).*$",
+        r"\s*SPF\s*\d+\+?\s*,?(?:\s*/\s*PA\+{1,4}|\s+PA\+{1,4}|\s*,\s*PA\+{1,4})?(?:\s+\S.*)?$",
+        r"\s*(?:SPF\s*\d+\+?(?:\s*/\s*PA\+{1,4}|\s+PA\+{1,4})?|PA\+{1,4})\s*$",
+        r"\s+\d+\s*매\s+\d+\s*종$",
+        r"\s+\d+\s*병\s+\d+\s*일분$",
+        r"\s+\d+\s*(?:colors?|컬러|종)(?:\s*(?:택\s*1|단품|기획|세트|본품\s*\+\s*리필|본품|리필).*)?\s*\*?$",
+        r"(?<=[가-힣A-Za-z])\d+\s*(?:colors?|컬러|종)$",
+        r"\s+\d+\s*(?:colors?|컬러)\s+한정(?:\s*기획)?$",
+        r"\s+\d+\s*\+\s*\d+\s*기획$",
+        r"\s+\d+\s*종\s*1택$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML|매|개)\s+\d+\s*\+\s*\d+\s*(?:교차\s*선택|기획|한정\s*기획|한정기획|단독\s*기획|단독기획).*$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML|매|개)\s+(?:대용량\s*)?(?:더블\s*기획|더블기획|기획\s*세트|기획세트|단독\s*기획|단독기획)(?:\s+.*)?$",
+        r"\s+본품\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*\+\s*리필\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*본품\s*\+\s*리필(?:\s+.*)?$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*\+\s*(?:브러쉬|브러시|퍼프|리필|본품|미니|샘플|증정).*$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*\+\s*[A-Za-z가-힣0-9\s]+$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*\+\s*[A-Za-z가-힣0-9-]+$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*(?:[xX]\s*)?\d+\s*입$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*[*xX]\s*\d+\s*(?:ea|EA|입)?$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*\*[A-Za-z가-힣0-9\s*]+$",
+        r"(?<=[가-힣A-Za-z])\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*[*xX]\s*\d+\s*(?:ea|EA|입)?$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*[xX]\s*\d+\s*$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*/\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*\+\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s+[A-Za-z가-힣0-9\s]+$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s+증량$",
+        r"\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*기획$",
+        r"\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)(?:\s*\+\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML))+$",
+        r"\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*\+\s*$",
+        r"\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*\+\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*(?:증량|대용량|증정)?$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML|매)\s+\d+\s*입$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s+\d+\s*개입\s*(?:한정|단독|기획|/)+.*$",
+        r"\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*\+\s*[A-Za-z가-힣0-9]+\s*증정기획$",
+        r"\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*\+\s*[A-Za-z가-힣0-9]+\s*증정\s*기획(?:_?올영(?:단독)?한정)?$",
+        r"\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)(?:\s*\+\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)?)?\s*(?:듀오\s*기획|듀오기획|한정\s*기획|한정기획)$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|매|개)\s+(?:리필\s*기획|리필기획|더블\s*기획|더블기획|기획)(?:\s+\d+\s*종)?$",
+        r"\s+(?:중\s*)?택\s*1.*$",
+        r"\s+(?:단품|더블|기획|기획팩|기획세트|단독기획|세트|본품|리필|리필기획|증정기획|더블기획|더블기획세트|한정기획|특별한정기획|듀오기획)(?:[/\s].*)?$",
+        r"(?<=[가-힣A-Za-z])기획(?:\s*\+\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)?)?$",
         r"\s+블랙/브라운\s*(?:단품|기획).*$",
         r"\s+기획/단품$",
+    ]
+    for pattern in suffix_patterns:
+        current = re.sub(pattern, "", current, flags=re.IGNORECASE)
+    return current
+
+
+def _normalize_residual_grouping_punctuation(text: str) -> str:
+    current = re.sub(r"\s*[\(\（]\s*([^()\[\]{}]+?)\s*[\)\）]\s*", r" \1 ", text)
+    current = re.sub(r"\s*[\[\【]\s*([^\[\]\(\){}]+?)\s*[\]\】]\s*", r" \1 ", current)
+    return clean_text(current) or text
+
+
+def _strip_flattened_packaging_suffix(text: str) -> str:
+    current = text
+    suffix_patterns = [
+        r"\s+\d+\s*colors?\s+SPF\s*\d+.*$",
+        r"\s+\d+\s*매\s+\d+\s*종(?:\s+.*)?$",
+        r"\s+\d+\s*종(?:\s+.*)?$",
+        r"\s+\d+\s*병\s+\d+\s*일분$",
+        r"\s+\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s*\+\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)\s+[A-Za-z가-힣0-9\s]+$",
+        r"\s+(?:단독기획|더블기획|기획)\s+.*$",
     ]
     for pattern in suffix_patterns:
         current = re.sub(pattern, "", current, flags=re.IGNORECASE)
@@ -339,6 +491,7 @@ def _strip_size_and_variant_suffix(text: str) -> str:
         r"\s+\d+(?:\.\d+)?\s*(?:g|ml|매|개)\s+\d+\s*(?:colors?|컬러|종)$",
         r"\s*\d+(?:\.\d+)?\s*(?:g|ml|매|개)\s+[A-Za-z가-힣]+/[A-Za-z가-힣]+$",
         r"\s+\d+(?:\.\d+)?\s*(?:g|ml|매|개)$",
+        r"(?<=[가-힣A-Za-z])\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)$",
     ]
     for pattern in suffix_patterns:
         current = re.sub(pattern, "", current, flags=re.IGNORECASE)
@@ -369,6 +522,22 @@ def _key(value: str | None) -> str:
     return re.sub(r"[\s\-_./&|#·ㆍ:：,\(\)\[\]]+", "", text).casefold()
 
 
+def _is_source_brand_noise(value: str | None) -> bool:
+    text = clean_text(value)
+    if not text:
+        return False
+    if text.casefold() in {item.casefold() for item in _SOURCE_BRAND_NOISE}:
+        return True
+    return bool(re.search(r"[\[\]【】]", text) or text.startswith("*"))
+
+
+def _is_leading_brand_noise(value: str | None) -> bool:
+    text = clean_text(value)
+    if not text:
+        return False
+    return bool(re.search(r"(?:^|\s)(?:NEW|뿌리는|바르는|올영\s*단독|단독|기획)(?:\s|$)", text, flags=re.IGNORECASE))
+
+
 def _dedupe_texts(values: list[str | None]) -> list[str]:
     deduped: list[str] = []
     seen: set[str] = set()
@@ -382,3 +551,30 @@ def _dedupe_texts(values: list[str | None]) -> list[str]:
         seen.add(key)
         deduped.append(text)
     return deduped
+
+
+def _dedupe_alias_texts(values: list[str | None]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = clean_text(value)
+        if not text:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(text)
+    return deduped
+
+
+def _compact_korean_aliases(values: list[str | None]) -> list[str]:
+    aliases: list[str] = []
+    for value in values:
+        text = clean_text(value)
+        if not text or not has_hangul(text):
+            continue
+        compact = re.sub(r"\s+", "", text)
+        if compact != text and len(_key(compact)) >= 4:
+            aliases.append(compact)
+    return aliases

@@ -20,6 +20,7 @@ from app.indexing.store import SQLiteProductIndexStore
 from app.ingestion.export import write_products_csv
 from app.ingestion.oliveyoung_pipeline import OliveYoungIngestionPipeline
 from app.normalizer.brand import BrandResolver
+from app.normalizer.product import ProductNormalizer
 
 
 def parse_args() -> argparse.Namespace:
@@ -94,12 +95,17 @@ async def main() -> int:
 
     store = SQLiteProductIndexStore(settings.product_index_path)
     brand_resolver = BrandResolver(settings.brand_registry_path)
+    normalizer = ProductNormalizer(brand_resolver, settings.oliveyoung_base_url)
     store.seed_brand_aliases(brand_resolver.index_aliases())
     queries = await _collect_queries(args, settings, store)
     if args.max_queries is not None and args.max_queries >= 0:
         queries = queries[: args.max_queries]
     detail_enricher = OliveYoungDetailEnrichmentAgent(settings) if args.enrich_details else None
-    ingestion_agent = ProductIngestionAgent(store, detail_enricher=detail_enricher)
+    ingestion_agent = ProductIngestionAgent(
+        store,
+        normalizer=normalizer,
+        detail_enricher=detail_enricher,
+    )
     pipeline = OliveYoungIngestionPipeline(
         collector=OliveYoungPublicApiCollector(settings),
         store=store,

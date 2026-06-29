@@ -3,7 +3,6 @@ from __future__ import annotations
 # ruff: noqa: E402
 
 import argparse
-import asyncio
 import json
 import sys
 from pathlib import Path
@@ -13,18 +12,18 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.core.config import Settings
-from app.ingestion.catalog_quality import build_catalog_quality_report
+from app.ingestion.export_quality import build_export_quality_report
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Audit verified catalog quality: required fields, display names, and enrichment backlog."
+        description="Audit exported product CSV normalization quality before catalog/index promotion."
     )
     parser.add_argument(
-        "--catalog-path",
+        "--export-path",
         type=Path,
-        default=None,
-        help="verified_products.json path. Defaults to Settings().verified_catalog_path.",
+        default=PROJECT_ROOT / "data" / "products_export.csv",
+        help="products_export.csv path.",
     )
     parser.add_argument(
         "--registry-path",
@@ -44,15 +43,9 @@ def parse_args() -> argparse.Namespace:
         help="Maximum number of issue rows to include. Use -1 for all issues.",
     )
     parser.add_argument(
-        "--max-targets",
-        type=int,
-        default=40,
-        help="Maximum number of product_name_en enrichment targets to include. Use -1 for all targets.",
-    )
-    parser.add_argument(
         "--fail-on-required",
         action="store_true",
-        help="Exit 1 when required catalog fields are missing.",
+        help="Exit 1 when required exported fields are missing after normalization.",
     )
     parser.add_argument(
         "--fail-on-dirty-display",
@@ -62,15 +55,14 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def main() -> int:
+def main() -> int:
     args = parse_args()
     settings = Settings()
-    report = await build_catalog_quality_report(
-        catalog_path=args.catalog_path or settings.verified_catalog_path,
+    report = build_export_quality_report(
+        export_path=args.export_path,
         registry_path=args.registry_path or settings.brand_registry_path,
         base_url=args.base_url,
         max_issues=None if args.max_issues < 0 else args.max_issues,
-        max_targets=None if args.max_targets < 0 else args.max_targets,
     )
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
 
@@ -82,4 +74,4 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(asyncio.run(main()))
+    raise SystemExit(main())

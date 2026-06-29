@@ -1,5 +1,6 @@
 import asyncio
 import time
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -2072,6 +2073,54 @@ async def test_search_service_runs_catalog_jobs_into_index(tmp_path) -> None:
     assert summary.completed_jobs == 1
     assert summary.stored_count == 1
     assert indexed[0].product_name_ko == "클리오 인덱스 보강 상품"
+    assert stats["completed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_search_service_resets_stale_catalog_jobs_before_run(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"CLIO","aliases":["클리오","CLIO"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.enqueue_catalog_jobs(["클리오", "최근 작업"], priority=10, max_attempts=2)
+    claimed = await store.claim_catalog_jobs(limit=2)
+    store._connection.execute(  # noqa: SLF001 - direct timestamp setup keeps this storage test focused.
+        "UPDATE catalog_jobs SET started_at = ? WHERE id = ?",
+        ((datetime.now(tz=UTC) - timedelta(hours=2)).isoformat(), claimed[0].id),
+    )
+    store._connection.execute(  # noqa: SLF001
+        "UPDATE catalog_jobs SET started_at = ? WHERE id = ?",
+        (datetime.now(tz=UTC).isoformat(), claimed[1].id),
+    )
+    store._connection.commit()  # noqa: SLF001
+    collector = CatalogJobCollector()
+    service = SearchService(
+        collectors=[collector],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        ingestion_agent=ProductIngestionAgent(store),
+        index_background_refresh_enabled=False,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    summary = await service.run_catalog_jobs(
+        max_jobs=1,
+        limit_per_query=10,
+        reset_stale_running_minutes=30,
+    )
+    stats = await service.catalog_job_stats()
+    await service.close()
+
+    assert summary.reset_stale_jobs == 1
+    assert collector.calls == ["클리오"]
+    assert summary.completed_jobs == 1
+    assert stats["running"] == 1
     assert stats["completed"] == 1
 
 

@@ -10,6 +10,7 @@ from app.core.config import Settings
 from app.ingestion.safety import is_bot_detection_response
 from app.indexing.store import ProductIndexStore
 from app.models.product import ProductSourceRecord
+from app.normalizer.product import ProductNormalizer
 from app.normalizer.text import clean_text
 from app.parser.oliveyoung_html import parse_detail_page
 
@@ -193,9 +194,11 @@ class ProductIngestionAgent:
     def __init__(
         self,
         store: ProductIndexStore,
+        normalizer: ProductNormalizer | None = None,
         detail_enricher: ProductDetailEnricher | None = None,
     ):
         self._store = store
+        self._normalizer = normalizer
         self._detail_enricher = detail_enricher
 
     async def ingest_search_results(
@@ -208,5 +211,41 @@ class ProductIngestionAgent:
             return
         if self._detail_enricher is not None:
             records = await self._detail_enricher.enrich(records)
+        if self._normalizer is not None:
+            records = [_normalized_source_record(self._normalizer, record) for record in records]
         for query in clean_queries:
             await self._store.upsert_search_results(query, records)
+
+
+def _normalized_source_record(
+    normalizer: ProductNormalizer,
+    record: ProductSourceRecord,
+) -> ProductSourceRecord:
+    result = normalizer.normalize(record)
+    return ProductSourceRecord(
+        canonical_product_id=result.canonical_product_id,
+        category=result.category,
+        source_brand_name=result.brand_ko,
+        source_brand_name_en=result.brand_en,
+        product_name_ko=result.product_name_ko,
+        product_name_en=result.product_name_en,
+        product_name_display_ko=result.product_name_display_ko,
+        product_name_display_en=result.product_name_display_en,
+        regular_price=result.price,
+        original_price=result.original_price,
+        sale_price=result.sale_price,
+        discount_rate=result.discount_rate,
+        rating=result.rating,
+        review_count=result.review_count,
+        currency=result.currency,
+        shade=result.shade,
+        image_url=result.image_url,
+        description=result.description,
+        options=result.options,
+        search_keywords=result.search_keywords,
+        sold_out=result.sold_out,
+        source=result.source,
+        source_url=result.source_url,
+        source_product_id=result.source_product_id,
+        updated_at=result.updated_at,
+    )

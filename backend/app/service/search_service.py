@@ -1188,6 +1188,7 @@ class SearchService:
         max_jobs: int,
         limit_per_query: int,
         kind: str | None = "oliveyoung-search",
+        reset_stale_running_minutes: int = 0,
     ) -> IngestionSummary:
         if self._product_index is None or self._ingestion_agent is None:
             return IngestionSummary(
@@ -1204,16 +1205,25 @@ class SearchService:
                 stored_count=0,
                 failures=["no non-browser Olive Young collector is configured"],
             )
+        reset_stale_jobs = 0
+        if reset_stale_running_minutes > 0:
+            reset_stale = getattr(self._product_index, "reset_stale_catalog_jobs", None)
+            if reset_stale is not None:
+                reset_stale_jobs = await reset_stale(
+                    older_than_minutes=reset_stale_running_minutes,
+                    kind=kind,
+                )
         pipeline = OliveYoungIngestionPipeline(
             collector=collector,
             store=self._product_index,
             ingestion_agent=self._ingestion_agent,
         )
-        return await pipeline.ingest_catalog_jobs(
+        summary = await pipeline.ingest_catalog_jobs(
             max_jobs=max(max_jobs, 1),
             limit_per_query=max(limit_per_query, 1),
             kind=kind,
         )
+        return replace(summary, reset_stale_jobs=reset_stale_jobs)
 
     def _catalog_ingestion_collector(self) -> ProductCollector | None:
         for name in ("oliveyoung:public-api", "oliveyoung"):
@@ -1386,7 +1396,11 @@ class SearchService:
 
     async def _run_catalog_jobs_safely(self, *, max_jobs: int, limit_per_query: int) -> None:
         try:
-            await self.run_catalog_jobs(max_jobs=max_jobs, limit_per_query=limit_per_query)
+            await self.run_catalog_jobs(
+                max_jobs=max_jobs,
+                limit_per_query=limit_per_query,
+                reset_stale_running_minutes=60,
+            )
         except Exception as exc:
             self._last_index_error = f"{type(exc).__name__}: {exc}"
             self._metrics.record_background_index_error(self._last_index_error)
@@ -1601,7 +1615,7 @@ class SearchService:
         if source_url_key:
             return f"{record.source}:{source_url_key}"
         brand_key = cls._key(record.source_brand_name)
-        name_key = cls._key(record.product_name_ko)
+        name_key = cls._key(record.product_name_ko or record.product_name_en)
         if brand_key and name_key:
             return f"{record.source}:product:{brand_key}:{name_key}"
         return f"{record.source}:{name_key}"
@@ -1611,7 +1625,7 @@ class SearchService:
         return [
             product
             for product in results
-            if product.product_name_ko
+            if (product.product_name_ko or product.product_name_en)
             and product.source
             and (product.source_url or product.source_product_id)
         ]
@@ -1642,7 +1656,7 @@ class SearchService:
         if canonical_key:
             return f"canonical:{canonical_key}"
         brand_key = cls._key(product.brand_en) or cls._key(product.brand_ko)
-        name_key = cls._key(product.product_name_ko)
+        name_key = cls._key(product.product_name_ko or product.product_name_en)
         if not brand_key or not name_key:
             return None
         return f"{brand_key}:{name_key}"
@@ -2160,10 +2174,10 @@ class SearchService:
     ) -> bool:
         brand = product.brand_en.casefold() if product.brand_en else ""
         brand_ko = product.brand_ko.casefold() if product.brand_ko else ""
-        name = product.product_name_ko.casefold() if product.product_name_ko else ""
+        name = cls._product_name_text(product).casefold()
         brand_key = cls._key(product.brand_en)
         brand_ko_key = cls._key(product.brand_ko)
-        name_key = cls._key(product.product_name_ko)
+        name_key = cls._key(cls._product_name_text(product))
         raw_key = cls._key(raw_needle)
         normalized_key = cls._key(normalized_needle)
         return bool(
@@ -2178,6 +2192,10 @@ class SearchService:
             or raw_needle in name
             or (raw_key and raw_key in name_key)
         )
+
+    @staticmethod
+    def _product_name_text(product: ProductSearchResult) -> str:
+        return product.product_name_ko or product.product_name_en or ""
 
     @staticmethod
     def _key(value: str | None) -> str:

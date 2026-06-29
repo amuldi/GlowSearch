@@ -1,5 +1,6 @@
 import asyncio
 import time
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -240,6 +241,8 @@ class VerifiedCatalogBackfillCollector:
                 source_brand_name="롬앤",
                 source_brand_name_en="rom&nd",
                 product_name_ko="롬앤 베러 댄 쉐입 쉐딩",
+                product_name_display_ko="베러 댄 쉐입 쉐딩",
+                product_name_display_en="Better Than Shape Shading",
                 regular_price=9900,
                 shade=None,
                 source="oliveyoung",
@@ -370,6 +373,65 @@ async def test_product_index_persists_extended_product_fields(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_product_index_preserves_decimal_source_prices(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "speedy skinny brow",
+        [
+            ProductSourceRecord(
+                source_brand_name="페리페라",
+                source_brand_name_en="Peripera",
+                product_name_ko="[6월 올영픽] 페리페라 스피디 스키니 브로우 8 Colors (단품/더블)",
+                product_name_en="[PERIPERA] Speedy Skinny Brow",
+                product_name_display_ko="스피디 스키니 브로우",
+                product_name_display_en="Speedy Skinny Brow",
+                regular_price=8.59,
+                currency="USD",
+                source="official",
+                source_url="https://clubclio.shop/products/peripera-speedy-skinny-brow",
+                source_product_id="4601270435977",
+            )
+        ],
+    )
+
+    records = await store.search("speedy skinny brow", 10)
+    all_records = await store.all_products()
+    await store.close()
+
+    assert records[0].regular_price == 8.59
+    assert all_records[0].regular_price == 8.59
+    assert records[0].currency == "USD"
+    assert records[0].product_name_display_ko == "스피디 스키니 브로우"
+    assert records[0].product_name_display_en == "Speedy Skinny Brow"
+    assert all_records[0].product_name_display_ko == "스피디 스키니 브로우"
+
+
+@pytest.mark.asyncio
+async def test_product_index_searches_product_display_names(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "peripera brow",
+        [
+            ProductSourceRecord(
+                source_brand_name="페리페라",
+                source_brand_name_en="peripera",
+                product_name_ko="[6월 올영픽] 페리페라 스피디 스키니 브로우 8 Colors (단품/더블)",
+                product_name_display_ko="스피디 스키니 브로우",
+                source="oliveyoung",
+                source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000000001",
+                source_product_id="A000000000001",
+            )
+        ],
+    )
+
+    records = await store.search("스피디 스키니 브로우", 10)
+    await store.close()
+
+    assert records[0].product_name_display_ko == "스피디 스키니 브로우"
+    assert records[0].source_product_id == "A000000000001"
+
+
+@pytest.mark.asyncio
 async def test_search_service_backfills_verified_catalog_into_index(tmp_path) -> None:
     registry_path = tmp_path / "brand_registry.json"
     registry_path.write_text('{"entries":[]}', encoding="utf-8")
@@ -392,6 +454,8 @@ async def test_search_service_backfills_verified_catalog_into_index(tmp_path) ->
     assert count == 1
     assert [record.source_product_id for record in records] == ["A000000135220"]
     assert records[0].search_keywords == ["그레이쿨", "베러 댄 쉐입 쉐딩"]
+    assert records[0].product_name_display_ko == "베러 댄 쉐입 쉐딩"
+    assert records[0].product_name_display_en == "Better Than Shape Shading"
 
 
 @pytest.mark.asyncio
@@ -481,6 +545,35 @@ async def test_product_index_catalog_jobs_are_claimed_and_completed(tmp_path) ->
 
 
 @pytest.mark.asyncio
+async def test_product_index_resets_stale_running_catalog_jobs(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.enqueue_catalog_jobs(["오래된 작업", "최근 작업"], priority=20, max_attempts=2)
+    claimed = await store.claim_catalog_jobs(limit=2)
+    old_started_at = (datetime.now(tz=UTC) - timedelta(hours=2)).isoformat()
+    recent_started_at = datetime.now(tz=UTC).isoformat()
+    store._connection.execute(  # noqa: SLF001 - direct timestamp setup keeps this storage test focused.
+        "UPDATE catalog_jobs SET started_at = ? WHERE id = ?",
+        (old_started_at, claimed[0].id),
+    )
+    store._connection.execute(  # noqa: SLF001
+        "UPDATE catalog_jobs SET started_at = ? WHERE id = ?",
+        (recent_started_at, claimed[1].id),
+    )
+    store._connection.commit()  # noqa: SLF001
+
+    reset_count = await store.reset_stale_catalog_jobs(older_than_minutes=30)
+    stats = await store.catalog_job_stats()
+    reclaimed = await store.claim_catalog_jobs(limit=1)
+    await store.close()
+
+    assert reset_count == 1
+    assert stats["pending"] == 1
+    assert stats["running"] == 1
+    assert reclaimed[0].query == "오래된 작업"
+    assert reclaimed[0].attempt_count == 2
+
+
+@pytest.mark.asyncio
 async def test_ingestion_pipeline_runs_catalog_jobs(tmp_path) -> None:
     store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
     await store.enqueue_catalog_jobs(["틴트"], priority=10)
@@ -500,6 +593,40 @@ async def test_ingestion_pipeline_runs_catalog_jobs(tmp_path) -> None:
     assert summary.failed_jobs == 0
     assert records[0].product_name_ko == "뮤드 틴트 상품"
     assert stats["completed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_product_ingestion_agent_normalizes_records_before_indexing(tmp_path) -> None:
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        '{"entries":[{"official_en":"BEYOND","aliases":["비욘드"],"sources":[]}]}',
+        encoding="utf-8",
+    )
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    normalizer = ProductNormalizer(
+        BrandResolver(registry_path),
+        base_url="https://www.oliveyoung.co.kr",
+    )
+    agent = ProductIngestionAgent(store, normalizer=normalizer)
+
+    await agent.ingest_search_results(
+        ["수분"],
+        [
+            ProductSourceRecord(
+                source_brand_name="비욘드",
+                product_name_ko="[NEW] 비욘드 엔젤 아쿠아 이온 히알루 10% 수분 로션 200ml",
+                source="oliveyoung",
+                source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000257196",
+                source_product_id="A000000257196",
+            )
+        ],
+    )
+    records = await store.search("비욘드 수분", 5)
+    await store.close()
+    normalizer.close()
+
+    assert records[0].source_brand_name == "비욘드"
+    assert records[0].source_brand_name_en == "BEYOND"
 
 
 @pytest.mark.asyncio

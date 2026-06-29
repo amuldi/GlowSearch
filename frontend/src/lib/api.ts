@@ -1,10 +1,7 @@
 import type {
-  DiagnosticsResponse,
   EditorBatchItem,
   EditorBatchProgress,
   EditorBatchResponse,
-  EditorConfirmRequest,
-  EditorConfirmResponse,
   SearchParams,
   SearchResponse,
   SuggestionResponse,
@@ -24,20 +21,10 @@ export async function searchProducts(
 ): Promise<SearchResponse> {
   const url = new URL("/search", API_BASE_URL);
   url.searchParams.set("q", params.query);
-
   if (params.limit) url.searchParams.set("limit", String(params.limit));
 
-  const response = await fetch(url, {
-    method: "GET",
-    signal,
-    headers: {
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`검색 요청 실패: ${response.status}`);
-  }
+  const response = await fetch(url, { method: "GET", signal, headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error(`검색 요청 실패: ${response.status}`);
   return response.json() as Promise<SearchResponse>;
 }
 
@@ -49,34 +36,9 @@ export async function fetchSearchSuggestions(
   url.searchParams.set("q", query);
   url.searchParams.set("limit", "10");
 
-  const response = await fetch(url, {
-    method: "GET",
-    signal,
-    headers: {
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`추천 검색어 요청 실패: ${response.status}`);
-  }
+  const response = await fetch(url, { method: "GET", signal, headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error(`추천 검색어 요청 실패: ${response.status}`);
   return response.json() as Promise<SuggestionResponse>;
-}
-
-export async function fetchDiagnostics(signal?: AbortSignal): Promise<DiagnosticsResponse> {
-  const url = new URL("/diagnostics", API_BASE_URL);
-  const response = await fetch(url, {
-    method: "GET",
-    signal,
-    headers: {
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`운영 상태 요청 실패: ${response.status}`);
-  }
-  return response.json() as Promise<DiagnosticsResponse>;
 }
 
 export async function organizeEditorBatch(
@@ -92,23 +54,15 @@ export async function organizeEditorBatch(
       const response = await fetch(url, {
         method: "POST",
         signal,
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
         body,
       });
-
-      if (response.ok) {
-        return response.json() as Promise<EditorBatchResponse>;
-      }
+      if (response.ok) return response.json() as Promise<EditorBatchResponse>;
       if (!isRetriableEditorBatchStatus(response.status) || attempt >= EDITOR_BATCH_RETRY_DELAYS_MS.length) {
         throw new Error(`편집자 정리 요청 실패: ${response.status}`);
       }
     } catch (error) {
-      if (signal?.aborted || attempt >= EDITOR_BATCH_RETRY_DELAYS_MS.length) {
-        throw error;
-      }
+      if (signal?.aborted || attempt >= EDITOR_BATCH_RETRY_DELAYS_MS.length) throw error;
     }
     await delay(EDITOR_BATCH_RETRY_DELAYS_MS[attempt]);
   }
@@ -125,13 +79,11 @@ export async function organizeEditorBatchByLines(
 ): Promise<EditorBatchResponse> {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const total = lines.length;
+  if (!total) return { count: 0, items: [] };
+
   const items: Array<EditorBatchItem | undefined> = new Array(total);
   let completed = 0;
   let nextIndex = 0;
-
-  if (!total) {
-    return { count: 0, items: [] };
-  }
 
   const publish = () => {
     options.onProgress?.({
@@ -146,29 +98,24 @@ export async function organizeEditorBatchByLines(
 
   const worker = async () => {
     while (nextIndex < total) {
-      const index = nextIndex;
-      nextIndex += 1;
+      const index = nextIndex++;
       const line = lines[index];
       try {
         const response = await organizeEditorBatch(line, options.signal, options.limit ?? 5);
         items[index] = response.items[0] ?? fallbackEditorBatchItem(line);
       } catch (error) {
-        if (options.signal?.aborted) {
-          throw error;
-        }
+        if (options.signal?.aborted) throw error;
         items[index] = fallbackEditorBatchItem(line);
       } finally {
-        completed += 1;
+        completed++;
         publish();
       }
     }
   };
 
-  const workers = Array.from(
-    { length: Math.min(EDITOR_BATCH_LINE_CONCURRENCY, total) },
-    () => worker(),
+  await Promise.all(
+    Array.from({ length: Math.min(EDITOR_BATCH_LINE_CONCURRENCY, total) }, () => worker()),
   );
-  await Promise.all(workers);
 
   const response = {
     count: total,
@@ -178,29 +125,8 @@ export async function organizeEditorBatchByLines(
   return response;
 }
 
-export async function confirmEditorCandidate(
-  payload: EditorConfirmRequest,
-  signal?: AbortSignal,
-): Promise<EditorConfirmResponse> {
-  const url = new URL("/editor/confirm", API_BASE_URL);
-  const response = await fetch(url, {
-    method: "POST",
-    signal,
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    throw new Error(`편집자 확정 저장 실패: ${response.status}`);
-  }
-  return response.json() as Promise<EditorConfirmResponse>;
-}
-
 function isRetriableEditorBatchStatus(status: number) {
-  return status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+  return [408, 429, 500, 502, 503, 504].includes(status);
 }
 
 function delay(ms: number) {
@@ -209,10 +135,7 @@ function delay(ms: number) {
 
 function fallbackEditorBatchItem(rawText: string): EditorBatchItem {
   const shade = parseFallbackShade(rawText);
-  const productQuery = rawText
-    .replace(shade.token ?? "", "")
-    .replace(/\s+/g, " ")
-    .trim() || rawText;
+  const productQuery = rawText.replace(shade.token ?? "", "").replace(/\s+/g, " ").trim() || rawText;
   return {
     raw_text: rawText,
     parsed: {
@@ -234,23 +157,11 @@ function parseFallbackShade(rawText: string) {
   const hashMatch = rawText.match(/#([0-9A-Za-z가-힣._-]+)/);
   if (hashMatch) {
     const value = hashMatch[1];
-    return {
-      token: hashMatch[0],
-      value,
-      code: /[0-9]/.test(value) ? value : null,
-      name: /[0-9]/.test(value) ? null : value,
-    };
+    return { token: hashMatch[0], value, code: /[0-9]/.test(value) ? value : null, name: /[0-9]/.test(value) ? null : value };
   }
-
   const numberMatch = rawText.match(/([0-9A-Za-z._-]+)\s*호/);
   if (numberMatch) {
-    return {
-      token: numberMatch[0],
-      value: numberMatch[0],
-      code: numberMatch[1],
-      name: null,
-    };
+    return { token: numberMatch[0], value: numberMatch[0], code: numberMatch[1], name: null };
   }
-
   return { token: null, value: null, code: null, name: null };
 }

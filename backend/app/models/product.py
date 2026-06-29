@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field
 
+PriceValue = int | float
+
 
 class ProductSourceRecord(BaseModel):
     canonical_product_id: str | None = None
@@ -10,9 +12,9 @@ class ProductSourceRecord(BaseModel):
     product_name_en: str | None = None
     product_name_display_ko: str | None = None
     product_name_display_en: str | None = None
-    regular_price: int | None = None
-    original_price: int | None = None
-    sale_price: int | None = None
+    regular_price: PriceValue | None = None
+    original_price: PriceValue | None = None
+    sale_price: PriceValue | None = None
     discount_rate: int | None = None
     rating: float | None = None
     review_count: int | None = None
@@ -35,9 +37,9 @@ class ProductOffer(BaseModel):
     source_priority: int | None = Field(default=None)
     source_url: str
     source_product_id: str | None = Field(default=None)
-    price: int | None = Field(default=None)
-    original_price: int | None = Field(default=None)
-    sale_price: int | None = Field(default=None)
+    price: PriceValue | None = Field(default=None)
+    original_price: PriceValue | None = Field(default=None)
+    sale_price: PriceValue | None = Field(default=None)
     currency: str | None = Field(default="KRW")
     image_url: str | None = Field(default=None)
     sold_out: bool | None = Field(default=None)
@@ -53,9 +55,9 @@ class ProductSearchResult(BaseModel):
     product_name_display_ko: str | None = Field(default=None)
     product_name_display_en: str | None = Field(default=None)
     category: str | None = Field(default=None)
-    price: int | None = Field(default=None)
-    original_price: int | None = Field(default=None)
-    sale_price: int | None = Field(default=None)
+    price: PriceValue | None = Field(default=None)
+    original_price: PriceValue | None = Field(default=None)
+    sale_price: PriceValue | None = Field(default=None)
     discount_rate: int | None = Field(default=None)
     rating: float | None = Field(default=None)
     review_count: int | None = Field(default=None)

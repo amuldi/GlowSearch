@@ -5,7 +5,7 @@ import json
 import re
 import sqlite3
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
@@ -69,6 +69,13 @@ class ProductIndexStore(Protocol):
         product_count: int = 0,
         error: str | None = None,
     ) -> None: ...
+
+    async def reset_stale_catalog_jobs(
+        self,
+        *,
+        older_than_minutes: int,
+        kind: str | None = None,
+    ) -> int: ...
 
     async def catalog_job_stats(self) -> dict[str, int | str | None]: ...
 
@@ -359,6 +366,45 @@ class SQLiteProductIndexStore:
             )
             self._connection.commit()
 
+    async def reset_stale_catalog_jobs(
+        self,
+        *,
+        older_than_minutes: int,
+        kind: str | None = None,
+    ) -> int:
+        cutoff = (
+            datetime.now(tz=UTC) - timedelta(minutes=max(older_than_minutes, 1))
+        ).isoformat()
+        clean_kind = _clean_job_kind(kind) if kind else None
+        now = datetime.now(tz=UTC).isoformat()
+        error = f"stale running job reset after {max(older_than_minutes, 1)} minutes"
+        async with self._lock:
+            params: tuple[object, ...]
+            kind_clause = ""
+            if clean_kind:
+                kind_clause = "AND kind = ?"
+                params = (error, now, cutoff, clean_kind)
+            else:
+                params = (error, now, cutoff)
+            cursor = self._connection.execute(
+                f"""
+                UPDATE catalog_jobs
+                SET status = CASE
+                        WHEN attempt_count < max_attempts THEN 'pending'
+                        ELSE 'failed'
+                    END,
+                    last_error = ?,
+                    updated_at = ?
+                WHERE status = 'running'
+                  AND started_at IS NOT NULL
+                  AND started_at < ?
+                  {kind_clause}
+                """,
+                params,
+            )
+            self._connection.commit()
+            return int(cursor.rowcount or 0)
+
     async def catalog_job_stats(self) -> dict[str, int | str | None]:
         async with self._lock:
             rows = self._connection.execute(
@@ -574,9 +620,11 @@ class SQLiteProductIndexStore:
                 source_brand_name_en TEXT,
                 product_name_ko TEXT,
                 product_name_en TEXT,
-                regular_price INTEGER,
-                original_price INTEGER,
-                sale_price INTEGER,
+                product_name_display_ko TEXT,
+                product_name_display_en TEXT,
+                regular_price REAL,
+                original_price REAL,
+                sale_price REAL,
                 discount_rate INTEGER,
                 rating REAL,
                 review_count INTEGER,
@@ -603,6 +651,8 @@ class SQLiteProductIndexStore:
                 "category": "TEXT",
                 "source_brand_name_en": "TEXT",
                 "product_name_en": "TEXT",
+                "product_name_display_ko": "TEXT",
+                "product_name_display_en": "TEXT",
                 "rating": "REAL",
                 "review_count": "INTEGER",
                 "description": "TEXT",
@@ -785,6 +835,8 @@ class SQLiteProductIndexStore:
                 source_brand_name_en,
                 product_name_ko,
                 product_name_en,
+                product_name_display_ko,
+                product_name_display_en,
                 regular_price,
                 original_price,
                 sale_price,
@@ -805,7 +857,7 @@ class SQLiteProductIndexStore:
                 last_refreshed_at,
                 source_updated_at
             )
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(record_key) DO UPDATE SET
                 canonical_product_id = COALESCE(excluded.canonical_product_id, products.canonical_product_id),
                 source = excluded.source,
@@ -815,6 +867,8 @@ class SQLiteProductIndexStore:
                 source_brand_name_en = COALESCE(excluded.source_brand_name_en, products.source_brand_name_en),
                 product_name_ko = COALESCE(excluded.product_name_ko, products.product_name_ko),
                 product_name_en = COALESCE(excluded.product_name_en, products.product_name_en),
+                product_name_display_ko = COALESCE(excluded.product_name_display_ko, products.product_name_display_ko),
+                product_name_display_en = COALESCE(excluded.product_name_display_en, products.product_name_display_en),
                 regular_price = COALESCE(excluded.regular_price, products.regular_price),
                 original_price = COALESCE(excluded.original_price, products.original_price),
                 sale_price = excluded.sale_price,
@@ -844,6 +898,8 @@ class SQLiteProductIndexStore:
                 record.source_brand_name_en,
                 record.product_name_ko,
                 record.product_name_en,
+                record.product_name_display_ko,
+                record.product_name_display_en,
                 record.regular_price,
                 record.original_price,
                 record.sale_price,
@@ -904,7 +960,12 @@ class SQLiteProductIndexStore:
                     ),
                     " ".join(
                         value
-                        for value in [record.product_name_ko, record.product_name_en]
+                        for value in [
+                            record.product_name_ko,
+                            record.product_name_en,
+                            record.product_name_display_ko,
+                            record.product_name_display_en,
+                        ]
                         if value
                     ),
                     record.category,
@@ -1092,6 +1153,8 @@ def _row_to_record(row: sqlite3.Row) -> ProductSourceRecord:
         source_brand_name_en=row["source_brand_name_en"],
         product_name_ko=row["product_name_ko"],
         product_name_en=row["product_name_en"],
+        product_name_display_ko=row["product_name_display_ko"],
+        product_name_display_en=row["product_name_display_en"],
         regular_price=row["regular_price"],
         original_price=row["original_price"],
         sale_price=row["sale_price"],
@@ -1137,6 +1200,8 @@ def _search_text(record: ProductSourceRecord) -> str:
                 record.canonical_product_id,
                 record.product_name_ko,
                 record.product_name_en,
+                record.product_name_display_ko,
+                record.product_name_display_en,
                 record.category,
                 record.description,
                 record.shade,
@@ -1155,6 +1220,8 @@ def _search_terms(record: ProductSourceRecord) -> str:
         record.source_brand_name_en,
         record.product_name_ko,
         record.product_name_en,
+        record.product_name_display_ko,
+        record.product_name_display_en,
         record.category,
         record.description,
         record.shade,

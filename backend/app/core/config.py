@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     musinsa_api_base_url: str | None = None
     musinsa_api_source: str = "musinsa"
     musinsa_api_timeout_seconds: float = 3.0
+    musinsa_direct_enabled: bool = False
+    musinsa_direct_timeout_seconds: float = 6.0
+    musinsa_direct_page_size: int = 24
+    brand_shopify_enabled: bool = False
+    brand_shopify_timeout_seconds: float = 6.0
     oliveyoung_global_api_enabled: bool = False
     oliveyoung_global_api_base_url: str | None = None
     oliveyoung_global_api_source: str = "oliveyoung-global"

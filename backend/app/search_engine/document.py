@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from app.models.product import PriceValue
+
 
 class SearchDocument(BaseModel):
     id: str
@@ -19,7 +21,7 @@ class SearchDocument(BaseModel):
     review_count: int | None = None
     sales_count: int | None = None
     image_url: str | None = None
-    price: int | None = None
+    price: PriceValue | None = None
     source: str
     source_url: str | None = None
     source_product_id: str | None = None

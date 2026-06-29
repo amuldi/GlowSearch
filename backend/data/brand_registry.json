@@ -61,9 +61,424 @@
       "sources": ["https://www.dr-g.co.kr/"]
     },
     {
+      "official_en": "BEYOND",
+      "aliases": ["비욘드", "BEYOND", "Beyond"],
+      "sources": ["https://www.beyond.co.kr/"]
+    },
+    {
+      "official_en": "Benton",
+      "aliases": ["벤튼", "Benton", "BENTON"],
+      "sources": ["https://bentoncosmetics.com/"]
+    },
+    {
       "official_en": "AESTURA",
       "aliases": ["에스트라", "AESTURA"],
       "sources": ["https://www.aestura.com/"]
+    },
+    {
+      "official_en": "S.NATURE",
+      "aliases": ["에스네이처", "S.NATURE", "SNATURE", "S Nature"],
+      "sources": ["https://snature.co.kr/"]
+    },
+    {
+      "official_en": "medicube",
+      "aliases": ["메디큐브", "medicube", "Medicube", "MEDICUBE"],
+      "sources": ["https://medicube.us/"]
+    },
+    {
+      "official_en": "COSNORI",
+      "aliases": ["코스노리", "COSNORI", "Cosnori"],
+      "sources": ["https://cosnori.com/"]
+    },
+    {
+      "official_en": "OBgE",
+      "aliases": ["오브제", "OBgE", "OBGE", "obge"],
+      "sources": ["https://www.obge.co.kr/"]
+    },
+    {
+      "official_en": "URIAGE",
+      "aliases": ["유리아쥬", "URIAGE", "Uriage"],
+      "sources": ["https://uriage.com/"]
+    },
+    {
+      "official_en": "ZEROID",
+      "aliases": ["제로이드", "ZEROID", "Zeroid"],
+      "sources": ["https://www.zeroid.co.kr/"]
+    },
+    {
+      "official_en": "Clinique",
+      "aliases": ["크리니크", "Clinique", "CLINIQUE"],
+      "sources": ["https://www.clinique.com/"]
+    },
+    {
+      "official_en": "Burt's Bees",
+      "aliases": ["버츠비", "Burt's Bees", "BURT'S BEES", "Burts Bees"],
+      "sources": ["https://www.burtsbees.com/"]
+    },
+    {
+      "official_en": "belif",
+      "aliases": ["빌리프", "belif", "Belif"],
+      "sources": ["https://www.belifusa.com/"]
+    },
+    {
+      "official_en": "Centellian24",
+      "aliases": ["센텔리안24", "Centellian24", "CENTELLIAN24"],
+      "sources": ["https://www.centellian24.com/"]
+    },
+    {
+      "official_en": "REJURAN",
+      "aliases": ["리쥬란", "REJURAN", "Rejuran"],
+      "sources": ["https://www.rejuran.com/"]
+    },
+    {
+      "official_en": "DEWYTREE",
+      "aliases": ["듀이트리", "DEWYTREE", "Dewytree"],
+      "sources": ["https://dewytree.com/"]
+    },
+    {
+      "official_en": "Neutrogena",
+      "aliases": ["뉴트로지나", "Neutrogena", "NEUTROGENA"],
+      "sources": ["https://www.neutrogena.com/"]
+    },
+    {
+      "official_en": "The Body Shop",
+      "aliases": ["더바디샵", "The Body Shop", "THE BODY SHOP"],
+      "sources": ["https://www.thebodyshop.com/"]
+    },
+    {
+      "official_en": "Mentholatum",
+      "aliases": ["멘소래담", "Mentholatum", "MENTHOLATUM"],
+      "sources": ["https://www.mentholatum.com/"]
+    },
+    {
+      "official_en": "The Ordinary",
+      "aliases": ["디오디너리", "The Ordinary", "THE ORDINARY"],
+      "sources": ["https://theordinary.com/"]
+    },
+    {
+      "official_en": "ANESSA",
+      "aliases": ["아넷사", "ANESSA", "Anessa"],
+      "sources": ["https://www.anessa.shiseido.co.jp/"]
+    },
+    {
+      "official_en": "Bifesta",
+      "aliases": ["비페스타", "Bifesta", "BIFESTA"],
+      "sources": ["https://www.bifesta.jp/"]
+    },
+    {
+      "official_en": "Carmex",
+      "aliases": ["카멕스", "Carmex", "CARMEX"],
+      "sources": ["https://www.mycarmex.com/"]
+    },
+    {
+      "official_en": "SIMIHAZE BEAUTY",
+      "aliases": ["시미헤이즈뷰티", "SIMIHAZE BEAUTY", "SIMIHAZE"],
+      "sources": ["https://simihazebeauty.com/"]
+    },
+    {
+      "official_en": "FRESHIAN",
+      "aliases": ["프레시안", "FRESHIAN", "Freshian"],
+      "sources": ["https://freshian.com/"]
+    },
+    {
+      "official_en": "WELLAGE",
+      "aliases": ["웰라쥬", "WELLAGE", "Wellage"],
+      "sources": ["https://www.wellage.co.kr/"]
+    },
+    {
+      "official_en": "HANYUL",
+      "aliases": ["한율", "HANYUL", "Hanyul"],
+      "sources": ["https://www.hanyul.com/"]
+    },
+    {
+      "official_en": "primera",
+      "aliases": ["프리메라", "primera", "Primera"],
+      "sources": ["https://www.primera.com/"]
+    },
+    {
+      "official_en": "P.CALM",
+      "aliases": ["피캄", "P.CALM", "PCALM", "p.calm"],
+      "sources": ["https://pcalm.co.kr/"]
+    },
+    {
+      "official_en": "NEOGEN",
+      "aliases": ["네오젠", "NEOGEN", "Neogen"],
+      "sources": ["https://www.neogenlab.us/"]
+    },
+    {
+      "official_en": "Milk Baobab",
+      "aliases": ["밀크바오밥", "Milk Baobab", "MILK BAOBAB"],
+      "sources": ["https://milkbaobab.com/"]
+    },
+    {
+      "official_en": "TONYMOLY",
+      "aliases": ["토니모리", "TONYMOLY", "TonyMoly"],
+      "sources": ["https://tonymoly.us/"]
+    },
+    {
+      "official_en": "Blistex",
+      "aliases": ["블리스텍스", "Blistex", "BLISTEX"],
+      "sources": ["https://www.blistex.com/"]
+    },
+    {
+      "official_en": "NARKA",
+      "aliases": ["나르카", "NARKA", "Narka"],
+      "sources": ["https://narka.co.kr/"]
+    },
+    {
+      "official_en": "su:m37°",
+      "aliases": ["숨37", "숨37도", "su:m37°", "sum37"],
+      "sources": ["https://www.sum37.com/"]
+    },
+    {
+      "official_en": "UIQ",
+      "aliases": ["유이크", "UIQ", "uiq"],
+      "sources": ["https://uiq.co.kr/"]
+    },
+    {
+      "official_en": "IOPE",
+      "aliases": ["아이오페", "IOPE", "Iope"],
+      "sources": ["https://www.iope.com/"]
+    },
+    {
+      "official_en": "GRAFEN",
+      "aliases": ["그라펜", "GRAFEN", "Grafen"],
+      "sources": ["https://grafen.co.kr/"]
+    },
+    {
+      "official_en": "Dr. Different",
+      "aliases": ["닥터디퍼런트", "Dr. Different", "DR.DIFFERENT"],
+      "sources": ["https://drdifferent.com/"]
+    },
+    {
+      "official_en": "Rovectin",
+      "aliases": ["로벡틴", "Rovectin", "ROVECTIN"],
+      "sources": ["https://rovectin.com/"]
+    },
+    {
+      "official_en": "SUNGBOON EDITOR",
+      "aliases": ["성분에디터", "SUNGBOON EDITOR", "Sungboon Editor"],
+      "sources": ["https://sungbooneditor.com/"]
+    },
+    {
+      "official_en": "Easydew",
+      "aliases": ["이지듀", "Easydew", "EASYDEW"],
+      "sources": ["https://www.easydew.co.kr/"]
+    },
+    {
+      "official_en": "HANSKIN",
+      "aliases": ["한스킨", "HANSKIN", "Hanskin"],
+      "sources": ["https://www.hanskin.com/"]
+    },
+    {
+      "official_en": "Biodance",
+      "aliases": ["바이오던스", "Biodance", "BIODANCE"],
+      "sources": ["https://biodance.com/"]
+    },
+    {
+      "official_en": "Dermatory",
+      "aliases": ["더마토리", "Dermatory", "DERMATORY"],
+      "sources": ["https://www.dermatory.com/"]
+    },
+    {
+      "official_en": "KATE",
+      "aliases": ["케이트", "KATE"],
+      "sources": ["https://www.nomorerules.net/"]
+    },
+    {
+      "official_en": "ilso",
+      "aliases": ["일소", "ilso", "ILSO"],
+      "sources": ["https://ilso.co.kr/"]
+    },
+    {
+      "official_en": "Hada Labo",
+      "aliases": ["하다라보", "Hada Labo", "HADALABO"],
+      "sources": ["https://hadalabo.com/"]
+    },
+    {
+      "official_en": "Johnson's",
+      "aliases": ["존슨즈", "Johnson's", "Johnsons", "JOHNSON'S"],
+      "sources": ["https://www.johnsonsbaby.com/"]
+    },
+    {
+      "official_en": "MdoC",
+      "aliases": ["엠도씨", "MdoC", "MDOC"],
+      "sources": ["https://mdoc.co.kr/"]
+    },
+    {
+      "official_en": "THE FACE SHOP",
+      "aliases": ["더페이스샵", "THE FACE SHOP", "The Face Shop"],
+      "sources": ["https://www.thefaceshop.com/"]
+    },
+    {
+      "official_en": "Kamill",
+      "aliases": ["카밀", "Kamill", "KAMILL"],
+      "sources": ["https://www.kamill.com/"]
+    },
+    {
+      "official_en": "L'OCCITANE",
+      "aliases": ["록시땅", "L'OCCITANE", "L'Occitane", "LOCCITANE"],
+      "sources": ["https://www.loccitane.com/"]
+    },
+    {
+      "official_en": "LAGOM",
+      "aliases": ["라곰", "LAGOM", "Lagom"],
+      "sources": ["https://lagomcosmetics.com/"]
+    },
+    {
+      "official_en": "LAB SERIES",
+      "aliases": ["랩시리즈", "LAB SERIES", "Lab Series"],
+      "sources": ["https://www.labseries.com/"]
+    },
+    {
+      "official_en": "BIOTHERM",
+      "aliases": ["비오템", "BIOTHERM", "Biotherm"],
+      "sources": ["https://www.biotherm.com/"]
+    },
+    {
+      "official_en": "Paula's Choice",
+      "aliases": ["폴라초이스", "Paula's Choice", "Paulas Choice"],
+      "sources": ["https://www.paulaschoice.com/"]
+    },
+    {
+      "official_en": "MEDIPEEL",
+      "aliases": ["메디필", "MEDIPEEL", "Medi-Peel", "Medi Peel"],
+      "sources": ["https://medipeel.com/"]
+    },
+    {
+      "official_en": "TOOQ",
+      "aliases": ["투크", "TOOQ", "tooq"],
+      "sources": ["https://tooq.co.kr/"]
+    },
+    {
+      "official_en": "Dr.Althea",
+      "aliases": ["닥터엘시아", "Dr.Althea", "Dr. Althea"],
+      "sources": ["https://dr-althea.com/"]
+    },
+    {
+      "official_en": "Lazy Society",
+      "aliases": ["레이지소사이어티", "Lazy Society", "LAZY SOCIETY"],
+      "sources": ["https://lazysociety.co.kr/"]
+    },
+    {
+      "official_en": "CAREZONE",
+      "aliases": ["케어존", "CAREZONE", "Carezone"],
+      "sources": ["https://www.carezone.co.kr/"]
+    },
+    {
+      "official_en": "Acnes",
+      "aliases": ["아크네스", "Acnes", "ACNES"],
+      "sources": ["https://www.acnes.co.kr/"]
+    },
+    {
+      "official_en": "9wishes",
+      "aliases": ["나인위시스", "9wishes", "9WISHES"],
+      "sources": ["https://9wishes.co.kr/"]
+    },
+    {
+      "official_en": "Real Barrier",
+      "aliases": ["리얼베리어", "Real Barrier", "REAL BARRIER"],
+      "sources": ["https://www.realbarrier.com/"]
+    },
+    {
+      "official_en": "Derma Factory",
+      "aliases": ["더마팩토리", "Derma Factory", "DERMA FACTORY"],
+      "sources": ["https://dermafactory.co.kr/"]
+    },
+    {
+      "official_en": "DALIF",
+      "aliases": ["달리프", "DALIF", "Dalif"],
+      "sources": ["https://dalif.co.kr/"]
+    },
+    {
+      "official_en": "PURCELL",
+      "aliases": ["퍼셀", "PURCELL", "Purcell"],
+      "sources": ["https://purcell.kr/"]
+    },
+    {
+      "official_en": "Parnell",
+      "aliases": ["파넬", "Parnell", "PARNELL"],
+      "sources": ["https://parnellbeauty.com/"]
+    },
+    {
+      "official_en": "ONE THING",
+      "aliases": ["원씽", "ONE THING", "One Thing"],
+      "sources": ["https://onethingcos.com/"]
+    },
+    {
+      "official_en": "SO NATURAL",
+      "aliases": ["쏘내추럴", "SO NATURAL", "So Natural"],
+      "sources": ["https://sonatural.co.kr/"]
+    },
+    {
+      "official_en": "Dear Dahlia",
+      "aliases": ["디어달리아", "Dear Dahlia", "DEAR DAHLIA"],
+      "sources": ["https://deardahlia.com/"]
+    },
+    {
+      "official_en": "athe",
+      "aliases": ["아떼", "athe", "ATHE"],
+      "sources": ["https://www.athe.com/"]
+    },
+    {
+      "official_en": "pleuvoir",
+      "aliases": ["플르부아", "pleuvoir", "PLEUVOIR"],
+      "sources": ["https://pleuvoir.co.kr/"]
+    },
+    {
+      "official_en": "Dr.Orga",
+      "aliases": ["닥터올가", "Dr.Orga", "Dr. Orga"],
+      "sources": ["https://drorga.com/"]
+    },
+    {
+      "official_en": "GOONGBE",
+      "aliases": ["궁중비책", "GOONGBE", "Goongbe"],
+      "sources": ["https://goongbe.com/"]
+    },
+    {
+      "official_en": "THE LAB by blanc doux",
+      "aliases": ["더랩바이블랑두", "THE LAB by blanc doux", "THE LAB"],
+      "sources": ["https://thelabbyblancdoux.com/"]
+    },
+    {
+      "official_en": "THE TOOL LAB",
+      "aliases": ["더툴랩", "THE TOOL LAB", "The Tool Lab"],
+      "sources": ["https://thetoollab.co.kr/"]
+    },
+    {
+      "official_en": "Papa Recipe",
+      "aliases": ["파파레서피", "Papa Recipe", "PAPA RECIPE"],
+      "sources": ["https://paparecipe.com/"]
+    },
+    {
+      "official_en": "NUXE",
+      "aliases": ["눅스", "NUXE", "Nuxe"],
+      "sources": ["https://www.nuxe.com/"]
+    },
+    {
+      "official_en": "Gillette",
+      "aliases": ["질레트", "Gillette", "GILLETTE"],
+      "sources": ["https://gillette.com/"]
+    },
+    {
+      "official_en": "Himalaya",
+      "aliases": ["히말라야", "Himalaya", "HIMALAYA"],
+      "sources": ["https://himalayawellness.com/"]
+    },
+    {
+      "official_en": "GIVERNY",
+      "aliases": ["지베르니", "GIVERNY", "Giverny"],
+      "sources": ["https://giverny.co.kr/"]
+    },
+    {
+      "official_en": "2aN",
+      "aliases": ["투에이엔", "2aN", "2AN"],
+      "sources": ["https://2an.co.kr/"]
+    },
+    {
+      "official_en": "Dr.Bio",
+      "aliases": ["닥터바이오", "Dr.Bio", "Dr. Bio"],
+      "sources": ["https://drbio.co.kr/"]
     },
     {
       "official_en": "innisfree",
@@ -109,6 +524,16 @@
       "official_en": "AOU",
       "aliases": ["에이오유", "AOU", "aou"],
       "sources": ["https://www.aoucosmetics.com/"]
+    },
+    {
+      "official_en": "ABOUT TONE",
+      "aliases": ["어바웃톤", "ABOUT TONE", "about tone"],
+      "sources": ["https://about-tone.com/"]
+    },
+    {
+      "official_en": "NOT4U",
+      "aliases": ["낫포유", "NOT4U", "not4u"],
+      "sources": ["https://not4u.co.kr/"]
     },
     {
       "official_en": "BRINGGREEN",
@@ -352,7 +777,7 @@
     },
     {
       "official_en": "BIOHEAL BOH",
-      "aliases": ["바이오힐보", "BIOHEAL BOH"],
+      "aliases": ["바이오힐보", "바이오힐 보", "BIOHEAL BOH"],
       "sources": ["https://www.biohealboh.com/"]
     },
     {

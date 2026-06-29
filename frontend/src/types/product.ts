@@ -57,65 +57,6 @@ export type SuggestionResponse = {
   suggestions: string[];
 };
 
-export type AdapterReadiness = {
-  enabled: boolean;
-  configured: boolean;
-  base_url_configured: boolean;
-  reason: string;
-};
-
-export type DiagnosticsResponse = {
-  adapter_readiness?: Record<string, AdapterReadiness>;
-  config?: {
-    musinsa_api_enabled?: boolean;
-    oliveyoung_global_api_enabled?: boolean;
-    official_brand_api_enabled?: boolean;
-    global_discovery_api_enabled?: boolean;
-  };
-  index?: {
-    product_count?: number;
-    search_gap_count?: number;
-    last_refreshed_at?: string | null;
-  };
-  verified_catalog?: {
-    total?: number;
-    canonical_product_id?: number;
-    product_name_en?: number;
-    source_counts?: Record<string, number>;
-  };
-  search_gaps?: Array<{
-    query?: string | null;
-    normalized_query?: string | null;
-    result_count?: number;
-    miss_count?: number;
-    last_reason?: string | null;
-    last_seen_at?: string | null;
-  }>;
-  catalog_jobs?: {
-    stats?: {
-      total?: number;
-      pending?: number;
-      running?: number;
-      completed?: number;
-      failed?: number;
-      skipped?: number;
-      last_finished_at?: string | null;
-      last_error?: string | null;
-    };
-    recent?: Array<{
-      query?: string | null;
-      normalized_query?: string | null;
-      priority?: number;
-      status?: string | null;
-      attempt_count?: number;
-      max_attempts?: number;
-      product_count?: number | null;
-      last_error?: string | null;
-      updated_at?: string | null;
-    }>;
-  };
-};
-
 export type SearchParams = {
   query: string;
   limit?: number;
@@ -156,20 +97,3 @@ export type EditorBatchProgress = {
   response: EditorBatchResponse;
 };
 
-export type EditorConfirmRequest = {
-  raw_text: string;
-  normalized_query: string;
-  source: string;
-  source_url?: string | null;
-  source_product_id?: string | null;
-  canonical_product_id?: string | null;
-  brand_ko?: string | null;
-  brand_en?: string | null;
-  product_name_ko?: string | null;
-  product_name_en?: string | null;
-  shade?: string | null;
-};
-
-export type EditorConfirmResponse = {
-  saved: boolean;
-};

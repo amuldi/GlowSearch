@@ -21,6 +21,7 @@ from app.ingestion.coverage import CoverageQueryOptions, build_coverage_queries
 from app.ingestion.export import write_products_csv
 from app.ingestion.oliveyoung_pipeline import OliveYoungIngestionPipeline
 from app.normalizer.brand import BrandResolver
+from app.normalizer.product import ProductNormalizer
 
 
 def parse_args() -> argparse.Namespace:
@@ -56,6 +57,17 @@ def parse_args() -> argparse.Namespace:
         help="큐 등록만 하고 catalog job 처리는 하지 않습니다.",
     )
     parser.add_argument(
+        "--plan-only",
+        action="store_true",
+        help="query 후보만 출력하고 catalog_jobs enqueue나 수집 실행은 하지 않습니다.",
+    )
+    parser.add_argument(
+        "--reset-stale-running-minutes",
+        type=int,
+        default=0,
+        help="지정한 분보다 오래 running 상태인 catalog job을 실행 전 복구합니다. 0이면 비활성화.",
+    )
+    parser.add_argument(
         "--csv",
         type=Path,
         default=None,
@@ -86,6 +98,7 @@ async def main() -> int:
     settings = _settings_from_args(args)
     store = SQLiteProductIndexStore(settings.product_index_path)
     brand_resolver = BrandResolver(settings.brand_registry_path)
+    normalizer = ProductNormalizer(brand_resolver, settings.oliveyoung_base_url)
     store.seed_brand_aliases(brand_resolver.index_aliases())
 
     try:
@@ -119,6 +132,28 @@ async def main() -> int:
                 max_queries=args.max_queries,
             ),
         )
+        if args.plan_only:
+            print(
+                json.dumps(
+                    {
+                        "candidate_queries": len(queries),
+                        "queries": queries,
+                        "catalog_job_stats": await store.catalog_job_stats(),
+                        "index_stats": await store.stats(),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 0
+
+        reset_count = 0
+        if args.reset_stale_running_minutes > 0:
+            reset_count = await store.reset_stale_catalog_jobs(
+                older_than_minutes=args.reset_stale_running_minutes,
+                kind=args.job_kind,
+            )
+
         enqueued_count = await store.enqueue_catalog_jobs(
             queries,
             kind=args.job_kind,
@@ -127,6 +162,7 @@ async def main() -> int:
         )
         payload: dict[str, object] = {
             "candidate_queries": len(queries),
+            "reset_stale_running_jobs": reset_count,
             "enqueued_jobs": enqueued_count,
             "catalog_job_stats_before_run": await store.catalog_job_stats(),
         }
@@ -137,6 +173,7 @@ async def main() -> int:
                 store=store,
                 ingestion_agent=ProductIngestionAgent(
                     store,
+                    normalizer=normalizer,
                     detail_enricher=(
                         OliveYoungDetailEnrichmentAgent(settings) if args.enrich_details else None
                     ),

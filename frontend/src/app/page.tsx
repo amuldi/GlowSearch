@@ -1,21 +1,18 @@
 "use client";
 
-import { Check, ChevronRight, Copy, ExternalLink, Loader2, Search, X } from "lucide-react";
+import { Check, ChevronRight, Copy, Loader2, Search, X } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  fetchDiagnostics,
   fetchSearchSuggestions,
   organizeEditorBatchByLines,
   searchProducts,
 } from "@/lib/api";
 import type {
-  DiagnosticsResponse,
   EditorBatchItem,
   EditorBatchResponse,
   Product,
-  ProductOffer,
   SearchResponse,
 } from "@/types/product";
 
@@ -51,6 +48,7 @@ export default function Home() {
   const [resultLimit, setResultLimit] = useState(DEFAULT_RESULT_LIMIT);
   const [currentPage, setCurrentPage] = useState(1);
   const [response, setResponse] = useState<SearchResponse | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<"all" | "oliveyoung" | "musinsa" | "official">("all");
   const [isLoading, setIsLoading] = useState(false);
   const [isSearchButtonPressed, setIsSearchButtonPressed] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -94,6 +92,21 @@ export default function Home() {
   const visibleStartIndex = (boundedCurrentPage - 1) * RESULT_PAGE_SIZE;
   const visibleEndIndex = visibleStartIndex + RESULT_PAGE_SIZE;
   const visibleResults = response?.results.slice(visibleStartIndex, visibleEndIndex) ?? [];
+
+  const sourceCounts = useMemo(() => {
+    const all = response?.results ?? [];
+    return {
+      oliveyoung: all.filter((p) => p.source.startsWith("oliveyoung")).length,
+      musinsa: all.filter((p) => p.source.startsWith("musinsa")).length,
+      official: all.filter((p) => p.source.startsWith("official")).length,
+    };
+  }, [response]);
+
+  const filteredForDisplay = useMemo(() => {
+    if (sourceFilter === "all") return visibleResults;
+    return (response?.results ?? []).filter((p) => p.source.startsWith(sourceFilter));
+  }, [sourceFilter, visibleResults, response]);
+
   const canShowSuggestions = Boolean(
     isSuggestionsOpen && trimmedQuery && !isInputBatchQuery && suggestions.length > 0,
   );
@@ -248,6 +261,7 @@ export default function Home() {
     setActiveSuggestionIndex(-1);
     setResultLimit(DEFAULT_RESULT_LIMIT);
     setCurrentPage(1);
+    setSourceFilter("all");
     setSearchRun((current) => current + 1);
   };
 
@@ -420,47 +434,128 @@ export default function Home() {
       {mode === "editor" ? (
         <EditorBatchWorkspace />
       ) : (
-        <section className="mx-auto mt-8 w-full max-w-5xl">
-        <div className="mb-4 flex min-h-6 items-center gap-2 text-sm font-medium text-neutral-600">
-          {isLoading ? <Loader2 className="h-4 w-4 animate-spin text-rosewood" aria-hidden="true" /> : null}
-          <span>{statusText}</span>
-        </div>
-
-        {response?.source_errors.length && response.results.length ? (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            일부 소스가 지연되어 확인 가능한 결과부터 표시합니다.
+        <section className="mx-auto mt-6 w-full max-w-5xl">
+          <div className="mb-3 flex min-h-6 items-center gap-2 text-sm font-medium text-neutral-600">
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin text-rosewood" aria-hidden="true" /> : null}
+            <span>{statusText}</span>
           </div>
-        ) : null}
 
-        {(!response || (isLoading && visibleResults.length === 0)) && isLoading ? (
+          {response?.source_errors.length && response.results.length ? (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              일부 소스가 지연되어 확인 가능한 결과부터 표시합니다.
+            </div>
+          ) : null}
+
+          {response && (sourceCounts.oliveyoung + sourceCounts.musinsa + sourceCounts.official) > 0 ? (
+            <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="소스 필터">
+              <SourceFilterTab
+                active={sourceFilter === "all"}
+                onClick={() => setSourceFilter("all")}
+                label="전체"
+                count={response.results.length}
+              />
+              {sourceCounts.oliveyoung > 0 && (
+                <SourceFilterTab
+                  active={sourceFilter === "oliveyoung"}
+                  onClick={() => setSourceFilter("oliveyoung")}
+                  label="올리브영"
+                  count={sourceCounts.oliveyoung}
+                  color="oliveyoung"
+                />
+              )}
+              {sourceCounts.musinsa > 0 && (
+                <SourceFilterTab
+                  active={sourceFilter === "musinsa"}
+                  onClick={() => setSourceFilter("musinsa")}
+                  label="무신사"
+                  count={sourceCounts.musinsa}
+                  color="musinsa"
+                />
+              )}
+              {sourceCounts.official > 0 && (
+                <SourceFilterTab
+                  active={sourceFilter === "official"}
+                  onClick={() => setSourceFilter("official")}
+                  label="공식몰"
+                  count={sourceCounts.official}
+                  color="official"
+                />
+              )}
+            </div>
+          ) : null}
+
+          {(!response || (isLoading && visibleResults.length === 0)) && isLoading ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <ProductSkeleton key={index} />
+              ))}
+            </div>
+          ) : null}
+
+          {response && response.results.length === 0 && !isLoading ? (
+            <EmptySearchState onChoose={submitSearch} />
+          ) : null}
+
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <ProductSkeleton key={index} />
+            {filteredForDisplay.map((product, index) => (
+              <ProductCard
+                key={`${product.source}-${product.source_product_id ?? product.product_name_ko ?? index}`}
+                product={product}
+              />
             ))}
           </div>
-        ) : null}
 
-        {response && response.results.length === 0 && !isLoading ? (
-          <EmptySearchState onChoose={submitSearch} />
-        ) : null}
-
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {visibleResults.map((product, index) => (
-            <ProductCard key={`${product.source}-${product.product_name_ko ?? index}`} product={product} />
-          ))}
-        </div>
-
-        {totalPageCount > 1 ? (
-          <Pagination
-            currentPage={boundedCurrentPage}
-            totalPageCount={totalPageCount}
-            isLoading={isLoading}
-            onPageChange={goToPage}
-          />
-        ) : null}
+          {sourceFilter === "all" && totalPageCount > 1 ? (
+            <Pagination
+              currentPage={boundedCurrentPage}
+              totalPageCount={totalPageCount}
+              isLoading={isLoading}
+              onPageChange={goToPage}
+            />
+          ) : null}
         </section>
       )}
     </main>
+  );
+}
+
+function SourceFilterTab({
+  active,
+  onClick,
+  label,
+  count,
+  color,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count: number;
+  color?: "oliveyoung" | "musinsa" | "official";
+}) {
+  const activeColors: Record<string, string> = {
+    oliveyoung: "border-oy-green bg-oy-green-soft text-oy-green",
+    musinsa: "border-ms-black bg-ms-soft text-ms-black",
+    official: "border-official-gold bg-official-soft text-official-gold",
+  };
+  const activeCls = color ? activeColors[color] : "border-rosewood bg-blush-soft text-rosewood";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition",
+        active
+          ? activeCls
+          : "border-line bg-white text-neutral-500 hover:border-neutral-300 hover:text-neutral-700",
+      ].join(" ")}
+    >
+      {label}
+      <span className={["rounded-full px-1.5 py-0.5 text-[10px] font-extrabold tabular-nums",
+        active ? "bg-white/70" : "bg-neutral-100",
+      ].join(" ")}>
+        {count}
+      </span>
+    </button>
   );
 }
 
@@ -490,13 +585,11 @@ function EmptySearchState({ onChoose }: { onChoose: (query: string) => void }) {
 function EditorBatchWorkspace() {
   const [text, setText] = useState("");
   const [response, setResponse] = useState<EditorBatchResponse | null>(null);
-  const [diagnostics, setDiagnostics] = useState<DiagnosticsResponse | null>(null);
-  const [diagnosticsStatus, setDiagnosticsStatus] = useState<"loading" | "ready" | "error">("loading");
   const [selected, setSelected] = useState<Record<number, number>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null);
+  const [exportCopied, setExportCopied] = useState<"youtube" | "list" | null>(null);
   const requestIdRef = useRef(0);
 
   const lineCount = useMemo(
@@ -504,21 +597,6 @@ function EditorBatchWorkspace() {
     [text],
   );
   const canSubmit = Boolean(text.trim()) && !isLoading;
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setDiagnosticsStatus("loading");
-    fetchDiagnostics(controller.signal)
-      .then((data) => {
-        setDiagnostics(data);
-        setDiagnosticsStatus("ready");
-      })
-      .catch(() => {
-        setDiagnostics(null);
-        setDiagnosticsStatus("error");
-      });
-    return () => controller.abort();
-  }, []);
 
   const runBatch = async () => {
     const input = text.trim();
@@ -553,23 +631,21 @@ function EditorBatchWorkspace() {
     }
   };
 
-  const copyEditorFormat = async (format: "ko" | "en" | "description" | "tsv" | "csv") => {
+  const exportDescriptionBox = async (format: "youtube" | "list") => {
     if (!response) return;
-    const payload = editorCopyPayload(response.items, selected, format);
-    if (!payload) return;
-    await copyToClipboard(payload);
-    setCopiedFormat(format);
-    window.setTimeout(() => setCopiedFormat(null), 1200);
+    const exportText = buildDescriptionBoxText(response.items, selected, format === "youtube");
+    await copyToClipboard(exportText);
+    setExportCopied(format);
+    window.setTimeout(() => setExportCopied(null), 1500);
   };
 
   return (
     <section className="mx-auto mt-8 w-full max-w-[326px] sm:max-w-2xl lg:max-w-6xl">
       <div className="grid w-full min-w-0 max-w-full gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <div className="min-w-0 overflow-hidden rounded-lg border border-blush/55 bg-white/92 p-4 shadow-soft">
-          <label htmlFor="editor-batch-input" className="text-sm font-bold text-rosewood">
-            러프 제품 리스트
+          <label htmlFor="editor-batch-input" className="sr-only">
+            편집자 일괄 정리 입력
           </label>
-          <EditorDataStatus diagnostics={diagnostics} status={diagnosticsStatus} />
           <textarea
             id="editor-batch-input"
             value={text}
@@ -580,7 +656,7 @@ function EditorBatchWorkspace() {
           />
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-xs font-semibold text-neutral-500">
-              {lineCount ? `${lineCount.toLocaleString("ko-KR")}개 라인` : "여러 줄을 붙여넣으세요"}
+              {`${lineCount.toLocaleString("ko-KR")}개 라인`}
             </span>
             <div className="flex min-w-0 flex-wrap gap-2 sm:justify-end">
               <button
@@ -602,33 +678,32 @@ function EditorBatchWorkspace() {
         </div>
 
         <div className="min-w-0 overflow-hidden rounded-lg border border-blush/55 bg-white/92 p-4 shadow-soft">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-base font-extrabold text-rosewood">정리 결과</h2>
-              <p className="mt-1 text-xs font-medium text-neutral-500">
-                source URL이 있는 결과만 표시합니다.
-              </p>
-            </div>
-            <div className="grid min-w-0 grid-cols-1 gap-1.5 sm:flex sm:flex-wrap sm:justify-end">
-              {[
-                ["ko", "한글 자막"],
-                ["en", "영문 자막"],
-                ["description", "더보기란"],
-                ["tsv", "TSV"],
-                ["csv", "CSV"],
-              ].map(([format, label]) => (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-extrabold text-rosewood">정리 결과</h2>
+            {response && response.items.length > 0 && (
+              <div className="flex flex-wrap gap-2">
                 <button
-                  key={format}
                   type="button"
-                  onClick={() => copyEditorFormat(format as "ko" | "en" | "description" | "tsv" | "csv")}
-                  disabled={!response}
-                  className="inline-flex min-w-0 items-center justify-center gap-1 rounded-full border border-line bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-700 transition hover:border-rose hover:bg-blush-soft hover:text-rosewood disabled:cursor-not-allowed disabled:opacity-40"
+                  onClick={() => exportDescriptionBox("youtube")}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 transition hover:border-rose hover:bg-blush-soft hover:text-rosewood"
                 >
-                  {copiedFormat === format ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
-                  {label}
+                  {exportCopied === "youtube"
+                    ? <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                    : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
+                  {exportCopied === "youtube" ? "복사됨" : "YouTube 설명란"}
                 </button>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  onClick={() => exportDescriptionBox("list")}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 transition hover:border-rose hover:bg-blush-soft hover:text-rosewood"
+                >
+                  {exportCopied === "list"
+                    ? <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                    : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
+                  {exportCopied === "list" ? "복사됨" : "목록만"}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="mt-4 max-h-[68vh] space-y-3 overflow-y-auto pr-1 lg:max-h-[640px]">
@@ -640,14 +715,13 @@ function EditorBatchWorkspace() {
             ) : null}
             {!response && !isLoading ? (
               <div className="rounded-lg border border-dashed border-blush/70 px-4 py-8 text-center text-sm font-medium text-neutral-500">
-                제품 리스트를 붙여넣고 정리하면 행별 결과가 표시됩니다.
+                정리 결과가 여기에 표시됩니다.
               </div>
             ) : null}
             {response?.items.map((item, index) => (
               <EditorBatchRow
                 key={`${item.raw_text}-${index}`}
                 item={item}
-                index={index}
                 selectedIndex={selected[index]}
                 onSelect={(candidateIndex) => {
                   setSelected((current) => ({ ...current, [index]: candidateIndex }));
@@ -661,116 +735,21 @@ function EditorBatchWorkspace() {
   );
 }
 
-function EditorDataStatus({
-  diagnostics,
-  status,
-}: {
-  diagnostics: DiagnosticsResponse | null;
-  status: "loading" | "ready" | "error";
-}) {
-  if (!diagnostics && status === "loading") {
-    return (
-      <div className="mt-3 rounded-lg border border-line bg-blush-soft/35 px-3 py-2 text-[11px] font-bold text-neutral-500">
-        운영 데이터 상태 확인 중
-      </div>
-    );
-  }
-
-  if (!diagnostics) {
-    return (
-      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-900">
-        운영 데이터 상태를 불러오지 못했습니다.
-      </div>
-    );
-  }
-
-  const catalogTotal = diagnostics?.verified_catalog?.total;
-  const productNameEnCount = diagnostics?.verified_catalog?.product_name_en;
-  const indexCount = diagnostics?.index?.product_count;
-  const enabledAdapters: Array<[string, boolean | undefined]> = [
-    ["Olive Young", diagnostics?.adapter_readiness?.oliveyoung_public_api?.enabled],
-    ["Musinsa", diagnostics?.adapter_readiness?.musinsa?.enabled],
-    ["OY Global", diagnostics?.adapter_readiness?.oliveyoung_global?.enabled],
-    ["Official", diagnostics?.adapter_readiness?.official_brand?.enabled],
-  ];
-  const sourceCounts = Object.entries(diagnostics?.verified_catalog?.source_counts ?? {}).sort(([left], [right]) =>
-    left.localeCompare(right),
-  );
-  const pendingJobCount = diagnostics.catalog_jobs?.stats?.pending;
-  const runningJobCount = diagnostics.catalog_jobs?.stats?.running;
-  const recentGapQueries = (diagnostics.search_gaps ?? [])
-    .map((gap) => gap.query?.trim())
-    .filter((query): query is string => Boolean(query))
-    .slice(0, 4);
-
-  return (
-    <div className="mt-3 rounded-lg border border-line bg-blush-soft/35 px-3 py-2">
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold text-neutral-600">
-        {catalogTotal !== undefined ? <span>verified catalog {catalogTotal.toLocaleString("ko-KR")}</span> : null}
-        {productNameEnCount !== undefined ? <span>영문 제품명 {productNameEnCount.toLocaleString("ko-KR")}</span> : null}
-        {indexCount !== undefined ? <span>index {indexCount.toLocaleString("ko-KR")}</span> : null}
-        {pendingJobCount !== undefined ? <span>보강 대기 {pendingJobCount.toLocaleString("ko-KR")}</span> : null}
-        {runningJobCount ? <span>보강 실행 {runningJobCount.toLocaleString("ko-KR")}</span> : null}
-      </div>
-      <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2 md:flex md:flex-wrap">
-        {enabledAdapters.map(([label, enabled]) => (
-          <span
-            key={label}
-            className={[
-              "min-w-0 max-w-full whitespace-normal break-words rounded-full border px-2 py-0.5 text-center text-[11px] font-bold leading-tight",
-              enabled
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-neutral-200 bg-white text-neutral-500",
-            ].join(" ")}
-          >
-            {label} {enabled ? "활성" : "비활성"}
-          </span>
-        ))}
-      </div>
-      {sourceCounts.length ? (
-        <div className="mt-2 grid grid-cols-1 gap-1.5 text-[11px] font-medium text-neutral-500 sm:grid-cols-2 md:flex md:flex-wrap">
-          {sourceCounts.map(([source, count]) => (
-            <span key={source} className="min-w-0 rounded-full bg-white/70 px-2 py-0.5 text-center leading-tight">
-              {source} {count}
-            </span>
-          ))}
-        </div>
-      ) : null}
-      {recentGapQueries.length ? (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-neutral-500">
-          <span className="font-bold text-neutral-600">최근 보강 대상</span>
-          {recentGapQueries.map((query) => (
-            <span
-              key={query}
-              className="min-w-0 max-w-full whitespace-normal break-words rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-center leading-tight text-amber-900"
-            >
-              {query}
-            </span>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function EditorBatchRow({
   item,
-  index,
   selectedIndex,
   onSelect,
 }: {
   item: EditorBatchItem;
-  index: number;
   selectedIndex?: number;
   onSelect: (candidateIndex: number) => void;
 }) {
   const selectedCandidate = selectedIndex !== undefined ? item.candidates[selectedIndex] : undefined;
   const selectedProduct = selectedCandidate?.product;
-  const status = item.status;
   const shadeCode = item.parsed.shade_code;
   const shadeName = selectedProduct?.shade ?? item.parsed.shade_name;
-  const selectedProductNameKo = productNameKo(selectedProduct);
-  const selectedProductNameEn = productNameEn(selectedProduct);
+  const selectedProductName = productNamePrimary(selectedProduct);
+  const selectedProductNameEn = distinctText(productNameEn(selectedProduct), selectedProductName);
   const brandKo = selectedProduct?.brand_ko ?? item.parsed.brand_query;
   const brandEn = selectedProduct?.brand_en ?? item.parsed.brand_en;
   const selectedOriginalPrice = selectedProduct
@@ -793,7 +772,7 @@ function EditorBatchRow({
         <Field label="브랜드명" value={brandKo} />
         <Field label="영문 브랜드명" value={brandEn} />
         <Field label="입력 제품 키워드" value={selectedProduct ? null : item.parsed.product_query} />
-        <Field label="제품명" value={selectedProductNameKo} />
+        <Field label="제품명" value={selectedProductName} />
         <Field label="영문 제품명" value={selectedProductNameEn} />
         <Field label="호수 번호" value={shadeCode} />
         <Field label="호수명 / 컬러명" value={shadeName} />
@@ -806,7 +785,7 @@ function EditorBatchRow({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={selectedProduct.image_url}
-                alt={selectedProductNameKo ?? item.raw_text}
+                alt={selectedProductName ?? item.raw_text}
                 className="h-full w-full object-cover"
                 loading="lazy"
               />
@@ -816,23 +795,6 @@ function EditorBatchRow({
             <PriceField label="가격" value={selectedOriginalPrice} />
             <PriceField label="할인가" value={selectedSalePrice} valueClassName="text-rosewood" />
           </dl>
-        </div>
-      ) : null}
-
-      {selectedProduct ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {sourceLinksForEditorProduct(selectedProduct).map((link) => (
-            <a
-              key={`${link.source}-${link.source_url}`}
-              href={link.source_url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex max-w-full items-center gap-1 rounded-full border border-line bg-white px-2.5 py-1 text-xs font-bold text-neutral-700 transition hover:border-rose hover:bg-blush-soft hover:text-rosewood"
-            >
-              <span className="truncate">{sourceLabel(link)}</span>
-              <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
-            </a>
-          ))}
         </div>
       ) : null}
 
@@ -852,7 +814,9 @@ function EditorBatchRow({
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="break-words text-sm font-bold text-ink">
-                  {[candidate.product.brand_ko, productNameKo(candidate.product)].filter(Boolean).join(" / ")}
+                  {[candidate.product.brand_ko ?? candidate.product.brand_en, productNamePrimary(candidate.product)]
+                    .filter(Boolean)
+                    .join(" / ")}
                 </span>
                 <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-neutral-500">
                   {candidateIndex + 1}
@@ -863,7 +827,7 @@ function EditorBatchRow({
                 {productNameEn(candidate.product) ? <span>{productNameEn(candidate.product)}</span> : null}
                 {candidate.product.shade ? <span>{candidate.product.shade}</span> : null}
                 {candidatePriceText(candidate.product) ? (
-                  <span className="inline-block whitespace-nowrap tabular-nums [overflow-wrap:normal] [word-break:normal]">
+                  <span className="inline-block min-w-max whitespace-nowrap break-keep tabular-nums [overflow-wrap:normal] [word-break:keep-all]">
                     {candidatePriceText(candidate.product)}
                   </span>
                 ) : null}
@@ -871,10 +835,6 @@ function EditorBatchRow({
               </div>
             </button>
           ))}
-        </div>
-      ) : status === "수동 확인 필요" ? (
-        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">
-          source URL이 있는 결과를 찾지 못했습니다.
         </div>
       ) : null}
     </article>
@@ -910,10 +870,10 @@ function PriceField({
 }) {
   if (!value) return null;
   return (
-    <div className="min-w-[5.75rem] shrink-0">
+    <div className="min-w-max shrink-0">
       <dt className="font-bold text-neutral-500">{label}</dt>
       <dd className={[
-        "inline-block whitespace-nowrap text-base font-extrabold tabular-nums text-neutral-900 [overflow-wrap:normal] [word-break:normal]",
+        "inline-block min-w-max whitespace-nowrap break-keep text-base font-extrabold tabular-nums text-neutral-900 [overflow-wrap:normal] [word-break:keep-all]",
         valueClassName ?? "",
       ].join(" ")}
       >
@@ -1036,8 +996,8 @@ function Pagination({
 
 function ProductCard({ product }: { product: Product }) {
   const [copied, setCopied] = useState(false);
-  const displayProductNameKo = productNameKo(product);
-  const displayProductNameEn = productNameEn(product);
+  const displayProductName = productNamePrimary(product);
+  const displayProductNameEn = distinctText(productNameEn(product), displayProductName);
   const originalPriceText = formatPrice(product.original_price ?? product.price, product.currency);
   const hasDiscount = Boolean(
     product.sale_price !== null
@@ -1052,7 +1012,7 @@ function ProductCard({ product }: { product: Product }) {
   const copyText = [
     product.brand_ko ? `브랜드명: ${product.brand_ko}` : null,
     product.brand_en ? `영문 브랜드명: ${product.brand_en}` : null,
-    displayProductNameKo ? `제품명: ${displayProductNameKo}` : null,
+    displayProductName ? `제품명: ${displayProductName}` : null,
     displayProductNameEn ? `영문 제품명: ${displayProductNameEn}` : null,
     originalPriceText ? `원가: ${originalPriceText}` : null,
     hasDiscount ? `할인가: ${salePriceText}` : null,
@@ -1062,19 +1022,7 @@ function ProductCard({ product }: { product: Product }) {
     .join("\n");
 
   const copyProductInfo = async () => {
-    try {
-      await navigator.clipboard.writeText(copyText);
-    } catch {
-      const textarea = document.createElement("textarea");
-      textarea.value = copyText;
-      textarea.style.position = "fixed";
-      textarea.style.opacity = "0";
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textarea);
-    }
+    await copyToClipboard(copyText);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1200);
   };
@@ -1085,7 +1033,7 @@ function ProductCard({ product }: { product: Product }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={product.image_url}
-          alt={displayProductNameKo ?? "상품 이미지"}
+          alt={displayProductName ?? "상품 이미지"}
           className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.04]"
           loading="lazy"
         />
@@ -1097,12 +1045,15 @@ function ProductCard({ product }: { product: Product }) {
 
   const name = (
     <h2 className="line-clamp-2 text-sm font-semibold leading-5 text-ink">
-      {displayProductNameKo}
+      {displayProductName}
     </h2>
   );
 
+  const accentColor = sourceKey(product.source) ? SOURCE_ACCENT_COLORS[sourceKey(product.source)!] : null;
+
   return (
-    <article className="grid grid-cols-[96px_1fr] gap-4 rounded-lg border border-blush/45 bg-white p-3 shadow-soft transition duration-150 hover:-translate-y-0.5 hover:border-rose/45 hover:shadow-[0_14px_36px_rgba(74,54,63,0.10)]">
+    <article className="relative grid grid-cols-[96px_1fr] gap-4 overflow-hidden rounded-lg border border-blush/45 bg-white p-3 shadow-soft transition duration-150 hover:-translate-y-0.5 hover:border-rose/45 hover:shadow-[0_14px_36px_rgba(74,54,63,0.10)]">
+      {accentColor && <span className={`pointer-events-none absolute inset-y-0 left-0 w-[3px] ${accentColor}`} />}
       {image}
 
       <div className="min-w-0">
@@ -1138,7 +1089,7 @@ function ProductCard({ product }: { product: Product }) {
             </div>
           ) : null}
           <dl className="min-w-0 space-y-1">
-            {displayProductNameKo ? (
+            {displayProductName ? (
               <div>
               <dt className="text-[11px] font-medium text-neutral-500">제품명</dt>
               <dd>{name}</dd>
@@ -1153,7 +1104,7 @@ function ProductCard({ product }: { product: Product }) {
             {originalPriceText ? (
               <div>
                 <dt className="text-[11px] font-medium text-neutral-500">원가</dt>
-                <dd className={hasDiscount ? "inline-block whitespace-nowrap text-xs text-neutral-500 line-through [overflow-wrap:normal] [word-break:normal]" : "inline-block whitespace-nowrap text-sm font-semibold tabular-nums [overflow-wrap:normal] [word-break:normal]"}>
+                <dd className={hasDiscount ? "inline-block min-w-max whitespace-nowrap break-keep text-xs text-neutral-500 line-through [overflow-wrap:normal] [word-break:keep-all]" : "inline-block min-w-max whitespace-nowrap break-keep text-sm font-semibold tabular-nums [overflow-wrap:normal] [word-break:keep-all]"}>
                   {originalPriceText}
                 </dd>
               </div>
@@ -1161,7 +1112,7 @@ function ProductCard({ product }: { product: Product }) {
             {hasDiscount ? (
               <div>
                 <dt className="text-[11px] font-medium text-neutral-500">할인가</dt>
-                <dd className="inline-block whitespace-nowrap text-sm font-bold tabular-nums text-rosewood [overflow-wrap:normal] [word-break:normal]">
+                <dd className="inline-block min-w-max whitespace-nowrap break-keep text-sm font-bold tabular-nums text-rosewood [overflow-wrap:normal] [word-break:keep-all]">
                   {salePriceText}
                   {product.discount_rate ? (
                     <span className="ml-1 rounded-full bg-blush-soft px-1.5 py-0.5 text-[11px] font-bold text-rosewood">
@@ -1201,9 +1152,34 @@ function productNameEn(product?: Product | null) {
   );
 }
 
+function productNamePrimary(product?: Product | null) {
+  return productNameKo(product) ?? productNameEn(product);
+}
+
+const SOURCE_BADGE_COLORS: Record<string, string> = {
+  oliveyoung: "border-oy-green/60 bg-oy-green-soft/70 text-oy-green",
+  musinsa: "border-ms-black/30 bg-ms-soft text-ms-black",
+  official: "border-official-gold/60 bg-official-soft text-official-gold",
+};
+
+const SOURCE_ACCENT_COLORS: Record<string, string> = {
+  oliveyoung: "bg-oy-green",
+  musinsa: "bg-ms-black",
+  official: "bg-official-gold",
+};
+
+function sourceKey(source: string): string | null {
+  if (source === "oliveyoung" || source.startsWith("oliveyoung:")) return "oliveyoung";
+  if (source === "musinsa" || source.startsWith("musinsa:")) return "musinsa";
+  if (source === "official" || source.startsWith("official:")) return "official";
+  return null;
+}
+
 function SourceBadge({ product }: { product: Product }) {
+  const key = sourceKey(product.source);
+  const colorClass = key ? SOURCE_BADGE_COLORS[key] : "border-blush/60 bg-blush-soft/70 text-rosewood";
   return (
-    <span className="inline-flex max-w-full items-center rounded-full border border-blush/60 bg-blush-soft/70 px-2 py-0.5 text-[11px] font-bold text-rosewood">
+    <span className={`inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[11px] font-bold ${colorClass}`}>
       <span className="truncate">{sourceLabel(product)}</span>
     </span>
   );
@@ -1218,137 +1194,43 @@ function initialEditorSelection(response: EditorBatchResponse) {
   }, {});
 }
 
-function selectedEditorProduct(
-  item: EditorBatchItem,
-  selected: Record<number, number>,
-  index: number,
-) {
-  const selectedIndex = selected[index];
-  if (selectedIndex === undefined) return null;
-  return item.candidates[selectedIndex]?.product ?? null;
+async function copyToClipboard(value: string) {
+  await navigator.clipboard.writeText(value).catch(() => {
+    const el = Object.assign(document.createElement("textarea"), {
+      value,
+      style: "position:fixed;opacity:0",
+    });
+    document.body.appendChild(el);
+    el.focus();
+    el.select();
+    // @ts-ignore -- execCommand fallback for clipboard API unavailability
+    document.execCommand("copy"); // eslint-disable-line @typescript-eslint/no-deprecated
+    document.body.removeChild(el);
+  });
 }
 
-function editorCopyPayload(
+function buildDescriptionBoxText(
   items: EditorBatchItem[],
   selected: Record<number, number>,
-  format: "ko" | "en" | "description" | "tsv" | "csv",
-) {
-  const rows = items.map((item, index) => ({
-    item,
-    product: selectedEditorProduct(item, selected, index),
-  }));
+  includeLinks: boolean,
+): string {
+  const lines: string[] = [];
+  if (includeLinks) lines.push("✨ 사용 제품", "");
 
-  if (format === "tsv") {
-    return editorDelimitedPayload(rows, "\t");
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const product = selected[i] !== undefined ? item.candidates[selected[i]]?.product : undefined;
+    const brand = product?.brand_ko ?? item.parsed.brand_query ?? "";
+    const name = productNameKo(product) ?? item.parsed.product_query ?? item.raw_text;
+    const shade = product?.shade ?? item.parsed.shade_query;
+    lines.push([brand, name, shade].filter(Boolean).join(" "));
+    if (includeLinks) {
+      if (product?.source_url) lines.push(`구매 링크: ${product.source_url}`);
+      lines.push("");
+    }
   }
 
-  if (format === "csv") {
-    return editorDelimitedPayload(rows, ",");
-  }
-
-  const lines = rows
-    .map(({ item, product }) => {
-      if (!product) return null;
-      const shade = product.shade ?? item.parsed.shade_name ?? item.parsed.shade_code;
-      if (format === "ko") {
-        return [product.brand_ko, productNameKo(product), shade].filter(Boolean).join(" / ");
-      }
-      if (format === "en") {
-        return [product.brand_en ?? item.parsed.brand_en, productNameEn(product), shade].filter(Boolean).join(" / ");
-      }
-      const title = [product.brand_ko, productNameKo(product), shade].filter(Boolean).join(" - ");
-      const link = bestEditorSourceUrl(product);
-      return [title, link].filter(Boolean).join("\n");
-    })
-    .filter(Boolean);
-  return lines.join(format === "description" ? "\n\n" : "\n");
-}
-
-function editorDelimitedPayload(
-  rows: Array<{ item: EditorBatchItem; product: Product | null }>,
-  delimiter: "\t" | ",",
-) {
-  const header = [
-    "원문 입력",
-    "브랜드명",
-    "영문 브랜드명",
-    "입력 제품 키워드",
-    "제품명",
-    "영문 제품명",
-    "호수 번호",
-    "호수명 / 컬러명",
-    "가격",
-    "할인가",
-    "이미지 URL",
-    "source 링크",
-  ];
-  return [
-    editorDelimitedRow(header, delimiter),
-    ...rows.map(({ item, product }) => editorDelimitedRow([
-      item.raw_text,
-      product?.brand_ko ?? item.parsed.brand_query ?? "",
-      product?.brand_en ?? item.parsed.brand_en ?? "",
-      item.parsed.product_query ?? "",
-      productNameKo(product) ?? "",
-      productNameEn(product) ?? "",
-      item.parsed.shade_code ?? "",
-      product?.shade ?? item.parsed.shade_name ?? "",
-      formatPrice(product?.original_price ?? product?.price ?? null, product?.currency) ?? "",
-      product?.sale_price != null ? formatPrice(product.sale_price, product.currency) ?? "" : "",
-      product?.image_url ?? "",
-      bestEditorSourceUrl(product) ?? "",
-    ], delimiter)),
-  ].join("\n");
-}
-
-function editorDelimitedRow(values: string[], delimiter: "\t" | ",") {
-  if (delimiter === "\t") return values.join("\t");
-  return values.map(csvEscape).join(",");
-}
-
-function csvEscape(value: string) {
-  if (!/[",\n\r]/.test(value)) return value;
-  return `"${value.replaceAll("\"", "\"\"")}"`;
-}
-
-async function copyToClipboard(value: string) {
-  try {
-    await navigator.clipboard.writeText(value);
-  } catch {
-    const textarea = document.createElement("textarea");
-    textarea.value = value;
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    document.execCommand("copy");
-    document.body.removeChild(textarea);
-  }
-}
-
-function sourceLinksForEditorProduct(product: Product): Array<Pick<ProductOffer, "source" | "source_label" | "source_url">> {
-  const links = (product.offers ?? [])
-    .filter((offer) => offer.source_url)
-    .map((offer) => ({
-      source: offer.source,
-      source_label: offer.source_label,
-      source_url: offer.source_url,
-    }));
-  if (links.length) return links;
-  if (!product.source_url) return [];
-  return [
-    {
-      source: product.source,
-      source_label: product.source_label,
-      source_url: product.source_url,
-    },
-  ];
-}
-
-function bestEditorSourceUrl(product: Product | null) {
-  if (!product) return null;
-  return sourceLinksForEditorProduct(product)[0]?.source_url ?? null;
+  return lines.join("\n").trimEnd();
 }
 
 function candidatePriceText(product: Product) {

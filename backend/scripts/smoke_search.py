@@ -39,6 +39,7 @@ class SmokeResult:
     count: int
     ok: bool
     first_result: str | None = None
+    expected_first_result: str | None = None
     error: str | None = None
 
 
@@ -50,6 +51,15 @@ def parse_args() -> argparse.Namespace:
         help="Backend base URL. 예: http://localhost:8000 또는 배포 URL",
     )
     parser.add_argument("--query", action="append", default=[], help="검색어. 여러 번 지정 가능.")
+    parser.add_argument(
+        "--expect",
+        action="append",
+        default=[],
+        help=(
+            "첫 결과 표시명을 검증합니다. 형식: '검색어=기대 표시명'. "
+            "여러 번 지정 가능하며 product_name_display_ko를 우선 확인합니다."
+        ),
+    )
     parser.add_argument("--limit", type=int, default=4, help="검색어별 요청 limit.")
     parser.add_argument(
         "--allow-empty",
@@ -63,11 +73,22 @@ def parse_args() -> argparse.Namespace:
 async def main() -> int:
     args = parse_args()
     queries = args.query or list(DEFAULT_QUERIES)
+    expectations = _parse_expectations(args.expect)
+    queries = _dedupe_queries([*queries, *expectations.keys()])
     async with httpx.AsyncClient(
         base_url=args.base_url.rstrip("/"),
         timeout=max(args.timeout, 0.1),
     ) as client:
-        results = [await _run_one(client, query, args.limit, args.allow_empty) for query in queries]
+        results = [
+            await _run_one(
+                client,
+                query,
+                args.limit,
+                args.allow_empty,
+                expected_first_result=expectations.get(query),
+            )
+            for query in queries
+        ]
 
     payload = {
         "base_url": args.base_url.rstrip("/"),
@@ -85,6 +106,7 @@ async def _run_one(
     query: str,
     limit: int,
     allow_empty: bool,
+    expected_first_result: str | None = None,
 ) -> SmokeResult:
     try:
         response = await client.get(f"/search?{urlencode({'q': query, 'limit': max(limit, 1)})}")
@@ -99,13 +121,55 @@ async def _run_one(
     if count:
         first = results[0]
         if isinstance(first, dict):
-            first_result = str(first.get("product_name_ko") or first.get("brand_ko") or "")
+            first_result = _display_name_from_result(first)
+    ok = allow_empty or count > 0
+    if expected_first_result is not None:
+        ok = ok and first_result == expected_first_result
     return SmokeResult(
         query=query,
         count=count,
-        ok=allow_empty or count > 0,
+        ok=ok,
         first_result=first_result,
+        expected_first_result=expected_first_result,
     )
+
+
+def _display_name_from_result(result: dict[str, object]) -> str:
+    return str(
+        result.get("product_name_display_ko")
+        or result.get("product_name_ko")
+        or result.get("product_name_display_en")
+        or result.get("product_name_en")
+        or result.get("brand_ko")
+        or ""
+    )
+
+
+def _parse_expectations(values: list[str]) -> dict[str, str]:
+    expectations: dict[str, str] = {}
+    for value in values:
+        if "=" not in value:
+            raise ValueError(f"--expect must use 'query=expected display name': {value}")
+        query, expected = value.split("=", 1)
+        query = query.strip()
+        expected = expected.strip()
+        if not query or not expected:
+            raise ValueError(f"--expect must include both query and expected value: {value}")
+        expectations[query] = expected
+    return expectations
+
+
+def _dedupe_queries(values: list[str]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        query = value.strip()
+        key = query.casefold()
+        if not query or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(query)
+    return deduped
 
 
 if __name__ == "__main__":

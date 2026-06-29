@@ -20,6 +20,7 @@ class IngestionSummary:
     job_count: int = 0
     completed_jobs: int = 0
     failed_jobs: int = 0
+    reset_stale_jobs: int = 0
     failures: list[str] = field(default_factory=list)
     started_at: str | None = None
     finished_at: str | None = None
