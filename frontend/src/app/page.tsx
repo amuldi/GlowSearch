@@ -1091,14 +1091,13 @@ function ProductCard({ product }: { product: Product }) {
           <dl className="min-w-0 space-y-1">
             {displayProductName ? (
               <div>
-              <dt className="text-[11px] font-medium text-neutral-500">제품명</dt>
-              <dd>{name}</dd>
-              </div>
-            ) : null}
-            {displayProductNameEn ? (
-              <div>
-                <dt className="text-[11px] font-medium text-neutral-500">영문 제품명</dt>
-                <dd className="whitespace-normal break-words text-xs font-medium leading-4 text-neutral-700">{displayProductNameEn}</dd>
+                <dt className="text-[11px] font-medium text-neutral-500">제품명</dt>
+                <dd>
+                  {name}
+                  {displayProductNameEn ? (
+                    <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-neutral-400">{displayProductNameEn}</p>
+                  ) : null}
+                </dd>
               </div>
             ) : null}
             {originalPriceText ? (
