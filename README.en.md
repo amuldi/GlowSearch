@@ -1,6 +1,6 @@
 # GlowSearch
 
-A multi-source K-beauty cosmetics search engine.
+cosmetics search engine.
 
 Search by brand name, English name, sub-brand, product name, category, or shade. Product data is normalized and indexed from multiple trusted sources. Searches hit the TTL cache → SQLite FTS5 index → live collectors in order, returning results as fast as possible.
 
