@@ -22,6 +22,7 @@ export async function searchProducts(
   const url = new URL("/search", API_BASE_URL);
   url.searchParams.set("q", params.query);
   if (params.limit) url.searchParams.set("limit", String(params.limit));
+  if (params.index_only) url.searchParams.set("index_only", "true");
 
   const response = await fetch(url, { method: "GET", signal, headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error(`검색 요청 실패: ${response.status}`);

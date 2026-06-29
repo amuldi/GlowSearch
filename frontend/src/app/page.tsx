@@ -50,6 +50,7 @@ export default function Home() {
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [sourceFilter, setSourceFilter] = useState<"all" | "oliveyoung" | "musinsa" | "official">("all");
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefining, setIsRefining] = useState(false);
   const [isSearchButtonPressed, setIsSearchButtonPressed] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
@@ -128,6 +129,7 @@ export default function Home() {
     if (!trimmedSubmittedQuery) {
       searchRequestIdRef.current += 1;
       setIsLoading(false);
+      setIsRefining(false);
       setErrorMessage(null);
       return;
     }
@@ -138,15 +140,31 @@ export default function Home() {
     const runSearch = async () => {
       const startedAt = Date.now();
       setIsLoading(true);
+      setIsRefining(false);
       setErrorMessage(null);
+      const limit = isSubmittedBatchQuery ? Math.min(submittedQueryCount, MAX_RESULT_LIMIT) : resultLimit;
+
+      // Phase 1: fire index-only request immediately (skip for batch queries)
+      let fullResponseArrived = false;
+      if (!isSubmittedBatchQuery) {
+        searchProducts({ query: trimmedSubmittedQuery, limit, index_only: true }, controller.signal)
+          .then((fastData) => {
+            if (fullResponseArrived) return;
+            if (searchRequestIdRef.current !== requestId) return;
+            if (fastData.results.length > 0) {
+              setResponse(fastData);
+              setIsLoading(false);
+              setIsRefining(true);
+            }
+          })
+          .catch(() => {});
+      }
+
+      // Phase 2: full search with live collection
       try {
-        const data = await searchProducts(
-          {
-            query: trimmedSubmittedQuery,
-            limit: isSubmittedBatchQuery ? Math.min(submittedQueryCount, MAX_RESULT_LIMIT) : resultLimit,
-          },
-          controller.signal,
-        );
+        const data = await searchProducts({ query: trimmedSubmittedQuery, limit }, controller.signal);
+        fullResponseArrived = true;
+        if (searchRequestIdRef.current !== requestId) return;
         setResponse(data);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -159,6 +177,7 @@ export default function Home() {
         }
         if (searchRequestIdRef.current === requestId) {
           setIsLoading(false);
+          setIsRefining(false);
         }
       }
     };
@@ -425,6 +444,11 @@ export default function Home() {
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose" />
             </span>
             상품과 브랜드 정보를 찾는 중
+          </div>
+        ) : isRefining ? (
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-1.5 text-xs font-semibold text-neutral-500 shadow-soft">
+            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+            추가 결과 불러오는 중
           </div>
         ) : null}
           </>
@@ -1017,7 +1041,7 @@ function ProductCard({ product }: { product: Product }) {
     window.setTimeout(() => setCopied(false), 1200);
   };
 
-  const image = (
+  const imageEl = (
     <div className="h-24 w-24 overflow-hidden rounded-lg bg-blush-soft">
       {product.image_url ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -1033,17 +1057,28 @@ function ProductCard({ product }: { product: Product }) {
     </div>
   );
 
+  const image = product.source_url ? (
+    <a
+      href={product.source_url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`${displayProductName ?? "상품"} 상세 페이지 열기`}
+      className="block shrink-0"
+    >
+      {imageEl}
+    </a>
+  ) : (
+    <div className="shrink-0">{imageEl}</div>
+  );
+
   const name = (
     <h2 className="line-clamp-2 text-sm font-semibold leading-5 text-ink">
       {displayProductName}
     </h2>
   );
 
-  const accentColor = sourceKey(product.source) ? SOURCE_ACCENT_COLORS[sourceKey(product.source)!] : null;
-
   return (
-    <article className="relative grid grid-cols-[96px_1fr] gap-4 overflow-hidden rounded-lg border border-blush/45 bg-white p-3 shadow-soft transition duration-150 hover:-translate-y-0.5 hover:border-rose/45 hover:shadow-[0_14px_36px_rgba(74,54,63,0.10)]">
-      {accentColor && <span className={`pointer-events-none absolute inset-y-0 left-0 w-[3px] ${accentColor}`} />}
+    <article className="grid grid-cols-[96px_1fr] gap-4 rounded-lg border border-blush/45 bg-white p-3 shadow-soft transition duration-150 hover:-translate-y-0.5 hover:border-rose/45 hover:shadow-[0_14px_36px_rgba(74,54,63,0.10)]">
       {image}
 
       <div className="min-w-0">
@@ -1149,12 +1184,6 @@ const SOURCE_BADGE_COLORS: Record<string, string> = {
   oliveyoung: "border-oy-green/60 bg-oy-green-soft/70 text-oy-green",
   musinsa: "border-ms-black/30 bg-ms-soft text-ms-black",
   official: "border-official-gold/60 bg-official-soft text-official-gold",
-};
-
-const SOURCE_ACCENT_COLORS: Record<string, string> = {
-  oliveyoung: "bg-oy-green",
-  musinsa: "bg-ms-black",
-  official: "bg-official-gold",
 };
 
 function sourceKey(source: string): string | null {

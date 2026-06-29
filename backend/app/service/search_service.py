@@ -255,6 +255,35 @@ class SearchService:
                 source_errors=[],
             )
 
+        # index_only: skip live collection, return best available local results immediately
+        if criteria.index_only and not require_relevant:
+            if indexed_results and (indexed_top_score > 0 or indexed_collected.has_official_records):
+                await self._cache.set(cache_key, indexed_collected)
+                self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
+                return SearchResponse(
+                    query=cleaned_query,
+                    count=len(indexed_results),
+                    results=indexed_results,
+                    source_errors=[],
+                )
+            verified_collected = await self._collect_verified_cache(collect_queries, collect_limit)
+            verified_results, verified_top_score = self._build_results(
+                verified_collected.records,
+                cleaned_query,
+                effective_criteria,
+                brand_match,
+                preserve_order=True,
+            )
+            if verified_results and verified_top_score > 0:
+                await self._cache.set(cache_key, verified_collected)
+                return SearchResponse(
+                    query=cleaned_query,
+                    count=len(verified_results),
+                    results=verified_results,
+                    source_errors=[],
+                )
+            return SearchResponse(query=cleaned_query, count=0, results=[], source_errors=[])
+
         collected = None
         collected_from_live = False
         if collected is None:

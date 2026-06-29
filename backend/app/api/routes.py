@@ -51,6 +51,7 @@ async def search(
     max_price: Annotated[int | None, Query(ge=0, description="최대 가격")] = None,
     has_shade: Annotated[bool | None, Query(description="색상/호수 존재 여부")] = None,
     limit: Annotated[int, Query(ge=1, le=480, description="반환 개수")] = 48,
+    index_only: Annotated[bool, Query(description="인덱스 결과만 반환 (라이브 수집 건너뜀)")] = False,
     service: SearchService = Depends(get_search_service),
     analytics: InMemorySearchAnalytics = Depends(get_search_analytics),
 ) -> SearchResponse:
@@ -66,6 +67,7 @@ async def search(
         max_price=max_price,
         has_shade=has_shade,
         limit=min(limit, settings.max_results),
+        index_only=index_only,
     )
     return await service.search(term, criteria)
 

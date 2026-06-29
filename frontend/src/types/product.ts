@@ -60,6 +60,7 @@ export type SuggestionResponse = {
 export type SearchParams = {
   query: string;
   limit?: number;
+  index_only?: boolean;
 };
 
 export type EditorParsedLine = {

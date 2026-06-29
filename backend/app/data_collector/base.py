@@ -23,3 +23,4 @@ class SearchCriteria:
     has_shade: bool | None = None
     limit: int = 24
     record_gaps: bool = True
+    index_only: bool = False
