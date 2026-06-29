@@ -61,6 +61,8 @@ services:
         value: 4.0
       - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RATE_LIMIT_PER_SECOND
         value: 1.0
+      - key: GLOWSEARCH_BRAND_SHOPIFY_ENABLED
+        value: true
       - key: GLOWSEARCH_OLIVEYOUNG_HTML_COLLECTOR_ENABLED
         value: false
       - key: GLOWSEARCH_BROWSER_COLLECTOR_ENABLED
@@ -86,15 +88,15 @@ services:
       - key: GLOWSEARCH_PRODUCT_INDEX_VERIFIED_CATALOG_BACKFILL_ON_STARTUP
         value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT
-        value: 24
+        value: 48
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY
-        value: 1
+        value: 2
       - key: GLOWSEARCH_PRODUCT_INDEX_MAX_SEED_QUERIES
-        value: 80
+        value: 160
       - key: GLOWSEARCH_PRODUCT_INDEX_BRAND_REGISTRY_WARMUP_ENABLED
         value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_BRAND_REGISTRY_WARMUP_LIMIT
-        value: 80
+        value: 160
       - key: GLOWSEARCH_PRODUCT_INDEX_DETAIL_ENRICHMENT_ENABLED
         value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_DETAIL_ENRICHMENT_MAX_RECORDS
