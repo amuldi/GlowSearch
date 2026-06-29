@@ -1,8 +1,8 @@
 # GlowSearch
 
-멀티 소스 기반 화장품 상품 검색 엔진입니다.
+K-뷰티 멀티소스 화장품 검색 엔진입니다.
 
-GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리 키워드, 색상/호수로 화장품을 검색하고, 캐시/검색 인덱스/백그라운드 수집으로 검색 커버리지를 확장하는 Next.js + FastAPI 프로젝트입니다. 단순 검색 UI가 아니라, 여러 신뢰 가능한 source의 상품 데이터를 정규화하고 색인해 사용자가 원하는 화장품 정보를 정확하고 완성도 높게 보여주는 검색 서비스입니다.
+브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리, 색상/호수로 화장품을 검색할 수 있습니다. 여러 신뢰 가능한 소스의 상품 데이터를 정규화·색인하고, TTL 캐시 → SQLite FTS5 인덱스 → 라이브 수집기 순서로 빠르게 결과를 반환합니다.
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)
@@ -13,599 +13,252 @@ GlowSearch는 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리
 ![Vercel](https://img.shields.io/badge/Vercel-Frontend-black?logo=vercel)
 ![Render](https://img.shields.io/badge/Render-Backend-46E3B7?logo=render&logoColor=black)
 
+---
+
 ## 배포 링크
 
-| 항목 | URL |
+| | URL |
 | --- | --- |
-| Frontend | [https://frontend-plum-six-32.vercel.app/](https://frontend-plum-six-32.vercel.app/) |
-| Last verified Vercel deployment | [https://frontend-ofci21r0i-amuldis-projects.vercel.app/](https://frontend-ofci21r0i-amuldis-projects.vercel.app/) |
+| Frontend | [https://frontend-plum-six-32.vercel.app](https://frontend-plum-six-32.vercel.app) |
 | Backend health | [https://glowsearch-backend.onrender.com/health](https://glowsearch-backend.onrender.com/health) |
 | Search API 예시 | [https://glowsearch-backend.onrender.com/search?q=%EB%A1%9C%EC%85%98&limit=4](https://glowsearch-backend.onrender.com/search?q=%EB%A1%9C%EC%85%98&limit=4) |
 
-백엔드의 현재 배포 커밋은 `/health` 응답의 `release_sha`로 확인할 수 있습니다.
+현재 배포 커밋은 `/health` 응답의 `release_sha`로 확인할 수 있습니다.
 
-## 최근 업데이트
+---
 
-### 2026-06-29
+## 왜 만들었나
 
-이번 업데이트는 편집자 모드의 일괄 export 기능, 멀티 소스 수집기 구현, 소스별 UI/UX 리디자인을 담은 변경입니다.
+화장품 검색은 한글 브랜드명, 영문 브랜드명, 하위 브랜드, 상품명, 성분명, 카테고리명이 뒤섞여 원하는 상품을 찾기 어렵습니다. `too cool`, `TOO COOL FOR SCHOOL`, `투쿨포스쿨`은 같은 브랜드를 가리키고, `정샘물`로 검색할 때는 `비긴스 바이 정샘물` 같은 하위 브랜드도 함께 고려해야 합니다.
 
-- `typesense_provider.py`를 삭제했습니다. 구현 없이 `NotImplementedError`만 있는 미사용 stub이었습니다.
-- 프론트 `product.ts`에서 `AdapterReadiness`, `DiagnosticsResponse`, `EditorConfirmRequest`, `EditorConfirmResponse` 타입을 제거했습니다. 화면에서 실제 사용하지 않는 타입입니다.
-- `api.ts`를 정리했습니다. `fetchDiagnostics()`, `confirmEditorCandidate()`를 제거하고, retry/worker 루프를 간결화했습니다.
-- **편집자 모드에 YouTube 설명란 일괄 export 버튼을 추가했습니다.** "YouTube 설명란" 버튼은 선택한 후보의 제품명과 구매 링크를 포함한 텍스트를 클립보드에 복사합니다. "목록만" 버튼은 링크 없이 제품명만 복사합니다. 복사 후 1.5초간 "복사됨" 피드백이 표시됩니다.
-- **무신사 뷰티 직접 수집기 (`backend/app/data_collector/musinsa.py`)를 추가했습니다.** `GLOWSEARCH_MUSINSA_DIRECT_ENABLED=true`로 활성화합니다. bot detection 응답은 `SourceUnavailableError`로 graceful fallback 처리합니다.
-- **브랜드 공식 Shopify 스토어 수집기 (`backend/app/data_collector/brand_shopify.py`)를 추가했습니다.** `GLOWSEARCH_BRAND_SHOPIFY_ENABLED=true`로 활성화합니다. `brand_registry.json`의 `sources` 도메인에서 Shopify 표준 `/products.json` API를 사용합니다. 검색어에 브랜드명 alias가 포함된 경우에만 해당 브랜드 스토어를 조회합니다.
-- `config.py`에 `musinsa_direct_enabled`, `musinsa_direct_timeout_seconds`, `musinsa_direct_page_size`, `brand_shopify_enabled`, `brand_shopify_timeout_seconds`를 추가했습니다.
-- `factory.py`에 두 수집기를 연결했습니다. `source_time_budgets`에 `"musinsa"`, `"official"` source timeout도 반영했습니다.
-- **검색 결과에 소스 필터 탭을 추가했습니다 (전체 / 올리브영 / 무신사 / 공식몰).** 각 탭에 해당 소스 결과 수 badge를 표시합니다. 필터 활성 시 페이지네이션 없이 해당 소스 전체 결과를 보여줍니다.
-- 소스별 브랜드 색상을 Tailwind config에 추가했습니다: 올리브영(`#00a862`), 무신사(`#161616`), 공식몰(`#b07d3a`).
-- 소스 badge와 제품 카드에 소스별 색상을 적용했습니다. 제품 카드 왼쪽 3px accent 스트라이프로 소스를 구분할 수 있습니다.
+GlowSearch는 매 요청마다 전체를 크롤링하지 않고, 소스 데이터를 수집·정규화·색인해 캐시와 인덱스를 먼저 조회합니다. 뷰티 유튜버 편집자에게 필요한 제품명 정리, 영문명 확인, YouTube 설명란 export 기능도 함께 제공합니다.
 
-### 2026-06-21
+---
 
-이번 업데이트는 verified catalog를 계속 확장하기 위한 운영 대기열과 source-backed 영문 제품명 병합 품질을 보강한 변경입니다.
+## 주요 기능
 
-- `backend/scripts/export_catalog_enrichment_targets.py`를 추가했습니다. 운영자는 `product_name_en`, `image_url`, `price`, `brand_en`이 부족한 source record를 `csv`, `json`, `jsonl`로 뽑아 작은 batch 검수 작업에 바로 사용할 수 있습니다.
-- `backend/scripts/audit_catalog_enrichment_sources.py`를 추가했습니다. 보강 target의 source URL을 제한된 개수만 확인해 JSON-LD/meta/title에 Latin 상품명이 있는지 감리합니다. Latin 후보가 없으면 catalog에 영문명을 쓰지 않습니다.
-- source enrichment audit는 `candidate_rejection_reason`으로 `fetch_error`, `mixed_language_without_latin_product_name`, `korean_or_mixed_evidence_only`, `latin_evidence_rejected_low_confidence`, `non_positive_price_evidence` 같은 사유를 함께 출력합니다.
-- 같은 audit는 JSON-LD/meta에서 `candidate_image_url`, `candidate_price`, `candidate_currency`도 읽어 보여주며, 가격 `0`처럼 실제 판매가로 볼 수 없는 값은 usable 후보와 출력 후보 가격에서 제외합니다.
-- source enrichment audit는 `usable_for_target_field`를 함께 출력합니다. `product_name_en`, `image_url`, `price` 중 현재 보강 대상 필드에 실제 반영 가능한 source evidence가 있을 때만 `true`가 됩니다.
-- `backend/scripts/refresh_coverage.py`에 `--plan-only`를 추가했습니다. 운영자는 catalog queue를 건드리기 전에 이번 실행에서 등록될 coverage query를 JSON으로 preview할 수 있습니다.
-- `refresh_coverage.py --reset-stale-running-minutes N`으로 오래 멈춘 `running` catalog job을 실행 전 복구할 수 있습니다. 이번 로컬 점검에서는 60분 이상 멈춘 running job 174개를 pending/failed 상태로 회수했습니다.
-- `/index/catalog/run`도 `reset_stale_running_minutes` query parameter를 지원합니다. Render 운영에서 admin token으로 작은 batch를 실행할 때 오래 멈춘 job을 먼저 회수하고, 응답의 `reset_stale_jobs`로 복구 개수를 확인할 수 있습니다.
-- catalog ingestion agent가 normalizer를 거쳐 index에 저장하도록 보강했습니다. 새로 수집되는 Olive Young 공개 JSON 결과도 brand registry 기반 `brand_en`, 정규화 URL, 품질 필드를 index에 반영합니다.
-- SQLite product index가 `product_name_display_ko`와 `product_name_display_en`을 저장하고 검색 FTS에도 포함합니다. verified catalog backfill 후 `페리페라 스키니브로우`는 raw 상품명과 별도로 표시용 상품명 `스피디 스키니 브로우` / `Speedy Skinny Brow`를 index row에 보존합니다.
-- `backend/scripts/audit_index_quality.py`를 추가했습니다. verified catalog뿐 아니라 실제 SQLite index 전체의 필수 필드, 표시용 상품명 오염, source별 보강 대기량을 같은 JSON 포맷으로 확인할 수 있습니다.
-- `backend/scripts/backfill_index_normalized_fields.py`를 추가했습니다. brand registry나 상품명 정제 규칙을 바꾼 뒤 기존 SQLite index row의 `brand_en`, 표시용 상품명, FTS 검색 필드를 dry-run/apply 방식으로 재정규화할 수 있습니다. `--recompute-display-names --source-prefix oliveyoung` 옵션으로 verified official 표시명은 보존하면서 Olive Young raw 상품명만 재정제할 수 있습니다.
-- 이번 로컬 DB backfill에서 누적 3,188개 row를 갱신했습니다. 표시용 한글 상품명 2,944개, 영문 브랜드명 2,124개, 표시용 영문 상품명 5개가 채워졌고, 재실행 dry-run 기준 변경 대기 row는 0개입니다.
-- Olive Young 표시용 상품명 recompute로 98개 row에서 용량, SPF/PA, `본품+리필`, 증량, `ml*ea`, `ml+증정품` 같은 구성 suffix를 제거했습니다. 예: `워터풀 톤업 선크림 65ml +`는 `워터풀 톤업 선크림`, `프로래스팅 결핏 메쉬 쿠션 SPF50+ PA++++`는 `프로래스팅 결핏 메쉬 쿠션`, `바이오힐 보 프로바이오덤 3D 리프팅 에센셜 토너`는 `프로바이오덤 3D 리프팅 에센셜 토너`, `석류 립밤 듀오팩 버츠비 석류 립밤 4.25g x 2`는 `석류 립밤 듀오팩`으로 정리됩니다.
-- index 품질 audit의 표시명 검사 범위를 강화했습니다. 이제 `[기획]`, `단품`, `Colors`, 브랜드 prefix뿐 아니라 trailing `SPF/PA`, `ml*ea`, `ml+증정품`, `본품+리필` 구성 suffix도 `dirty_display_*` issue로 감지하고, `--fail-on-dirty-display` 배포 전 gate에서 실패시킵니다.
-- 이번 로컬 index audit 기준 `product_index.sqlite3`는 2,880개 source record이며, 필수 필드 결손 0건, 표시용 상품명 오염 0건, 평균 품질 점수 95.8점입니다. 보강 대기는 영문 제품명 2,862건, 영문 브랜드명 698건입니다.
-- brand registry에 공식 도메인이 확인된 `S.NATURE`, `medicube`, `COSNORI`, `OBgE`, `URIAGE`, `ZEROID`, `Clinique`, `Burt's Bees`, `belif`, `Centellian24`, `REJURAN`, `DEWYTREE`, `Neutrogena`, `The Body Shop`, `Mentholatum`, `The Ordinary`, `ANESSA`, `Bifesta`, `Carmex`, `SIMIHAZE BEAUTY`, `FRESHIAN`, `WELLAGE`, `HANYUL`, `primera`, `P.CALM`, `NEOGEN`, `Milk Baobab`, `TONYMOLY`, `Blistex`, `NARKA`, `su:m37°`, `UIQ`, `IOPE`, `GRAFEN`, `Dr. Different`, `Rovectin`, `SUNGBOON EDITOR`, `Easydew`, `HANSKIN`, `Biodance`, `Dermatory`, `KATE`, `ilso`, `Hada Labo`, `Johnson's`, `MdoC`, `THE FACE SHOP`, `Kamill`, `L'OCCITANE`, `LAGOM`, `LAB SERIES`, `BIOTHERM`, `Paula's Choice`, `MEDIPEEL`, `TOOQ`, `Dr.Althea`, `Lazy Society`, `CAREZONE`, `Acnes`, `9wishes`, `Real Barrier`, `Derma Factory`, `DALIF`, `PURCELL`, `Parnell`, `ONE THING`, `SO NATURAL`, `Dear Dahlia`, `athe`, `pleuvoir`, `Dr.Orga`, `GOONGBE`, `THE LAB by blanc doux`, `THE TOOL LAB`, `Papa Recipe`, `NUXE`, `Gillette`, `Himalaya`, `GIVERNY`, `2aN`, `Dr.Bio`를 추가했습니다. 이 보강으로 local index의 영문 브랜드명 누락은 1,314건에서 698건으로 줄었습니다.
-- brand registry에 공식 도메인이 확인된 `BEYOND`/`Benton`을 추가했습니다. `비욘드 수분` 소량 refresh 결과, 로컬 index row의 영문 브랜드명이 `BEYOND`로 저장되는 것을 확인했습니다.
-- `backend/scripts/audit_export_normalization.py`를 추가했습니다. `products_export.csv`를 catalog/index에 승격하기 전에 브랜드 보정, 표시용 상품명 정제, 필수 locator, 평점/리뷰/options/sold_out 보유량을 점검합니다.
-- enrichment target export는 `official > oliveyoung-global > musinsa > oliveyoung` 순으로 우선 source를 고릅니다. 영문 제품명은 canonical 상품 단위로 dedupe하고, 이미지/가격은 source offer 단위로 추적합니다.
-- export row에는 `priority`, `field`, `canonical_product_id`, `source`, `source_url`, `brand_ko`, `brand_en`, `product_name_display_ko`, `search_query`, `reason`이 포함됩니다.
-- 현재 verified catalog는 44개 source record이며, source별로 Olive Young 18개, Musinsa 6개, Official 13개, Hwahae 3개, Glowpick 2개, Coupang 1개, Fude Japan 1개를 포함합니다.
-- 현재 source 기반 영문 제품명(`product_name_en`) 보유 항목은 18개입니다. canonical 기준 영문 제품명 보강 대기 상품은 24개입니다.
-- 현재 catalog 품질 audit 기준 필수 필드 결손은 0건, 표시용 상품명 오염은 0건입니다. 이미지 보강 대기 항목은 4건, 가격 보강 대기 항목은 2건입니다.
-- 현재 catalog에는 표시용 한글 상품명 override 33개, 표시용 영문 상품명 override 13개가 들어 있습니다.
-- catalog 품질 audit는 표시용 상품명에 브랜드명이 다시 붙는 `brand_prefixed_display_name` 회귀도 감지합니다.
-- KISS ME/Heavy Rotation 공식 페이지에서 `COLORING EYEBROW EX` 영문 제품명을 확인해 `키스미 헤비로테이션 컬러링 아이브로우 EX`에 official source offer와 영문 표시명을 보강했습니다.
-- HERA 공식 JSON-LD에서 `SOFT FINISH LOOSE POWDER` 상품 이미지를 확인해 official source offer에 보강했습니다. 공식 페이지 가격은 `0`으로 내려와 실제 판매가로 볼 수 없어 가격은 저장하지 않았습니다.
-- JUNGSAEMMOOL 공식 JSON-LD에서 `정샘물 아티스트 콜 펜 라이너` 상품 이미지와 가격 정보를 확인해 official source offer 보강 테스트를 추가했습니다.
-- the SAEM 공식 상품 페이지에서 `Cover Perfection Tip Concealer` 이미지와 색상 option 목록을 확인해 `더샘 커버 퍼펙션 팁 컨실러` verified record에 보강했습니다.
-- HAKUHODO 공식 Shopify product page에서 `G5512`, `G5513` 브러시 이미지를 확인해 official source record에 보강했습니다.
-- Fude Japan 공개 상품 목록에서 `S191 Eyeliner Brush Round` 이미지를 확인해 `하쿠호도 S191` source record에 보강했습니다.
-- ANCCI 공식 상품 페이지에서 `ebony 42` 상품 이미지를 확인해 official source record에 보강했습니다.
-- Glowpick 공개 상품 meta에서 `오렌즈 글로이 티어 원데이 그레이` 이미지를 확인해 source record에 보강했습니다. 영문 제품명은 source에서 확정되지 않아 만들지 않았습니다.
-- Glowpick JSON-LD에서 `클리오 프로 아이 팔레트 에어` 대표 이미지, 평점, 리뷰 수를 확인해 source record에 보강했습니다.
-- 같은 canonical 상품 안에 official source가 이미 영문 제품명을 제공하면, Olive Young record에 영문명이 없어도 별도 보강 대상으로 잡지 않습니다.
-- `키스미 아이브로우`는 일반 검색과 편집자 일괄정리 후보에서 `헤비로테이션 컬러링 아이브로우 EX` / `COLORING EYEBROW EX`로 병합됩니다.
-- 편집자 모드의 내부 운영 상태 패널과 일괄 복사/export 버튼은 현재 UI에서 숨겼습니다. 개별 상품 복사와 source-backed 후보 확인 흐름은 유지합니다.
-- Olive Young Global은 도메인은 응답하지만 현재 curl 기반 본문 수집이 0바이트로 내려오는 상태라, 차단 우회 없이 보수적으로 비활성 source로 취급합니다.
-- 영문 제품명은 계속 source, verified catalog, 공식/공개 API, JSON-LD, 공식 홈페이지, Olive Young Global, Musinsa Beauty 등에서 확인된 경우에만 저장합니다. 자동 번역이나 추측 매핑은 하지 않습니다.
-
-운영자가 전체 보강 대상을 뽑는 명령:
-
-```bash
-cd backend
-.venv/bin/python scripts/export_catalog_enrichment_targets.py \
-  --max-targets 40 \
-  --format csv
-```
-
-실행 전 coverage query만 확인할 때:
-
-```bash
-cd backend
-.venv/bin/python scripts/refresh_coverage.py \
-  --query 수분 \
-  --max-queries 5 \
-  --coverage-pairs 2 \
-  --plan-only
-```
-
-오래 멈춘 catalog job을 복구하면서 작은 batch를 처리할 때:
-
-```bash
-cd backend
-.venv/bin/python scripts/refresh_coverage.py \
-  --query "비욘드 수분" \
-  --no-default-seeds \
-  --no-gaps \
-  --coverage-pairs 0 \
-  --max-jobs 1 \
-  --limit 12 \
-  --reset-stale-running-minutes 60
-```
-
-JSONL로 batch 검수 queue를 만들 때:
-
-```bash
-cd backend
-.venv/bin/python scripts/export_catalog_enrichment_targets.py \
-  --max-targets -1 \
-  --format jsonl \
-  --output ../data/catalog_enrichment_targets.jsonl
-```
-
-공식몰 source부터 우선 검수할 때:
-
-```bash
-cd backend
-.venv/bin/python scripts/export_catalog_enrichment_targets.py \
-  --source official \
-  --max-targets 20 \
-  --format csv
-```
-
-무신사 catalog record만 별도 검수할 때:
-
-```bash
-cd backend
-.venv/bin/python scripts/export_catalog_enrichment_targets.py \
-  --source musinsa \
-  --field product_name_en \
-  --max-targets 20 \
-  --format csv
-```
-
-이미지 누락만 별도 검수할 때:
-
-```bash
-cd backend
-.venv/bin/python scripts/export_catalog_enrichment_targets.py \
-  --field image_url \
-  --max-targets 20 \
-  --format csv
-```
-
-가격 누락만 JSON으로 확인할 때:
-
-```bash
-cd backend
-.venv/bin/python scripts/export_catalog_enrichment_targets.py \
-  --field price \
-  --max-targets 20 \
-  --format json
-```
-
-공식 source URL이 실제로 영문 제품명을 제공하는지 확인할 때:
-
-```bash
-cd backend
-.venv/bin/python scripts/audit_catalog_enrichment_sources.py \
-  --source official \
-  --field product_name_en \
-  --max-targets 10 \
-  --format json
-```
-
-이 명령은 source URL의 JSON-LD/meta/title만 검사하고 catalog를 수정하지 않습니다. `usable_for_product_name_en=false`이면 확인된 Latin 상품명이 없다는 뜻이고, `usable_for_target_field=false`이면 현재 보강 대상 필드에 바로 반영 가능한 source evidence가 없다는 뜻입니다. 자동 번역이나 추측값으로 채우지 않고 보강 대기 상태로 남깁니다.
-
-실제로 catalog에 반영 가능한 Latin 후보만 보고 싶을 때:
-
-```bash
-cd backend
-.venv/bin/python scripts/audit_catalog_enrichment_sources.py \
-  --field product_name_en \
-  --max-targets -1 \
-  --only-usable \
-  --format csv
-```
-
-최근 검증 결과:
-
-- 백엔드 전체 테스트: `278 passed`
-- Ruff: 통과
-- 프론트 production build: 통과
-
-### 2026-06-19
-
-이번 업데이트는 verified catalog를 계속 서비스 수준으로 다듬기 위한 반복 점검 도구와 표시명 품질 기준을 추가한 변경입니다.
-
-- `backend/scripts/audit_catalog_quality.py`를 추가했습니다. 운영자는 verified catalog의 필수 필드 결손, 지저분한 표시용 상품명, 영문 제품명/이미지/가격 enrichment backlog를 JSON으로 확인할 수 있습니다.
-- catalog 품질 audit는 `--fail-on-required`, `--fail-on-dirty-display` 옵션을 지원합니다. CI나 배포 전 점검에서 필수 필드가 없거나 `[기획]`, `단품`, `Colors`, 괄호형 프로모션 문구가 표시용 상품명에 남으면 실패시킬 수 있습니다.
-- 현재 verified catalog는 41개 상품이며, source별로 Olive Young 18개, Musinsa 6개, Official 10개, Hwahae 3개, Glowpick 2개, Coupang 1개, Fude Japan 1개를 포함합니다.
-- 현재 catalog 품질 audit 기준 필수 필드 결손은 0건, 표시용 상품명 오염은 0건입니다.
-- 현재 source 기반 영문 제품명(`product_name_en`) 보유 항목은 13개입니다. 나머지 28개는 source가 영문 제품명을 제공하지 않았거나 아직 verified catalog에 확인값이 없어 enrichment backlog로 남습니다.
-- `ProductSourceRecord`와 verified catalog에 `product_name_display_ko`, `product_name_display_en` override를 추가했습니다. raw source 상품명은 보존하되, 카드/복사/export에는 검증된 표시용 상품명을 우선 사용합니다.
-- 현재 catalog에는 표시용 한글 상품명 override 33개, 표시용 영문 상품명 override 13개가 들어 있습니다.
-- HERA 공식 상품 페이지에서 `SOFT FINISH LOOSE POWDER` 영문 제품명을 확인해 `헤라 소프트 피니시 루스 파우더 15g`에 official source offer와 영문 표시명을 보강했습니다.
-- HOURGLASS 공식 상품 페이지에서 `Vanish™ Airbrush Concealer` 영문 제품명을 확인해 `아워글래스 배니쉬 에어브러쉬 컨실러`에 official source offer와 영문 표시명을 보강했습니다. 기존 Musinsa verified record의 한글 shade `스톤`은 유지하고, 공식 record는 영문 상품명 보강 source로만 병합합니다.
-- 표시용 상품명 정제에 verified shade suffix 분리 규칙을 추가했습니다. 예를 들어 `글로이 티어 원데이 그레이`는 제품명 `글로이 티어 원데이`, 호수/컬러명 `그레이`로 분리됩니다.
-- 표시용 상품명 정제 규칙을 보강했습니다. 예를 들어 `(클리오X국가유산청) 프로 아이 팔레트 에어`는 `프로 아이 팔레트 에어`, `포뷰트 두피 타투15g 블랙/브라운 단품/기획`은 `두피 타투`로 표시됩니다.
-- catalog 전체를 정규화했을 때 `[ ]`, `기획`, `단품`, `택1`, `Colors`, 괄호형 프로모션 문구가 표시용 상품명에 남는 케이스가 없도록 테스트를 추가했습니다.
-- 공식/source에서 확인 가능한 신규 영문 제품명이 없는 항목은 임의 번역하지 않았습니다. 영문 제품명 결손은 audit 결과의 `missing_product_name_en`으로 추적합니다.
-
-### 2026-06-17
-
-이번 업데이트는 편집자 일괄 정리 모드의 운영 안정성, 보강 대기 queue, 배포 URL 혼선을 정리한 변경입니다.
-
-- 편집자 일괄 정리 UI가 입력을 라인 단위 작은 요청으로 나눠 처리합니다. 운영 백엔드가 느리거나 특정 라인이 실패해도 전체 결과가 깨지지 않고, 완료된 행은 즉시 정리 결과에 누적됩니다.
-- 진행 중에는 `후보를 찾는 중 n/전체` 형태로 진행률을 표시합니다.
-- 개별 라인 요청이 실패하면 source 기반 정보를 임의 생성하지 않고 `수동 확인 필요` 행으로 남깁니다.
-- verified catalog를 39개로 늘렸고, source 기반 영문 제품명 보유 항목은 5개로 늘렸습니다.
-- `페리페라 스키니브로우`는 CLUBCLIO 공식 Shopify JSON/JSON-LD source로 `[PERIPERA] Speedy Skinny Brow` 영문 제품명과 official source offer를 보강했습니다.
-- `캔메이크 아라 카푸치노`는 CANMAKE 공식 상품 페이지의 색상 데이터로 `[15]Cappuccino Pink` 색상명을 보강했습니다. 공식 페이지에서 영문 상품명 본문은 확인되지 않아 `product_name_en`은 만들지 않았습니다.
-- 일반 검색 관련성 판단에 verified catalog의 `search_keywords`를 반영합니다. 이 변경으로 편집자 입력에서 자주 쓰는 `아라` 같은 줄임말과 `카푸치노` 같은 색상 키워드가 검색 결과 필터에서 누락되지 않습니다.
-- 현재 source로 확인되지 않은 `어반디케이 파우더`, `어반디케이 문더스트 #글림락`, `페리페라 포근 픽싱 틴트 19호`, `아멜리 하이라이터 #432`는 계속 `수동 확인 필요`가 정상입니다.
-
-- 프론트 운영 주소는 `https://frontend-plum-six-32.vercel.app`입니다.
-- 마지막으로 수동 검증한 Vercel 고유 배포 URL은 `https://frontend-j62u2oy4n-amuldis-projects.vercel.app`입니다.
-- 프론트 최신 기능 커밋은 `be2b507dd828205ae2aba292be45916c82348b38`입니다.
-- 백엔드 Render 운영 `release_sha`는 `https://glowsearch-backend.onrender.com/health`에서 최신 Git 커밋과 일치하는지 확인합니다.
-- `https://frontend-plum-six-32.vercel.app/?mode=editor`에서 편집자 모드가 직접 열리는 것을 확인했습니다. 당시 운영 데이터 상태 패널도 노출했지만, 2026-06-21 업데이트에서 현재 UI에서는 숨겼습니다.
-- 편집자 모드 상단 상태 패널은 초기 운영 진단용으로 사용했으며, 현재 UI에서는 노출하지 않습니다. 같은 정보는 `/diagnostics`와 catalog audit/export 스크립트로 확인합니다.
-- `/diagnostics` 호출이 실패하면 source adapter를 `비활성`으로 오표시하지 않고 별도 실패 상태를 보여줍니다.
-- `/editor/batch` 호출은 Render cold start, 일시적 5xx, 429, 네트워크 오류에 대해 짧은 backoff로 재시도합니다.
-- 운영 batch에서 live source timeout이 정상 후보 행까지 수동 처리하지 않도록 editor batch 병렬도를 3으로 낮추고 줄별 timeout을 35초로 조정했습니다.
-- `클리오 치즈냥이`는 source-backed Glowpick 상품의 비노출 매칭 keyword로 보강해 `확인됨`으로 반환됩니다. 표시되는 제품명/가격/link는 기존 source 값을 그대로 사용합니다.
-- 편집자 일괄 정리에서 최종 상태가 `수동 확인 필요`인 입력은 `search_gaps`와 `catalog_jobs`에 `editor_manual_review` 사유로 기록됩니다. 운영자는 `/diagnostics`, catalog audit, enrichment target export로 최근 보강 대상을 확인하고 source 기반 catalog refresh 대상으로 사용할 수 있습니다.
-- 일반 검색 카드에서는 source 원본 링크 이동과 복사 텍스트의 `출처:` 라인을 제거했습니다. 편집자 모드 API 응답에는 source URL을 유지하지만, 현재 UI에서는 일괄 export 버튼을 노출하지 않습니다.
-- 17개 편집자 샘플 입력의 운영 결과는 `확인됨` 10개, `후보 있음` 3개, `수동 확인 필요` 4개입니다.
-- `수동 확인 필요`로 남는 항목은 어반디케이 파우더, 어반디케이 문더스트 글림락, 페리페라 포근 픽싱 틴트 19호, 아멜리 하이라이터 432입니다. 현재 안전한 source에서 직접 확인된 상품 URL이 없어 임의 catalog 추가를 하지 않았습니다.
-- 운영 verified catalog는 39개 상품이며, source 기준으로 Olive Young 18개, Musinsa 6개, Official 8개, Hwahae 3개, Glowpick 2개, Coupang 1개, Fude Japan 1개를 포함합니다.
-- 운영 verified catalog에서 source 기반 영문 제품명(`product_name_en`)이 있는 항목은 5개입니다. 영문 제품명은 자동 번역하지 않으므로 source가 제공하지 않은 상품은 빈 값으로 남습니다.
-- 현재 운영 환경에서는 Olive Young public API와 verified catalog cache만 활성화되어 있습니다. Musinsa Beauty, Olive Young Global, Official brand, global discovery, managed search adapter는 provider base URL이 없어 비활성화 상태입니다.
-- 데스크톱 1280px와 모바일 390px에서 편집자 모드의 가로 overflow가 없고, `미확인`, `Unknown`, `N/A`, `가격 정보 없음` 텍스트가 노출되지 않는 것을 확인했습니다.
-
-### 2026-06-16
-
-이번 업데이트는 편집자 일괄 정리의 실제 운영 진단과 브랜드 alias/fallback 정확도를 개선한 변경입니다.
-
-- 백엔드 Render 배포는 `/health`의 `release_sha`로 확인합니다. 2026-06-16 점검 기준 운영 `release_sha`는 기능/데이터 변경 커밋 `1e00ecdeaedd32baa2eb2ab72884146871cbb71b`입니다.
-- 편집자 일괄 정리에서 브랜드 포함 검색이 실패하면 제품명 기반 fallback 검색을 한 번 더 수행합니다. 다만 source 브랜드가 입력 브랜드와 다르면 `확인됨`으로 확정하지 않고 `후보 있음`으로 유지합니다.
-- `Urban Decay`, `HAMING`, `OFRA Cosmetics`, `MERZY`, `VIDIVICI`, `HOLIKA HOLIKA`의 한글 alias/영문 브랜드명 매핑을 보강했습니다.
-- 17개 편집자 샘플 입력의 운영 결과는 이후 2026-06-17 업데이트에서 다시 개선했습니다.
-- source 브랜드가 입력 브랜드와 다르면 제품명 fallback 후보라도 사용자에게 표시하지 않고 `수동 확인 필요`로 남깁니다.
-- `/diagnostics` 응답에 `verified_catalog`와 `adapter_readiness`를 추가했습니다. 운영자는 verified catalog 총량, source별 개수, `product_name_en` 보유 개수, Musinsa/Olive Young Global/Official adapter의 `disabled` 또는 `missing_base_url` 상태를 바로 확인할 수 있습니다.
-- 현재 운영 환경에서는 Olive Young public API와 verified catalog cache만 활성화되어 있습니다. Musinsa Beauty, Olive Young Global, Official brand, global discovery, managed search adapter는 provider base URL이 없어 비활성화 상태입니다.
-- `수분` 같은 넓은 키워드가 Olive Young 실제 페이지보다 훨씬 적게 나오는 원인은 최신 배포 문제가 아니라 운영 index/source 커버리지 부족입니다. persistent disk 또는 외부 검색 저장소와 source provider 연결이 다음 병목입니다.
-
-### 2026-06-15
-
-이번 업데이트는 검색 결과의 데이터 품질, 멀티소스 확장 기반, 배포 문서를 정리한 변경입니다.
-
-- 프론트 운영 주소는 `https://frontend-plum-six-32.vercel.app`입니다.
-- 마지막으로 수동 검증한 Vercel 고유 배포 URL은 최신 2026-06-17 섹션을 기준으로 합니다. 실제 사용 주소는 Vercel production alias인 `https://frontend-plum-six-32.vercel.app`를 기준으로 합니다.
-- 백엔드 Render 배포는 `/health`의 `release_sha`로 확인합니다.
-- 편집자 일괄 정리 화면의 모바일 overflow를 줄이기 위해 입력/복사 버튼 영역을 작은 화면에서 세로로 정렬하도록 수정했습니다.
-- Musinsa Beauty, Olive Young Global, 브랜드 공식몰을 source-specific JSON provider로 연결할 수 있는 설정을 추가했습니다.
-- `GLOWSEARCH_MUSINSA_API_ENABLED`, `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED`, `GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED`가 켜지고 각 provider base URL이 설정되면 해당 source가 live collector에 포함됩니다.
-- 현재 운영 환경에서는 위 provider URL이 아직 설정되지 않아 Musinsa Beauty, Olive Young Global, 브랜드 공식몰, global discovery, managed search adapter는 비활성화 상태입니다. 무단 scraping이나 추측 URL 생성은 사용하지 않습니다.
-- verified catalog 항목에 내부 `canonical_product_id`를 보강해 같은 상품의 여러 source offer를 한 카드로 병합할 수 있는 기반을 넓혔습니다.
-- verified catalog는 이후 37개 상품으로 확장되었으며, 최신 source별 개수는 2026-06-17 섹션을 기준으로 합니다.
-- verified catalog에서 source 기반 영문 제품명(`product_name_en`)이 있는 항목은 4개입니다. 영문 제품명은 자동 번역하지 않으므로 source가 제공하지 않은 상품은 빈 값으로 남습니다.
-- 검색 결과 카드는 `offers` 배열을 통해 Olive Young, Musinsa, Olive Young Global, Official 등 여러 source offer를 병합할 수 있습니다. 현재 UI에서는 별도 출처 링크 버튼을 표시하지 않고 source badge만 표시합니다.
-- 영문 제품명은 source, verified catalog, 공식/공개 API 등에서 확인된 경우에만 표시합니다. 자동 번역이나 추측 매핑은 하지 않습니다.
-- 프론트 카드에서 한글 제품명과 영문 제품명이 동일한 경우 중복 표시하지 않도록 처리했습니다.
-- `미확인`, `Unknown`, `N/A` 같은 대체 텍스트는 상품 필드 값으로 표시하지 않고, 값이 없으면 해당 줄을 숨기는 원칙을 유지합니다.
-- 편집자 일괄 정리 모드를 추가했습니다. 뷰티 유튜버가 보낸 러프한 제품 리스트를 붙여넣으면 줄별로 브랜드/제품/shade를 파싱하고 source 기반 후보를 정리합니다.
-- `POST /editor/batch` API를 추가했습니다. 각 줄은 `raw_text`, `brand_query`, `product_query`, `shade_code`, `shade_name`, 후보 상품, 상태(`확인됨`, `후보 있음`, `수동 확인 필요`)로 반환됩니다.
-- 편집자 모드는 후보 선택과 source-backed 필드 확인 구조를 제공합니다. 초기 UI에는 한글 자막용/영문 자막용/YouTube 더보기란용/TSV/CSV 클립보드 복사가 있었지만, 현재 UI에서는 일괄 복사/export 버튼을 숨기고 개별 상품 복사만 유지합니다.
-- 확정 매칭을 반복 활용할 수 있도록 SQLite index schema에 `editor_confirmed_mappings` 테이블을 준비했습니다.
-- 편집자 모드는 shade가 입력된 상품 후보에서 source가 해당 shade를 확인하지 못하면 단일 후보라도 `확인됨`으로 올리지 않고 `후보 있음`으로 남깁니다.
-- 구체적인 상품명 토큰이 여러 개인 일반 검색은 브랜드/카테고리만 맞는 느슨한 후보를 제외해 오답 노출을 줄입니다.
-- 17개 편집자 샘플 입력의 운영 결과는 이후 2026-06-16 업데이트에서 다시 개선했습니다.
-- 반복 점검용 스크립트 `backend/scripts/audit_editor_batch.py`를 추가했습니다.
-- Render 재배포 직후 운영 index가 비어 시작할 수 있음을 확인했습니다. 즉 배포 SHA가 최신이어도 index가 차갑게 시작하면 결과가 적게 보일 수 있습니다. 이를 줄이기 위해 `GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP=true`, `GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT=24`로 시작 시 작은 warmup을 켰습니다.
-- 장기적으로는 Render persistent disk를 `/var/data`에 붙이거나 Postgres/Typesense 같은 외부 저장소로 index를 옮겨야 합니다. Render persistent disk는 비용이 발생할 수 있으므로 실제 계정 적용 전 요금 확인이 필요합니다.
-
-최근 검증 결과:
-
-- 백엔드 전체 테스트: `162 passed`
-- Ruff: 통과
-- 프론트 production build: 통과
-- 운영 편집자 샘플 audit: `확인됨` 10개, `후보 있음` 2개, `수동 확인 필요` 5개
-
-운영 점검 예시:
-
-```bash
-cd backend
-.venv/bin/python scripts/audit_editor_batch.py \
-  --base-url https://glowsearch-backend.onrender.com
-
-.venv/bin/python scripts/audit_catalog_quality.py \
-  --fail-on-required \
-  --fail-on-dirty-display
-```
-
-## 프로젝트 목표
-
-GlowSearch의 목표는 사용자가 화장품명, 브랜드명, 제품 키워드, 카테고리, 색상/호수 등을 검색했을 때 신뢰 가능한 출처 기반으로 화장품 정보를 찾아 보여주는 것입니다. 검색 결과는 정확성, source 신뢰도, 데이터 완성도, 가격 정보, 영문명 제공 여부를 기준으로 정렬됩니다.
-
-검색 결과 카드가 가능한 경우 표시해야 하는 핵심 정보:
-
-- 브랜드명
-- 영문 브랜드명
-- 제품명
-- 영문 제품명
-- 가격
-- 할인 중인 경우 할인가
-- 상품 이미지
-- source badge
-
-데이터 source 연결 우선순위:
-
-1. Olive Young
-2. Musinsa Beauty
-3. Olive Young Global
-4. 브랜드 공식 홈페이지
-5. verified catalog
-6. 공식/공개 API
-7. 공개 JSON / JSON-LD Product schema
-8. 관리형 provider
-
-핵심 원칙:
-
-- source가 제공하지 않은 브랜드명, 영문 브랜드명, 제품명, 영문 제품명, 가격, 할인가, 이미지는 임의로 만들지 않습니다.
-- 영문 제품명은 자동 번역하거나 추측하지 않습니다.
-- `brand_registry`, verified catalog, 공식 API, 공개 JSON, 공식 홈페이지 등에서 확인된 값만 사용합니다.
-- 없는 값은 `미확인`, `Unknown`, `N/A` 같은 텍스트로 대체하지 않고 UI에서 숨깁니다.
-- `source_url` 또는 `source_product_id`가 없는 불완전한 상품은 검색 결과에서 제외합니다.
-- 차단 우회, captcha 회피, 약관 위반성 scraping은 하지 않습니다.
-- 공식 API, 공개 JSON, JSON-LD, verified catalog, managed provider 순서로 안전한 데이터 확보를 우선합니다.
-
-## 만들게 된 계기
-
-화장품 검색은 한글 브랜드명, 영문 브랜드명, 하위 브랜드, 상품명, 성분명, 카테고리명이 섞여 있어 원하는 상품을 빠르게 찾기 어렵습니다. 예를 들어 `too cool`, `TOO COOL FOR SCHOOL`, `투쿨포스쿨`은 같은 브랜드를 가리키고, `정샘물` 검색에는 `비긴스 바이 정샘물` 같은 하위 브랜드도 함께 고려해야 합니다.
-
-GlowSearch는 검색 요청마다 모든 상품을 실시간으로 수집하는 방식이 아니라, 실제 source가 제공한 상품 데이터를 수집/정규화/색인하고 캐시와 인덱스를 먼저 조회해 빠르게 결과를 보여주는 검색 엔진을 목표로 만들었습니다.
-
-## 핵심 기능
-
-- 브랜드명, 영문명, 상품명, 카테고리 키워드 검색
-- `too cool`, `TOO COOL FOR SCHOOL`, `투쿨포스쿨` 같은 alias 검색
-- `정샘물`, `비긴스 바이 정샘물` 같은 하위 브랜드 검색 확장
+**검색**
+- 브랜드명, 영문명, 하위 브랜드, 상품명, 카테고리, 색상/호수 검색
+- alias 검색: `too cool` / `TOO COOL FOR SCHOOL` / `투쿨포스쿨` 모두 동일 브랜드 반환
+- 하위 브랜드 확장: `정샘물` → `비긴스 바이 정샘물` 포함
 - SQLite FTS5 기반 빠른 인덱스 검색
-- TTL cache와 SQLite index 우선 반환
-- 인덱스 결과가 부족할 때 제한 시간 안에서 live source collector 보강
-- Olive Young, Musinsa Beauty, Olive Young Global, 브랜드 공식 홈페이지, verified catalog, 공개 API, JSON/JSON-LD, managed provider를 연결할 수 있는 collector/adapter 구조
-- source별 timeout, retry, rate limit, graceful fallback
-- live 결과를 background ingestion으로 인덱스에 저장
-- `search_gaps`로 결과 없음/부족 검색어 기록
-- `catalog_jobs` queue로 seed, 브랜드, 카테고리, 검색 gap 기반 수집 작업 관리
-- source별 가격과 offer 정보를 `offers`로 묶어 하나의 상품 카드에 반영
-- 원가, 할인가, 할인율 표시
-- 자동완성, 페이지네이션, source badge UI
-- 편집자 일괄 정리 모드
-- 줄별 shade parser: `#13N1`, `19호`, `#432`, `#그레이쿨`, `카푸치노`, `#핑크올로지`, `#글림락` 등 처리
-- 편집자 모드 후보 확인과 개별 상품 복사
-- **편집자 모드 YouTube 설명란 일괄 export (링크 포함 / 목록만)**
-- 소스 필터 탭 (올리브영 / 무신사 / 공식몰) — 결과 수 badge 포함
-- **무신사 뷰티 직접 수집기** (`GLOWSEARCH_MUSINSA_DIRECT_ENABLED=true`로 활성화)
-- **브랜드 공식 Shopify 스토어 수집기** (`GLOWSEARCH_BRAND_SHOPIFY_ENABLED=true`로 활성화)
-- catalog enrichment target CSV/JSONL export
+- 자동완성, 페이지네이션
 
-## 추진 기능
+**멀티소스**
+- 소스 필터 탭: 전체 / 올리브영 / 무신사 / 공식몰 (탭별 결과 수 badge)
+- 올리브영 공개 API, 무신사 뷰티 직접 수집, 브랜드 공식 Shopify 스토어, verified catalog
+- 소스별 timeout / retry / graceful fallback
+- 라이브 결과를 백그라운드로 인덱스에 저장
 
-### 1. 멀티 소스 데이터 수집 구조
+**데이터 품질**
+- source가 제공하지 않은 값은 절대 만들지 않음 (자동 번역·추측 없음)
+- 없는 값은 `미확인` / `N/A` 대신 UI에서 숨김
+- `brand_registry.json` 기반 브랜드 한↔영 정규화
+- verified catalog로 표시용 상품명, 영문 제품명 override
 
-각 source는 독립 collector 또는 adapter로 구성합니다. 한 source의 실패가 전체 검색 실패로 이어지지 않도록 graceful fallback을 적용하고, source별 timeout, retry, rate limit을 설정합니다.
+**편집자 모드**
+- 제품 리스트 붙여넣기 → 줄별 브랜드·제품명·호수 파싱 → 소스 기반 후보 매칭
+- **YouTube 설명란 일괄 export** (링크 포함 / 텍스트만)
+- 호수 parser: `#13N1`, `19호`, `#432`, `#그레이쿨`, `카푸치노` 등 처리
 
-### 2. 데이터 정규화
+---
 
-source마다 다른 필드명을 공통 모델로 정규화합니다. 주요 필드는 `brand_ko`, `brand_en`, `product_name_ko`, `product_name_en`, `price`, `original_price`, `sale_price`, `discount_rate`, `currency`, `image_url`, `source`, `source_url`, `source_product_id`, `updated_at`입니다.
+## 아키텍처
 
-### 3. 브랜드/상품 영문 데이터 처리
-
-`brand_en`은 source 제공 영문 브랜드명, `brand_registry.json`의 `official_en`, `null` 순서로 결정합니다. `product_name_en`은 source 제공 영문 제품명, verified catalog의 영문 제품명, 공식 홈페이지 또는 Olive Young Global이 제공한 영문 제품명, `null` 순서로 결정합니다. 자동 번역은 사용하지 않습니다.
-
-### 4. DB/index 저장 구조
-
-현재 SQLite index는 source record를 `products`에 저장하고, 검색 응답 단계에서 같은 상품의 source link를 `offers`로 병합합니다. 장기 목표 구조는 상품 identity와 source offer를 분리하는 것입니다.
-
-```text
-products
-  normalized_product_id
-  brand_ko
-  brand_en
-  product_name_ko
-  product_name_en
-  category
-  image_url
-  quality_score
-  updated_at
-
-product_offers
-  normalized_product_id
-  source
-  source_label
-  source_url
-  source_product_id
-  price
-  original_price
-  sale_price
-  discount_rate
-  currency
-  sold_out
-  updated_at
 ```
-
-### 5. 멀티 소스 병합
-
-같은 상품 판단은 barcode/GTIN 또는 verified cross-source mapping, source_product_id cross mapping, normalized brand 일치, normalized product name 강한 유사도 순서로 적용합니다. 유사도가 낮으면 병합하지 않습니다.
-
-### 6. 검색 fallback 흐름
-
-검색은 DB/index를 먼저 조회하고, 결과가 부족하거나 필수 정보가 부족하면 source collector를 제한 시간 안에서 사용합니다.
-
-```text
 검색어 입력
-→ DB/index 검색
-→ Olive Young 검색
-→ 결과 부족 시 Musinsa Beauty 검색
-→ 결과 부족 시 Olive Young Global 검색
-→ 결과 부족 시 브랜드 공식 홈페이지 또는 verified catalog 검색
-→ 수집 결과 정규화
-→ DB/index 저장
-→ quality_score 계산
-→ 검색 결과 반환
+  → GET /search
+  → TTL Cache 조회  →  캐시 히트 시 즉시 반환
+  → SQLite FTS5 인덱스 조회  →  인덱스 히트 시 반환 + 백그라운드 refresh
+  → 라이브 수집기 (deadline 내)
+      - OliveYoung Public API
+      - Musinsa Beauty (옵션)
+      - Brand Shopify (옵션)
+      - LocalVerifiedCatalogCollector
+  → ProductNormalizer
+  → 결과 반환 + 인덱스 저장
 ```
 
-### 7. 품질 점수
+```mermaid
+flowchart LR
+  User --> FE["Next.js"]
+  FE --> API["FastAPI /search"]
+  API --> Cache["TTL Cache"]
+  Cache -->|hit| Res["Response"]
+  Cache -->|miss| Index["SQLite FTS5"]
+  Index -->|hit| Res
+  Index -->|miss| Collectors["Live Collectors"]
+  Collectors --> Normalizer["ProductNormalizer"]
+  Normalizer --> Res
+  Collectors --> BG["Background Ingestion"]
+  BG --> Index
+```
 
-`quality_score`는 상품 정보 완성도를 기준으로 계산합니다. `product_name_ko`, `brand_ko`, `brand_en`, `product_name_en`, `price`, `sale_price`, `image_url`, `source_url`, `source_product_id`, 신뢰도 높은 source 여부를 반영합니다. 필수 필드는 `product_name_ko` 또는 `product_name_en`, `source`, `source_url` 또는 `source_product_id`입니다.
-
-### 8. 백그라운드 enrichment
-
-검색 응답은 빠르게 반환하고, 부족한 데이터는 background task로 보강합니다. enrichment 대상은 `brand_en`, `product_name_en`, `price`, `sale_price`, `image_url`, Musinsa Beauty source, Olive Young Global source, official source가 없는 상품입니다.
-
-### 9. 검색 결과 카드
-
-카드는 브랜드명, 영문 브랜드명, 제품명, 영문 제품명, 가격, 할인가, 상품 이미지, source badge를 가능한 경우 표시합니다. `offers`에는 여러 source의 URL과 가격 정보가 유지되지만, 현재 카드 UI에서는 별도 출처 링크 버튼을 렌더링하지 않습니다.
-
-### 10. 운영/데이터 갱신
-
-데이터 수집은 작은 batch로 반복 가능해야 합니다. `catalog_jobs`와 `search_gaps`를 활용해 실패 source 재시도, 누락 검색어 수집, index 상태 확인, source별 성공/실패 확인, 최근 업데이트 시간, 품질 점수 낮은 상품, enrichment 대기 목록을 운영자가 추적할 수 있게 합니다.
+---
 
 ## 편집자 일괄 정리 모드
 
-GlowSearch는 뷰티 유튜버 편집자가 영상 원고, 자막, YouTube 더보기란에 넣을 제품 정보를 빠르게 정리할 수 있도록 편집자 모드를 제공합니다.
+뷰티 유튜버 편집자가 원고의 제품 리스트를 붙여넣으면 줄별로 후보 상품을 찾아줍니다.
 
-사용 흐름:
+**사용 흐름**
 
-1. `편집자 일괄 정리` 탭을 선택합니다.
-2. 유튜버가 보낸 제품 리스트를 여러 줄로 붙여넣습니다.
-3. `정리하기`를 누르면 각 줄을 파싱하고 후보 상품을 3~5개까지 찾습니다.
-4. 후보가 여러 개면 편집자가 하나를 선택합니다.
-5. source 기반으로 확인된 브랜드명, 영문 브랜드명, 제품명, 영문 제품명, 호수/컬러명을 확인합니다.
-6. 필요한 상품은 개별 복사 버튼으로 복사합니다.
+1. `편집자 일괄 정리` 탭 선택
+2. 유튜버가 보낸 제품 리스트를 여러 줄로 붙여넣기
+3. `정리하기` → 각 줄을 파싱하고 소스 기반 후보 최대 5개 반환
+4. 후보가 여러 개면 편집자가 직접 선택
+5. 소스로 확인된 브랜드명, 영문 브랜드명, 제품명, 영문 제품명, 호수 확인
+6. **YouTube 설명란** 버튼으로 선택한 제품 전체를 클립보드에 복사
 
-API:
+**응답 상태**
+- `확인됨` — 소스와 정확히 일치하는 후보 1개
+- `후보 있음` — 후보는 있지만 편집자 확인 필요
+- `수동 확인 필요` — 소스에서 확인된 상품 없음
 
 ```bash
+# API 직접 호출 예시
 curl -X POST https://glowsearch-backend.onrender.com/editor/batch \
   -H "Content-Type: application/json" \
   -d '{"text":"헤라 파우더 #13N1\n롬앤 쉐딩 #그레이쿨","limit":5}'
 ```
 
-백엔드에는 `POST /editor/confirm`과 `editor_confirmed_mappings` 저장 구조가 준비되어 있습니다. 현재 프론트 화면에서는 확정 저장 버튼을 노출하지 않으며, 이 기록은 추후 랭킹 보정과 모델 학습용 정답 데이터로만 사용합니다. 즉시 상품명을 생성하거나 번역하는 데 쓰지 않습니다.
+---
 
-응답은 줄별로 다음 정보를 포함합니다.
+## 데이터 소스 우선순위
 
-- 원문 입력
-- 파싱된 브랜드 query, 제품 query, 호수 번호, 호수명/컬러명
-- source URL이 있는 후보 상품
-- 상태: `확인됨`, `후보 있음`, `수동 확인 필요`
+| 우선순위 | 소스 |
+| --- | --- |
+| 1 | Olive Young (공개 API) |
+| 2 | Musinsa Beauty |
+| 3 | Olive Young Global |
+| 4 | 브랜드 공식 홈페이지 (Shopify `/products.json`) |
+| 5 | Verified catalog (`verified_products.json`) |
+| 6 | 공식/공개 API, JSON-LD |
+| 7 | Managed provider |
 
-편집자 모드에서도 데이터 원칙은 동일합니다. 영문 브랜드명/영문 제품명/source URL은 source, verified catalog, 공식/공개 API, JSON-LD, 공식 홈페이지, Olive Young Global, Musinsa Beauty 등에서 확인된 경우에만 API 응답에 포함합니다. 현재 카드 UI에서는 일반 검색의 출처 링크 버튼과 편집자 모드의 일괄 export 버튼을 노출하지 않습니다. 모델이나 규칙은 입력 분해와 후보 랭킹 보조에만 사용하고, 없는 제품명이나 영문명을 생성하지 않습니다. 제품 키워드가 후보 상품명/설명/options에 충분히 맞지 않으면 editor 후보에서 제외해 부정확한 결과를 줄입니다.
+**데이터 원칙**
+- 소스가 제공하지 않은 값은 만들지 않습니다 (자동 번역, 추측 금지)
+- `source_url` 또는 `source_product_id` 없는 상품은 결과에서 제외합니다
+- Cloudflare 우회, captcha 회피, 약관 위반 scraping은 하지 않습니다
+- HTML/browser collector는 기본 비활성화 상태입니다
+
+---
 
 ## 기술 스택
 
-| 영역 | 기술 | 사용 이유 |
-| --- | --- | --- |
-| Frontend | Next.js | 검색 UI, 배포, 정적/동적 화면 구성 |
-| Backend | FastAPI | 빠른 API 서버, 타입 기반 request/response 처리 |
-| Language | TypeScript, Python | UI 안정성, 데이터 수집/정규화 구현 |
-| Search Index | SQLite + FTS5 | 로컬/소규모 운영에서 빠른 전문 검색과 쉬운 배포 |
-| Data Collection | httpx | 비동기 HTTP 수집, timeout/retry/rate limit 제어 |
-| Parsing | BeautifulSoup4 | 보수적인 HTML parsing fallback |
-| Cache | In-memory TTL cache | 반복 검색의 time-to-first-result 단축 |
-| Deployment | Vercel, Render | 프론트/백엔드 분리 배포 |
-| Test | pytest | collector, normalizer, indexing, cache, orchestration 검증 |
+| 영역 | 기술 |
+| --- | --- |
+| Frontend | Next.js 16, TypeScript, Tailwind CSS |
+| Backend | FastAPI, Python 3.13 |
+| Search Index | SQLite FTS5 |
+| HTTP 수집 | httpx (async, timeout/retry/rate limit) |
+| Cache | In-memory TTL cache |
+| Deployment | Vercel (frontend), Render (backend) |
+| Test | pytest, ruff |
+
+---
 
 ## 파일 구조
 
-```text
+```
 GlowSearch/
-  frontend/
-    src/app/
-      page.tsx        # 검색 UI, 자동완성, 결과 카드, 페이지네이션
-      layout.tsx      # 메타데이터, favicon
-      globals.css     # 전역 스타일
-
-  backend/
-    app/
-      api/            # FastAPI routes, health, diagnostics, index status
-      cache/          # TTL cache
-      core/           # 환경 변수와 설정
-      data_collector/ # Olive Young, Musinsa Beauty, brand Shopify, local catalog, optional provider adapters
-      indexing/       # SQLite product index, FTS, catalog job queue
-      ingestion/      # 안전 수집 pipeline, retry/backoff, CSV export
-      normalizer/     # 브랜드 alias, 상품 record 정규화
-      observability/  # latency, cache/index/source metrics
-      search/         # synonym, search key
-      service/        # SearchService orchestration
-    scripts/
-      ingest_oliveyoung.py
-      audit_catalog_quality.py
-      audit_editor_batch.py
-      benchmark_search.py
-    tests/
+├── frontend/
+│   └── src/
+│       ├── app/page.tsx        # 검색 UI, 편집자 모드, 소스 필터, export
+│       └── lib/api.ts          # API 클라이언트
+│
+└── backend/
+    ├── app/
+    │   ├── api/                # FastAPI routes (/search, /suggest, /editor/batch, /health 등)
+    │   ├── cache/              # TTL cache
+    │   ├── core/config.py      # 환경 변수 (GLOWSEARCH_ prefix)
+    │   ├── data_collector/     # OliveYoung, Musinsa, Shopify, local catalog, adapters
+    │   ├── indexing/           # SQLite FTS5 store, catalog job queue
+    │   ├── ingestion/          # 수집 pipeline, 품질 검사, enrichment export
+    │   ├── normalizer/         # 브랜드 alias, 상품명 정규화
+    │   ├── search_engine/      # synonym, intent, ranking
+    │   └── service/            # SearchService orchestration
+    ├── scripts/                # 운영 스크립트 (ingest, audit, refresh, backfill 등)
+    ├── tests/
+    └── data/
+        ├── brand_registry.json      # 브랜드 한↔영 + 공식 도메인 매핑
+        ├── verified_products.json   # 수동 검증 카탈로그 (표시명, 영문명 override)
+        └── product_index.sqlite3    # SQLite FTS5 인덱스 (런타임)
 ```
 
-## 아키텍처
+---
 
-```mermaid
-flowchart LR
-  User["User"] --> Frontend["Next.js Frontend"]
-  Frontend --> SearchAPI["FastAPI /search"]
-  SearchAPI --> Cache["TTL Cache"]
-  Cache -->|hit| Response["SearchResponse"]
-  Cache -->|miss| Index["SQLite FTS Index"]
-  Index -->|hit| Response
-  Index -->|miss or low coverage| Collectors["Live Source Collectors"]
-  Collectors --> Normalizer["ProductNormalizer"]
-  Normalizer --> Response
-  Collectors --> Background["Background Ingestion"]
-  Background --> Index
-  SearchAPI --> Gaps["search_gaps"]
-  Gaps --> Jobs["catalog_jobs"]
-  Jobs --> Background
+## 로컬 실행
+
+### 백엔드
+
+```bash
+cd backend
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 ```
 
-## 검색 데이터 흐름
+### 프론트엔드
 
-```mermaid
-sequenceDiagram
-  participant User
-  participant FE as Next.js Frontend
-  participant API as FastAPI /search
-  participant Cache as TTL Cache
-  participant Index as SQLite FTS Index
-  participant Source as Live Source Collectors
-  participant BG as Background Ingestion
-
-  User->>FE: 검색어 입력
-  FE->>API: GET /search
-  API->>Cache: cache 조회
-  alt cache hit
-    Cache-->>API: cached records
-    API-->>FE: 즉시 반환
-  else cache miss
-    API->>Index: index 조회
-    alt index hit
-      Index-->>API: indexed records
-      API-->>FE: 빠르게 반환
-      API->>BG: background refresh 예약
-    else index miss
-      API->>Source: 제한 시간 안에서 live 조회
-      Source-->>API: source records
-      API-->>FE: 결과 반환
-      API->>BG: 결과 저장
-      BG->>Index: upsert products/query mappings/FTS
-    end
-  end
+```bash
+cd frontend
+npm install
+npm run dev   # http://localhost:3000
 ```
 
-## DB/index 구조
+프론트 로컬 환경변수 (`frontend/.env.local`):
 
-| 테이블 | 역할 |
-| --- | --- |
-| `products` | source가 제공한 상품 record 저장 |
-| `query_products` | 검색어별 source rank 보존 |
-| `products_fts` | 브랜드, 상품명, 카테고리, 옵션, alias 기반 검색 |
-| `brand_aliases` | 한글/영문/하위 브랜드 alias 연결 |
-| `search_gaps` | 결과 없음/부족 검색어 기록 |
-| `catalog_jobs` | seed/search gap 기반 background catalog ingestion queue |
+```
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+```
 
-현재 검색 응답의 `offers`는 `products`에 저장된 source별 record를 검색 응답 단계에서 병합해 만듭니다. 장기적으로는 상품 identity와 offer를 물리적으로 분리한 `product_offers` 테이블 또는 외부 검색 엔진 schema로 확장할 수 있습니다.
+---
 
-## API 문서
+## 환경 변수
+
+모든 백엔드 환경 변수는 `GLOWSEARCH_` 접두사를 사용합니다 (`backend/.env`).
+
+### 필수 / 권장
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | — | 프론트에서 호출할 백엔드 URL |
+| `GLOWSEARCH_PRODUCT_INDEX_PATH` | `data/product_index.sqlite3` | Render persistent disk 사용 시 `/var/data/product_index.sqlite3` 권장 |
+| `GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN` | — | `/index/catalog/run` 보호 토큰 |
+
+### 수집기
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_ENABLED` | `true` | Olive Young 공개 API 활성화 |
+| `GLOWSEARCH_MUSINSA_DIRECT_ENABLED` | `false` | 무신사 뷰티 직접 수집기 |
+| `GLOWSEARCH_MUSINSA_DIRECT_PAGE_SIZE` | `24` | 무신사 수집기 페이지 크기 |
+| `GLOWSEARCH_BRAND_SHOPIFY_ENABLED` | `false` | 브랜드 공식 Shopify 수집기 |
+| `GLOWSEARCH_MUSINSA_API_ENABLED` + `_BASE_URL` | `false` | 관리형 Musinsa JSON provider |
+| `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED` + `_BASE_URL` | `false` | 관리형 OliveYoung Global provider |
+| `GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED` + `_BASE_URL` | `false` | 브랜드 공식몰 JSON provider |
+
+### 타이밍
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `GLOWSEARCH_LIVE_COLLECT_DEADLINE_SECONDS` | `3.2` | 라이브 수집 전체 deadline. 커버리지 우선 시 `7.0` 권장 |
+| `GLOWSEARCH_BACKGROUND_COLLECT_DEADLINE_SECONDS` | `18.0` | 백그라운드 refresh deadline |
+| `GLOWSEARCH_CACHE_TTL_SECONDS` | `180` | 캐시 TTL |
+
+### 인덱스 운영
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `GLOWSEARCH_PRODUCT_INDEX_VERIFIED_CATALOG_BACKFILL_ON_STARTUP` | `true` | 시작 시 verified catalog를 인덱스에 적재 |
+| `GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP` | `false` | 시작 시 seed warmup 실행 |
+| `GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_LIMIT` | `240` | 백그라운드 refresh 수집 개수 |
+| `GLOWSEARCH_RESULT_SOURCE_PREFIXES` | `oliveyoung,musinsa,official,...` | 결과에 허용할 소스 목록 |
+
+---
+
+## API 레퍼런스
 
 ### `GET /search`
 
@@ -613,17 +266,12 @@ sequenceDiagram
 curl "https://glowsearch-backend.onrender.com/search?q=로션&limit=48"
 ```
 
-주요 query parameter:
-
 | 파라미터 | 설명 |
 | --- | --- |
 | `q` | 검색어 |
-| `keyword` | `q` alias |
 | `brand` | 브랜드 필터 |
-| `min_price` | 최소 가격 |
-| `max_price` | 최대 가격 |
-| `has_shade` | 색상/호수 존재 여부 |
-| `limit` | 반환 개수, 1~480 |
+| `min_price` / `max_price` | 가격 범위 |
+| `limit` | 반환 개수 (1~480) |
 
 응답 예시:
 
@@ -633,285 +281,133 @@ curl "https://glowsearch-backend.onrender.com/search?q=로션&limit=48"
   "count": 1,
   "results": [
     {
-      "canonical_product_id": null,
       "brand_ko": "에스트라",
       "brand_en": "AESTURA",
-      "product_name_ko": "에스트라 아토베리어365 로션 150ml",
+      "product_name_ko": "아토베리어365 로션",
       "product_name_en": null,
       "price": 29700,
       "original_price": 33000,
       "sale_price": 29700,
       "discount_rate": 10,
       "source": "oliveyoung",
-      "source_label": "Olive Young",
-      "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000000000",
-      "source_product_id": "A000000000000",
-      "offers": [
-        {
-          "source": "oliveyoung",
-          "source_label": "Olive Young",
-          "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000000000",
-          "source_product_id": "A000000000000",
-          "price": 29700,
-          "original_price": 33000,
-          "sale_price": 29700,
-          "currency": "KRW"
-        }
-      ]
+      "source_url": "https://www.oliveyoung.co.kr/...",
+      "offers": [...]
     }
-  ],
-  "source_errors": []
+  ]
 }
 ```
 
-### 기타 endpoint
+### 기타 엔드포인트
 
 | Endpoint | 설명 |
 | --- | --- |
 | `GET /suggest?q=투&limit=10` | 자동완성 후보 |
-| `GET /index/status` | 상품 인덱스 상태 |
-| `GET /index/catalog/status` | catalog ingestion job 상태 |
-| `POST /index/catalog/run` | 보호 token으로 pending catalog job을 작은 batch로 실행 |
-| `GET /diagnostics` | cache/index/source/gap/job 진단 정보 |
-| `GET /health` | backend 상태와 `release_sha` |
+| `POST /editor/batch` | 편집자 일괄 정리 |
+| `GET /index/status` | 인덱스 상태 |
+| `GET /index/catalog/status` | catalog job 상태 |
+| `POST /index/catalog/run` | pending job 실행 (admin token 필요) |
+| `GET /diagnostics` | 캐시/인덱스/소스/gap 진단 |
+| `GET /health` | 상태 및 `release_sha` |
 
-## 로컬 실행
+---
 
-### Backend
+## 인덱스 운영
 
-```bash
-cd backend
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.api.main:app --reload --port 8000
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-프론트 로컬 환경:
-
-```bash
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-```
-
-## 환경 변수
-
-| 변수 | 설명 |
-| --- | --- |
-| `NEXT_PUBLIC_API_BASE_URL` | 프론트에서 호출할 백엔드 API base URL |
-| `GLOWSEARCH_PRODUCT_INDEX_PATH` | SQLite product index 경로. Render persistent disk 사용 시 `/var/data/product_index.sqlite3` 권장 |
-| `GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_ENABLED` | Olive Young 공개 JSON adapter 사용 여부 |
-| `GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_TIMEOUT_SECONDS` | Olive Young 공개 JSON adapter source timeout. 넓은 키워드는 `6.0` 이상 권장 |
-| `GLOWSEARCH_LIVE_COLLECT_DEADLINE_SECONDS` | 사용자 검색에서 live source를 기다리는 전체 deadline. 결과 커버리지 우선이면 `7.0` 권장 |
-| `GLOWSEARCH_BACKGROUND_COLLECT_DEADLINE_SECONDS` | 검색 후 백그라운드 refresh deadline. catalog job 보강에는 `18.0` 이상 권장 |
-| `GLOWSEARCH_MUSINSA_API_ENABLED` / `GLOWSEARCH_MUSINSA_API_BASE_URL` | 검증된 Musinsa Beauty JSON provider 연결. 기본 비활성화 |
-| `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED` / `GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_BASE_URL` | 검증된 Olive Young Global JSON provider 연결. 기본 비활성화 |
-| `GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED` / `GLOWSEARCH_OFFICIAL_BRAND_API_BASE_URL` | 브랜드 공식몰/공식 catalog JSON provider 연결. 기본 비활성화 |
-| `GLOWSEARCH_PRODUCT_INDEX_VERIFIED_CATALOG_BACKFILL_ON_STARTUP` | 서버 시작 시 `verified_products.json` 전체를 SQLite index에 적재합니다. 네트워크를 쓰지 않으므로 운영 기본 `true` 권장 |
-| `GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP` | 서버 시작 시 seed index warmup 실행 여부. 작은 batch와 낮은 concurrency로만 켜는 것을 권장 |
-| `GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN` | 원격 `/index/warm`, `/index/catalog/run` 보호 token |
-| `GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_LIMIT` | 검색 후 백그라운드 refresh 수집 개수. 운영 초기에는 `48~120` 권장 |
-| `GLOWSEARCH_RESULT_SOURCE_PREFIXES` | 결과에 허용할 source prefix 목록. 기본값: `oliveyoung,oliveyoung-global,official,musinsa,coupang,hwahae,glowpick,fudejapan,managed,barcode,discovery,external` |
-| `GLOWSEARCH_MUSINSA_DIRECT_ENABLED` | 무신사 뷰티 직접 수집기 활성화 여부. 기본 비활성화 |
-| `GLOWSEARCH_MUSINSA_DIRECT_PAGE_SIZE` | 무신사 수집기 페이지당 결과 수. 기본 `24` |
-| `GLOWSEARCH_BRAND_SHOPIFY_ENABLED` | 브랜드 공식 Shopify 스토어 수집기 활성화 여부. 기본 비활성화 |
-| `GLOWSEARCH_BROWSER_COLLECTOR_ENABLED` | Playwright/browser fallback 사용 여부, 기본 비활성화 |
-
-## 데이터 수집 원칙
-
-- 상품 데이터는 source가 제공한 값만 저장합니다.
-- 없는 가격, 브랜드명, 영문명, 상품명, 이미지, 리뷰 수, 옵션은 만들지 않습니다.
-- Olive Young/Musinsa Beauty 전체 상품을 무제한 크롤링하는 구조가 아닙니다. 검색 gap, seed/category query, verified catalog, provider adapter를 작은 batch로 반복 처리해 커버리지를 확장합니다.
-- 같은 Olive Young `goodsNo`는 하나의 상품으로 dedupe합니다.
-- Cloudflare, captcha, login wall, 403, 429, 503, rate limit, terms 이슈가 보이면 우회하지 않습니다.
-- `robots.txt`와 서비스 약관을 확인하지 않은 대량 수집은 실행하지 않습니다.
-- HTML/browser collector는 기본 비활성화되어 있습니다.
-- 운영에서는 공식 API, 제휴 데이터, managed scraping provider를 우선 검토합니다.
-- Musinsa Beauty, Olive Young Global, 브랜드 공식몰은 검증된 JSON/API provider URL이 설정된 경우에만 live collector로 연결합니다.
-
-## 운영 source 활성화 기준
-
-`GLOWSEARCH_RESULT_SOURCE_PREFIXES`는 결과에 허용할 source 이름 목록일 뿐이고, 실제 수집 adapter를 켜는 설정은 아닙니다. 운영에서 Musinsa Beauty, Olive Young Global, Official source를 실제로 붙이려면 각 provider가 GlowSearch 공통 상품 JSON을 반환하는 안전한 endpoint여야 하며, 아래처럼 `*_ENABLED=true`와 `*_BASE_URL`이 함께 설정되어야 합니다.
-
-```bash
-GLOWSEARCH_MUSINSA_API_ENABLED=true
-GLOWSEARCH_MUSINSA_API_BASE_URL=https://your-provider.example/musinsa/search
-
-GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_ENABLED=true
-GLOWSEARCH_OLIVEYOUNG_GLOBAL_API_BASE_URL=https://your-provider.example/oliveyoung-global/search
-
-GLOWSEARCH_OFFICIAL_BRAND_API_ENABLED=true
-GLOWSEARCH_OFFICIAL_BRAND_API_BASE_URL=https://your-provider.example/official/search
-```
-
-provider 응답은 source가 확인한 값만 내려야 합니다. 특히 `product_name_en`, shade, 가격, 이미지, source URL은 자동 번역/추측으로 채우지 않습니다. provider가 없으면 해당 source는 `/diagnostics`에서 `false`로 표시되고, `enrichment_missing_fields`에 `musinsa_source`, `oliveyoung_global_source`, `official_source`, `product_name_en` 등이 남는 것이 정상입니다.
-
-운영 점검 명령:
-
-```bash
-curl https://glowsearch-backend.onrender.com/diagnostics
-curl "https://glowsearch-backend.onrender.com/search?q=%ED%8E%98%EB%A6%AC%ED%8E%98%EB%9D%BC%20%ED%8F%AC%EA%B7%BC%20%ED%94%BD%EC%8B%B1%20%ED%8B%B4%ED%8A%B8%2019%ED%98%B8&limit=5"
-```
-
-현재 verified catalog가 작으면 구조가 있어도 원하는 상품이 나오지 않습니다. source adapter를 켠 뒤에는 `search_gaps`와 seed query를 작은 batch로 반복 처리해 index를 채워야 합니다.
-
-## 카탈로그 인덱싱 운영
-
-현재 구조는 검색 요청과 카탈로그 수집을 분리합니다. 검색은 cache/index를 우선 조회하고, 전체 카탈로그에 가까운 DB snapshot은 별도 ingestion job으로 확장합니다.
+검색 커버리지는 작은 batch를 반복 실행해 확장합니다.
 
 ```bash
 cd backend
 
-# seed, 브랜드, 카테고리, 브랜드+카테고리 조합, search_gaps를 큐에 넣고
-# 작은 batch만 처리합니다. 반복 실행해도 query/job은 dedupe됩니다.
+# seed / 브랜드 / 카테고리 / gap 기반 batch 수집
 .venv/bin/python scripts/refresh_coverage.py \
-  --coverage-pairs 300 \
-  --max-jobs 50 \
-  --limit 120 \
-  --db-path data/product_index.sqlite3
+  --coverage-pairs 300 --max-jobs 50 --limit 120
 
-# 특정 누락 브랜드/상품을 우선 보강할 때
+# 특정 브랜드 우선 보강
 .venv/bin/python scripts/refresh_coverage.py \
   --query "비긴스 바이 정샘물" \
-  --no-default-seeds \
-  --no-gaps \
-  --coverage-pairs 0 \
-  --max-queries 1 \
-  --job-priority 0 \
-  --max-jobs 1 \
-  --limit 48 \
-  --db-path data/product_index.sqlite3
+  --no-default-seeds --no-gaps \
+  --coverage-pairs 0 --max-jobs 1 --limit 48
 
-# 전체 index를 CSV로 확인할 때
-.venv/bin/python scripts/refresh_coverage.py \
-  --export-only \
-  --csv data/products_export.csv \
-  --db-path data/product_index.sqlite3
-
-# CSV를 catalog/index 승격 전에 정규화 품질 감사할 때
-.venv/bin/python scripts/audit_export_normalization.py \
-  --export-path data/products_export.csv \
-  --fail-on-required \
-  --fail-on-dirty-display
-
-# 실제 SQLite index의 표시용 상품명/보강 backlog를 감사할 때
+# 인덱스 품질 감사
 .venv/bin/python scripts/audit_index_quality.py \
-  --max-issues 80 \
-  --max-targets 40 \
-  --fail-on-required \
-  --fail-on-dirty-display
+  --fail-on-required --fail-on-dirty-display
 
-# normalizer/brand_registry 변경 후 기존 SQLite index row를 재정규화할 때
-.venv/bin/python scripts/backfill_index_normalized_fields.py
-
-# dry-run 결과를 검토한 뒤 적용
+# brand_registry/normalizer 변경 후 기존 row 재정규화
 .venv/bin/python scripts/backfill_index_normalized_fields.py --apply
 
-# 운영 백엔드에서 pending job을 처리할 때는 admin token을 사용
+# 운영 백엔드에서 원격 실행
 curl -X POST \
-  "https://glowsearch-backend.onrender.com/index/catalog/run?max_jobs=20&limit=120&reset_stale_running_minutes=60&token=$GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN"
+  "https://glowsearch-backend.onrender.com/index/catalog/run?max_jobs=20&limit=120&token=$GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN"
 ```
 
-권장 운영 루프는 10~30분마다 `scripts/refresh_coverage.py --max-jobs 20~50 --limit 48~120`을 실행하는 방식입니다. Render web process 안에서 큰 batch를 돌리기보다, 별도 cron/worker에서 같은 persistent index path를 바라보게 하는 것이 안전합니다. 실패한 job은 `catalog_jobs`에 남아 재시도할 수 있고, 누락 검색어는 `search_gaps`를 통해 다음 refresh 후보가 됩니다.
+### catalog enrichment
 
-인덱스 상태 확인:
+영문 제품명, 이미지, 가격이 부족한 상품을 검수 대기열로 내보낼 수 있습니다.
 
 ```bash
-curl "https://glowsearch-backend.onrender.com/index/status"
-curl "https://glowsearch-backend.onrender.com/index/catalog/status"
-curl "https://glowsearch-backend.onrender.com/diagnostics"
+# 보강 대상 CSV 추출
+.venv/bin/python scripts/export_catalog_enrichment_targets.py \
+  --max-targets 40 --format csv
+
+# source URL에서 영문명 증거 감사 (catalog 수정 없음)
+.venv/bin/python scripts/audit_catalog_enrichment_sources.py \
+  --field product_name_en --only-usable --format csv
 ```
 
-## 테스트/검증
+---
 
-Backend:
+## 테스트
 
 ```bash
 cd backend
 .venv/bin/python -m ruff check app tests scripts
 .venv/bin/python -m pytest
-```
 
-Frontend:
-
-```bash
 cd frontend
 npm run build
+npm run typecheck
 ```
 
-API smoke test:
+smoke test:
 
 ```bash
-curl https://glowsearch-backend.onrender.com/health
-curl "https://glowsearch-backend.onrender.com/search?q=too%20cool&limit=4"
-curl "https://glowsearch-backend.onrender.com/search?q=%EC%A0%95%EC%83%98%EB%AC%BC&limit=48"
-
 cd backend
-.venv/bin/python scripts/smoke_search.py --base-url http://localhost:8000 --limit 4
-.venv/bin/python scripts/smoke_search.py --base-url https://glowsearch-backend.onrender.com --limit 4
 .venv/bin/python scripts/smoke_search.py \
-  --base-url http://localhost:8000 \
-  --query "페리페라 스키니브로우" \
-  --query "오렌즈 글로이 티어 그레이" \
-  --expect "페리페라 스키니브로우=스피디 스키니 브로우" \
-  --expect "오렌즈 글로이 티어 그레이=글로이 티어 원데이"
+  --base-url https://glowsearch-backend.onrender.com --limit 4
 ```
 
-Benchmark:
-
-```bash
-cd backend
-.venv/bin/python scripts/benchmark_search.py --base-url http://localhost:8000 --repeat 3
-.venv/bin/python scripts/benchmark_search.py --base-url https://glowsearch-backend.onrender.com --repeat 3
-```
+---
 
 ## 배포
 
-| 영역 | 플랫폼 | 설명 |
+| 영역 | 플랫폼 | 트리거 |
 | --- | --- | --- |
-| Frontend | Vercel | Next.js app 배포 |
-| Backend | Render | FastAPI Docker web service 배포 |
-
-Render backend는 `/health`의 `release_sha`로 현재 배포 commit을 확인합니다.
-
-```bash
-curl https://glowsearch-backend.onrender.com/health
-```
-
-Render free filesystem은 SQLite index 보존에 적합하지 않습니다. 운영에서는 Render persistent disk를 `/var/data`에 붙이고 `GLOWSEARCH_PRODUCT_INDEX_PATH=/var/data/product_index.sqlite3`로 지정하거나, Postgres/검색 엔진으로 전환해야 합니다. persistent disk 없이 운영하면 deploy/restart 때 coverage refresh로 쌓은 index가 사라질 수 있습니다.
+| Frontend | Vercel | `main` 브랜치 push 시 자동 배포 |
+| Backend | Render | `main` 브랜치 push 시 자동 배포 |
 
 배포 후 체크리스트:
 
 ```bash
 curl https://glowsearch-backend.onrender.com/health
-curl https://glowsearch-backend.onrender.com/index/status
-curl https://glowsearch-backend.onrender.com/index/catalog/status
-curl "https://glowsearch-backend.onrender.com/search?q=%EB%A1%AC%EC%95%A4&limit=4"
-curl "https://glowsearch-backend.onrender.com/search?q=too%20cool&limit=4"
+curl "https://glowsearch-backend.onrender.com/search?q=롬앤&limit=4"
+curl "https://glowsearch-backend.onrender.com/index/status"
 ```
+
+> **주의**: Render free filesystem은 재배포 시 SQLite 인덱스가 초기화됩니다. 운영 환경에서는 Render persistent disk(`/var/data`)를 마운트하거나 외부 DB로 전환해야 합니다.
+
+---
 
 ## 한계와 개선 계획
 
-### 현재 한계
+**현재 한계**
+- Olive Young 전체 상품 커버리지 100%는 아직 아닙니다
+- Render free filesystem은 재배포 시 인덱스가 초기화됩니다
+- 소스/`brand_registry.json`에 없는 영문 브랜드명은 `null`입니다
+- 공식 API/제휴 데이터 없이 전체 카탈로그를 안정적으로 유지하는 데 한계가 있습니다
 
-- Olive Young 전체 상품 100% 보장은 아직 아닙니다.
-- Render free filesystem은 SQLite index 보존에 적합하지 않습니다.
-- 일부 브랜드 영문명은 source나 `brand_registry.json`에 없으면 `null`입니다.
-- 공식 API/제휴 데이터 없이 전체 카탈로그를 안정적으로 유지하는 데 한계가 있습니다.
-- 현재 Olive Young HTML/browser collector는 준수/차단 리스크 때문에 기본 비활성화되어 있습니다.
-
-### 개선 계획
-
+**개선 계획**
 - Render persistent disk 또는 Postgres 도입
-- Meilisearch/Typesense 기반 typo/prefix search
-- 브랜드 alias 자동 보강 workflow
+- Meilisearch/Typesense 기반 오타 허용 검색
 - `search_gaps` 기반 자동 warmup
-- managed scraping/API provider 연동
-- 공식/제휴 데이터 소스 확보
+- 브랜드 alias 자동 보강
+- 관리형 scraping/API provider 연동
