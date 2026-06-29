@@ -94,6 +94,60 @@ flowchart LR
   BG --> Index
 ```
 
+### Request Flow (Detailed)
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant FE as Next.js
+  participant API as FastAPI
+  participant Cache as TTL Cache
+  participant Index as SQLite FTS5
+  participant Src as Live Collectors
+  participant BG as Background Ingestion
+
+  User->>FE: Enter search query
+  FE->>API: GET /search?q=...
+
+  API->>Cache: Check cache
+  alt cache hit
+    Cache-->>API: Cached result
+    API-->>FE: Immediate response (< 50ms)
+  else cache miss
+    API->>Index: FTS5 query
+    alt index hit
+      Index-->>API: Indexed result
+      API-->>FE: Fast response (< 200ms)
+      API-)BG: Schedule background refresh
+    else index miss
+      API->>Src: Live collection (within deadline)
+      Note over Src: OliveYoung / Musinsa<br/>Shopify / LocalCatalog
+      Src-->>API: Source records
+      API-->>FE: Return results
+      API-)BG: Schedule index persist
+    end
+    BG->>Index: upsert (products / FTS / query_products)
+  end
+```
+
+### Collection → Storage Pipeline
+
+```mermaid
+flowchart TD
+  A["Source Collector"] -->|ProductSourceRecord| B["ProductNormalizer"]
+  B -->|brand_ko / brand_en normalization<br/>display name cleaning / shade split| C["ProductIngestionAgent"]
+  C -->|upsert| D[("SQLite\nproduct_index.sqlite3")]
+
+  D --> D1["products table<br/>(product records)"]
+  D --> D2["products_fts table<br/>(FTS5 full-text search)"]
+  D --> D3["query_products table<br/>(per-query source rank)"]
+  D --> D4["search_gaps table<br/>(low-coverage queries)"]
+  D4 -->|gap-driven re-collection| A
+
+  E["brand_registry.json"] -->|alias / official_en| B
+  F["verified_products.json"] -->|display name override<br/>English name override| C
+```
+
 ---
 
 ## Editor Batch Mode

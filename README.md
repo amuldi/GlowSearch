@@ -94,6 +94,60 @@ flowchart LR
   BG --> Index
 ```
 
+### 데이터 흐름 상세
+
+```mermaid
+sequenceDiagram
+  participant User as 사용자
+  participant FE as Next.js
+  participant API as FastAPI
+  participant Cache as TTL Cache
+  participant Index as SQLite FTS5
+  participant Src as Live Collectors
+  participant BG as Background Ingestion
+
+  User->>FE: 검색어 입력
+  FE->>API: GET /search?q=...
+
+  API->>Cache: 캐시 조회
+  alt 캐시 히트
+    Cache-->>API: 캐시 결과
+    API-->>FE: 즉시 반환 (< 50ms)
+  else 캐시 미스
+    API->>Index: FTS5 쿼리
+    alt 인덱스 히트
+      Index-->>API: 인덱스 결과
+      API-->>FE: 빠른 반환 (< 200ms)
+      API-)BG: 백그라운드 refresh 예약
+    else 인덱스 미스
+      API->>Src: 라이브 수집 (deadline 내)
+      Note over Src: OliveYoung / Musinsa<br/>Shopify / LocalCatalog
+      Src-->>API: 소스 레코드
+      API-->>FE: 결과 반환
+      API-)BG: 인덱스 저장 예약
+    end
+    BG->>Index: upsert (products / FTS / query_products)
+  end
+```
+
+### 수집 → 저장 파이프라인
+
+```mermaid
+flowchart TD
+  A["소스 수집기<br/>(Collector)"] -->|ProductSourceRecord| B["ProductNormalizer"]
+  B -->|brand_ko / brand_en 정규화<br/>표시명 정제 / 호수 분리| C["ProductIngestionAgent"]
+  C -->|upsert| D[("SQLite\nproduct_index.sqlite3")]
+
+  D --> D1["products 테이블<br/>(상품 record)"]
+  D --> D2["products_fts 테이블<br/>(FTS5 전문 검색)"]
+  D --> D3["query_products 테이블<br/>(쿼리별 소스 rank)"]
+  D --> D4["search_gaps 테이블<br/>(커버리지 부족 쿼리)"]
+  D4 -->|gap 기반 재수집| A
+
+  E["brand_registry.json"] -->|alias / official_en| B
+  F["verified_products.json"] -->|표시명 override<br/>영문명 override| C
+```
+
 ---
 
 ## 편집자 일괄 정리 모드
