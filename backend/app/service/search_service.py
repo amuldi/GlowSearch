@@ -881,21 +881,24 @@ class SearchService:
         tokens = cls._tokens(query)
         if len(tokens) != 1:
             return False
-        benefit_terms = {
-            "각질",
-            "광채",
-            "미백",
-            "모공",
-            "보습",
-            "브라이트닝",
-            "수분",
-            "장벽",
-            "진정",
-            "탄력",
-            "피지",
-            "쿨링",
+        discovery_terms = {
+            # 피부 고민
+            "각질", "광채", "미백", "모공", "보습", "브라이트닝", "수분", "장벽", "진정", "탄력", "피지", "쿨링",
+            # 스킨케어 카테고리
+            "세럼", "에센스", "앰플", "토너", "스킨", "크림", "수분크림", "아이크림", "슬리핑팩",
+            "클렌저", "클렌징", "폼클렌저", "마스크팩", "시트마스크", "필링젤", "미스트", "오일",
+            # 메이크업 카테고리
+            "파운데이션", "쿠션", "비비크림", "CC크림", "프라이머", "컨실러",
+            "블러셔", "블러시", "볼터치", "하이라이터", "섀딩",
+            "마스카라", "아이라이너", "아이섀도", "아이섀도우",
+            "눈썹", "브로우",
+            "립스틱", "립밤",
+            # 선케어
+            "자외선차단제", "선스틱", "선세럼",
+            # 기타
+            "로션", "바디로션", "미스트",
         }
-        return cls._key(tokens[0]) in benefit_terms
+        return cls._key(tokens[0]) in discovery_terms
 
     @staticmethod
     def _is_brand_only_query(brand_match: BrandMatch | None, product_query: str) -> bool:

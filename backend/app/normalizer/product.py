@@ -11,6 +11,82 @@ _SOURCE_BRAND_NOISE = {
     "뿌리는",
 }
 
+# 한글 제품명에서 영문 제품 타입을 추출하기 위한 사전 (길이 내림차순으로 정렬해야 앞부분이 먼저 매칭됨)
+_KO_TERM_EN: tuple[tuple[str, str], ...] = (
+    # 스킨케어
+    ("슬리핑팩", "Sleeping Pack"),
+    ("수분크림", "Moisturizer"),
+    ("젤크림", "Gel Cream"),
+    ("아이크림", "Eye Cream"),
+    ("클렌징오일", "Cleansing Oil"),
+    ("클렌징밤", "Cleansing Balm"),
+    ("클렌징밀크", "Cleansing Milk"),
+    ("클렌징워터", "Micellar Water"),
+    ("폼클렌저", "Foam Cleanser"),
+    ("클렌징폼", "Cleansing Foam"),
+    ("클렌저", "Cleanser"),
+    ("클렌징", "Cleansing"),
+    ("마스크팩", "Sheet Mask"),
+    ("시트마스크", "Sheet Mask"),
+    ("필링젤", "Peeling Gel"),
+    ("나이트크림", "Night Cream"),
+    ("에센스", "Essence"),
+    ("앰플", "Ampoule"),
+    ("세럼", "Serum"),
+    ("토너", "Toner"),
+    ("스킨", "Toner"),
+    ("미스트", "Mist"),
+    ("크림", "Cream"),
+    ("로션", "Lotion"),
+    ("오일", "Oil"),
+    ("스크럽", "Scrub"),
+    # 선케어
+    ("자외선차단제", "Sunscreen"),
+    ("선쿠션", "Sun Cushion"),
+    ("선세럼", "Sun Serum"),
+    ("선스틱", "Sun Stick"),
+    ("선스크린", "Sunscreen"),
+    ("선크림", "Sunscreen"),
+    # 베이스 메이크업
+    ("비비크림", "BB Cream"),
+    ("씨씨크림", "CC Cream"),
+    ("파운데이션", "Foundation"),
+    ("쿠션", "Cushion Foundation"),
+    ("프라이머", "Primer"),
+    ("컨실러", "Concealer"),
+    ("컨씰러", "Concealer"),
+    ("세팅파우더", "Setting Powder"),
+    ("루스파우더", "Loose Powder"),
+    ("파우더", "Powder"),
+    # 치크/하이라이터
+    ("하이라이터", "Highlighter"),
+    ("블러셔", "Blush"),
+    ("블러시", "Blush"),
+    ("볼터치", "Blush"),
+    ("치크", "Blush"),
+    ("섀딩", "Contour"),
+    # 아이 메이크업
+    ("아이섀도우", "Eyeshadow"),
+    ("아이섀도", "Eyeshadow"),
+    ("아이라이너", "Eyeliner"),
+    ("마스카라", "Mascara"),
+    ("브로우마스카라", "Brow Mascara"),
+    ("브로우펜슬", "Brow Pencil"),
+    ("아이브로우", "Eyebrow"),
+    ("눈썹", "Eyebrow"),
+    # 립 메이크업
+    ("립글로스", "Lip Gloss"),
+    ("립틴트", "Lip Tint"),
+    ("립스틱", "Lipstick"),
+    ("립밤", "Lip Balm"),
+    ("립라이너", "Lip Liner"),
+    # 바디
+    ("바디로션", "Body Lotion"),
+    ("바디크림", "Body Cream"),
+    ("바디워시", "Body Wash"),
+    ("바디오일", "Body Oil"),
+)
+
 
 class ProductNormalizer:
     def __init__(self, brand_resolver: BrandResolver, base_url: str):
@@ -28,10 +104,12 @@ class ProductNormalizer:
             brand_aliases,
             variant_values=[record.shade],
         )
-        product_name_display_en = clean_text(record.product_name_display_en) or _display_product_name(
-            product_name_en,
-            brand_aliases,
-            variant_values=[record.shade],
+        _auto_en = _auto_translate_ko_product_name(product_name_display_ko)
+        product_name_display_en = (
+            clean_text(record.product_name_display_en)
+            or _display_product_name(product_name_en, brand_aliases, variant_values=[record.shade])
+            # 한글이 전혀 없는 결과만 설정 (혼합 결과는 제외 → 병합 시 공식 영문명 우선)
+            or (_auto_en if _auto_en and not has_hangul(_auto_en) else None)
         )
         original_price = record.original_price or record.regular_price
         sale_price = record.sale_price
@@ -458,6 +536,16 @@ def _strip_packaging_suffix(text: str) -> str:
         r"(?<=[가-힣A-Za-z])기획(?:\s*\+\s*\d+(?:\.\d+)?\s*(?:g|ml|mL|ML)?)?$",
         r"\s+블랙/브라운\s*(?:단품|기획).*$",
         r"\s+기획/단품$",
+        # 영문 수량/세트 표기
+        r"\s+\d+\s*pcs?(?:\s+.*)?$",
+        r"\s+\d+\s*pieces?(?:\s+.*)?$",
+        r"\s+\d+\s*items?$",
+        r"\s+\d+\s*set(?:s)?$",
+        r"\s+\d+\s*pack(?:s)?$",
+        r"\s*\[\s*\d+\s*pcs?\s*\].*$",
+        r"\s*\(\s*\d+\s*pcs?\s*\).*$",
+        # 개수 표기 (앞에 공백 없어도 붙는 경우)
+        r"(?<=[가-힣A-Za-z])\s*\d+\s*pcs?$",
     ]
     for pattern in suffix_patterns:
         current = re.sub(pattern, "", current, flags=re.IGNORECASE)
@@ -513,6 +601,24 @@ def _strip_known_variant_suffix(text: str, variant_values: list[str]) -> str:
         if stripped != current and len(_key(stripped)) >= 4:
             current = stripped
     return current
+
+
+def _auto_translate_ko_product_name(name: str | None) -> str | None:
+    """
+    한글 제품명에서 알려진 제품 타입 용어를 영문으로 치환해 부분 영문명을 반환.
+    긴 용어를 먼저 매칭해 오인식 방지 (예: "크림" 전에 "선크림" 매칭).
+    """
+    text = clean_text(name)
+    if not text or not has_hangul(text):
+        return None
+    translated = text
+    for ko_term, en_term in sorted(_KO_TERM_EN, key=lambda x: len(x[0]), reverse=True):
+        if ko_term in translated:
+            translated = translated.replace(ko_term, en_term)
+            break  # 가장 긴 매칭 하나만 치환
+    if translated == text:
+        return None
+    return clean_text(translated)
 
 
 def _key(value: str | None) -> str:
