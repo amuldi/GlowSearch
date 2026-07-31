@@ -16,7 +16,7 @@ services:
       - key: GLOWSEARCH_LIVE_FIRST_RESULT_GRACE_SECONDS
         value: 0.8
       - key: GLOWSEARCH_BACKGROUND_COLLECT_DEADLINE_SECONDS
-        value: 18.0
+        value: 90.0
       - key: GLOWSEARCH_MANAGED_SCRAPING_TIME_BUDGET_SECONDS
         value: 4.0
       - key: GLOWSEARCH_MUSINSA_API_ENABLED
@@ -60,9 +60,11 @@ services:
       - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RETRY_MAX_DELAY_SECONDS
         value: 4.0
       - key: GLOWSEARCH_OLIVEYOUNG_PUBLIC_API_RATE_LIMIT_PER_SECOND
-        value: 1.0
+        value: 2.0
       - key: GLOWSEARCH_BRAND_SHOPIFY_ENABLED
         value: true
+      - key: GLOWSEARCH_OLIVEYOUNG_SEARCH_MAX_PAGES
+        value: 25
       - key: GLOWSEARCH_OLIVEYOUNG_HTML_COLLECTOR_ENABLED
         value: false
       - key: GLOWSEARCH_BROWSER_COLLECTOR_ENABLED
@@ -82,21 +84,21 @@ services:
       - key: GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_ENABLED
         value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_LIMIT
-        value: 120
+        value: 1200
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_ON_STARTUP
         value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_VERIFIED_CATALOG_BACKFILL_ON_STARTUP
         value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_LIMIT
-        value: 48
+        value: 1200
       - key: GLOWSEARCH_PRODUCT_INDEX_WARMUP_CONCURRENCY
-        value: 2
+        value: 4
       - key: GLOWSEARCH_PRODUCT_INDEX_MAX_SEED_QUERIES
-        value: 160
+        value: 500
       - key: GLOWSEARCH_PRODUCT_INDEX_BRAND_REGISTRY_WARMUP_ENABLED
         value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_BRAND_REGISTRY_WARMUP_LIMIT
-        value: 160
+        value: 300
       - key: GLOWSEARCH_PRODUCT_INDEX_DETAIL_ENRICHMENT_ENABLED
         value: true
       - key: GLOWSEARCH_PRODUCT_INDEX_DETAIL_ENRICHMENT_MAX_RECORDS

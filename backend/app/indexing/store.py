@@ -110,6 +110,8 @@ class SQLiteProductIndexStore:
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = sqlite3.connect(self._db_path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
+        self._connection.execute("PRAGMA journal_mode=WAL")
+        self._connection.execute("PRAGMA synchronous=NORMAL")
         self._lock = asyncio.Lock()
         self._fts_enabled = True
         self._ensure_schema()

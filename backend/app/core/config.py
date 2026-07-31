@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     oliveyoung_public_api_retry_attempts: int = 2
     oliveyoung_public_api_retry_base_delay_seconds: float = 0.5
     oliveyoung_public_api_retry_max_delay_seconds: float = 4.0
-    oliveyoung_public_api_rate_limit_per_second: float = 1.0
+    oliveyoung_public_api_rate_limit_per_second: float = 2.0
     request_timeout_seconds: float = 12.0
     request_user_agent: str = (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     source_time_budget_seconds: float = 2.5
     live_collect_deadline_seconds: float = 3.2
     live_first_result_grace_seconds: float = 0.8
-    background_collect_deadline_seconds: float = 18.0
+    background_collect_deadline_seconds: float = 90.0
     managed_scraping_time_budget_seconds: float = 4.0
     result_source_prefixes: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     detail_concurrency: int = 6
 
     oliveyoung_search_page_size: int = 48
-    oliveyoung_search_max_pages: int = 10
+    oliveyoung_search_max_pages: int = 25
 
     browser_collector_enabled: bool = False
     browser_headless: bool = True
@@ -111,14 +111,14 @@ class Settings(BaseSettings):
     product_index_admin_token: str | None = None
     product_index_min_results: int = 1
     product_index_background_refresh_enabled: bool = True
-    product_index_background_refresh_limit: int = 240
+    product_index_background_refresh_limit: int = 1200
     product_index_warmup_on_startup: bool = False
     product_index_verified_catalog_backfill_on_startup: bool = True
-    product_index_warmup_limit: int = 48
-    product_index_warmup_concurrency: int = 2
-    product_index_max_seed_queries: int = 180
+    product_index_warmup_limit: int = 1200
+    product_index_warmup_concurrency: int = 4
+    product_index_max_seed_queries: int = 500
     product_index_brand_registry_warmup_enabled: bool = True
-    product_index_brand_registry_warmup_limit: int = 80
+    product_index_brand_registry_warmup_limit: int = 300
     product_index_detail_enrichment_enabled: bool = True
     product_index_detail_enrichment_max_records: int = 12
     product_index_seed_queries: Annotated[list[str], NoDecode] = Field(

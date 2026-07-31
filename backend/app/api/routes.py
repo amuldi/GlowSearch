@@ -1,3 +1,4 @@
+import hmac
 import os
 import json
 from collections import Counter
@@ -387,7 +388,7 @@ def _require_index_admin(request: Request, token: str | None) -> None:
     settings = get_settings()
     expected_token = settings.product_index_admin_token
     if expected_token:
-        if token == expected_token:
+        if token is not None and hmac.compare_digest(token, expected_token):
             return
         raise HTTPException(status_code=403, detail="Invalid index admin token.")
 
