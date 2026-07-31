@@ -14,6 +14,14 @@ from app.normalizer.product import ProductNormalizer
 from app.service.search_service import SearchService, _CollectedResult
 
 
+async def _wait_until(predicate, *, timeout: float = 1.0, interval: float = 0.01) -> None:
+    """Poll until predicate() is true, tolerating extra event-loop ticks for
+    background task cancellation to propagate (varies across environments)."""
+    deadline = time.perf_counter() + timeout
+    while not predicate() and time.perf_counter() < deadline:
+        await asyncio.sleep(interval)
+
+
 class FakeCollector:
     name = "fake"
 
@@ -1239,7 +1247,7 @@ async def test_search_service_returns_primary_oliveyoung_before_slow_supplements
         "메디힐 비타 브라이트닝 패드",
         "메디힐 비타 패드",
     ]
-    await asyncio.sleep(0)
+    await _wait_until(lambda: slow_supplement.cancelled)
     assert slow_supplement.cancelled is True
 
 
@@ -1271,7 +1279,7 @@ async def test_search_service_returns_public_api_before_slow_official_html(
     assert elapsed < 0.4
     assert response.count == 1
     assert response.results[0].product_name_ko == "메디힐 비타 패드"
-    await asyncio.sleep(0)
+    await _wait_until(lambda: slow_official.cancelled)
     assert slow_official.cancelled is True
 
 
