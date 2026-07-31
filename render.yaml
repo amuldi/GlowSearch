@@ -5,7 +5,7 @@ services:
     plan: free
     rootDir: backend
     healthCheckPath: /health
-    autoDeploy: true
+    autoDeploy: false
     envVars:
       - key: GLOWSEARCH_CACHE_TTL_SECONDS
         value: 180
