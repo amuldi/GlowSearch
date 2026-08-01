@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
+from app.indexing._libsql_compat import LibsqlConnection, Row
 from app.models.product import ProductSourceRecord
 from app.normalizer.brand import BrandAlias
 from app.search.synonyms import search_key
@@ -105,11 +106,22 @@ class ProductIndexStore(Protocol):
 
 
 class SQLiteProductIndexStore:
-    def __init__(self, db_path: Path):
+    def __init__(
+        self,
+        db_path: Path,
+        *,
+        turso_sync_url: str | None = None,
+        turso_auth_token: str | None = None,
+        turso_sync_interval_seconds: float | None = None,
+    ):
         self._db_path = db_path
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(self._db_path, check_same_thread=False)
-        self._connection.row_factory = sqlite3.Row
+        self._connection = LibsqlConnection(
+            str(self._db_path),
+            sync_url=turso_sync_url,
+            auth_token=turso_auth_token,
+            sync_interval_seconds=turso_sync_interval_seconds,
+        )
         self._connection.execute("PRAGMA journal_mode=WAL")
         self._connection.execute("PRAGMA synchronous=NORMAL")
         self._lock = asyncio.Lock()
@@ -141,7 +153,7 @@ class SQLiteProductIndexStore:
             rows = self._search_mapped_rows_locked(query_key, limit)
         return [_row_to_record(row) for row in rows]
 
-    def _search_mapped_rows_locked(self, query_key: str, limit: int) -> list[sqlite3.Row]:
+    def _search_mapped_rows_locked(self, query_key: str, limit: int) -> list[Row]:
         return self._connection.execute(
             """
             SELECT p.*
@@ -240,8 +252,7 @@ class SQLiteProductIndexStore:
                 if not query_key:
                     continue
                 job_key = f"{clean_kind}:{query_key}"
-                before = self._connection.total_changes
-                self._connection.execute(
+                cursor = self._connection.execute(
                     """
                     INSERT INTO catalog_jobs(
                         job_key,
@@ -277,7 +288,7 @@ class SQLiteProductIndexStore:
                         now,
                     ),
                 )
-                if self._connection.total_changes > before:
+                if cursor.rowcount > 0:
                     inserted_or_updated += 1
             self._connection.commit()
         return inserted_or_updated
@@ -785,7 +796,7 @@ class SQLiteProductIndexStore:
                 )
                 """
             )
-        except sqlite3.OperationalError:
+        except (sqlite3.OperationalError, ValueError):
             self._fts_enabled = False
 
     def _ensure_columns(self, table: str, columns: dict[str, str]) -> None:
@@ -978,7 +989,7 @@ class SQLiteProductIndexStore:
                     _search_terms(record),
                 ),
             )
-        except sqlite3.OperationalError:
+        except (sqlite3.OperationalError, ValueError):
             self._fts_enabled = False
 
     def _backfill_fts_if_needed_locked(self) -> None:
@@ -991,7 +1002,7 @@ class SQLiteProductIndexStore:
             fts_count = self._connection.execute(
                 "SELECT COUNT(*) AS count FROM products_fts"
             ).fetchone()["count"]
-        except sqlite3.OperationalError:
+        except (sqlite3.OperationalError, ValueError):
             self._fts_enabled = False
             return
         if not product_count or fts_count >= product_count:
@@ -1000,8 +1011,8 @@ class SQLiteProductIndexStore:
         for row in rows:
             self._upsert_product_fts(row["record_key"], _row_to_record(row))
 
-    def _search_fallback_rows(self, query: str, limit: int) -> list[sqlite3.Row]:
-        rows: list[sqlite3.Row] = []
+    def _search_fallback_rows(self, query: str, limit: int) -> list[Row]:
+        rows: list[Row] = []
         seen_record_keys: set[str] = set()
         for candidate in self._fallback_queries(query):
             if self._fts_enabled:
@@ -1036,7 +1047,7 @@ class SQLiteProductIndexStore:
                     return rows
         return rows
 
-    def _search_fts_rows(self, query: str, limit: int) -> list[sqlite3.Row]:
+    def _search_fts_rows(self, query: str, limit: int) -> list[Row]:
         match_query = _fts_match_query(query)
         if not match_query:
             return []
@@ -1052,7 +1063,7 @@ class SQLiteProductIndexStore:
                 """,
                 (match_query, limit),
             ).fetchall()
-        except sqlite3.OperationalError:
+        except (sqlite3.OperationalError, ValueError):
             self._fts_enabled = False
             return []
 
@@ -1137,7 +1148,7 @@ class SQLiteProductIndexStore:
     def _append_unique_record(
         records: list[ProductSourceRecord],
         seen: set[str],
-        row: sqlite3.Row,
+        row: Row,
     ) -> None:
         record = _row_to_record(row)
         record_key = _record_key(record)
@@ -1147,7 +1158,7 @@ class SQLiteProductIndexStore:
         records.append(record)
 
 
-def _row_to_record(row: sqlite3.Row) -> ProductSourceRecord:
+def _row_to_record(row: Row) -> ProductSourceRecord:
     return ProductSourceRecord(
         canonical_product_id=row["canonical_product_id"],
         category=row["category"],
@@ -1177,7 +1188,7 @@ def _row_to_record(row: sqlite3.Row) -> ProductSourceRecord:
     )
 
 
-def _catalog_job_from_row(row: sqlite3.Row) -> CatalogIngestionJob:
+def _catalog_job_from_row(row: Row) -> CatalogIngestionJob:
     return CatalogIngestionJob(
         id=int(row["id"]),
         job_key=row["job_key"],

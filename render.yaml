@@ -79,6 +79,12 @@ services:
         value: /var/data/product_index.sqlite3
       - key: GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN
         sync: false
+      - key: GLOWSEARCH_TURSO_DATABASE_URL
+        sync: false
+      - key: GLOWSEARCH_TURSO_AUTH_TOKEN
+        sync: false
+      - key: GLOWSEARCH_TURSO_SYNC_INTERVAL_SECONDS
+        value: 300
       - key: GLOWSEARCH_PRODUCT_INDEX_MIN_RESULTS
         value: 1
       - key: GLOWSEARCH_PRODUCT_INDEX_BACKGROUND_REFRESH_ENABLED

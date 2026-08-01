@@ -280,6 +280,9 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | `NEXT_PUBLIC_API_BASE_URL` | — | 프론트에서 호출할 백엔드 URL |
 | `GLOWSEARCH_PRODUCT_INDEX_PATH` | `data/product_index.sqlite3` | Render persistent disk 사용 시 `/var/data/product_index.sqlite3` 권장 |
 | `GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN` | — | `/index/catalog/run` 보호 토큰 |
+| `GLOWSEARCH_TURSO_DATABASE_URL` | — | 설정 시 인덱스가 Turso(무료 영속 SQLite 호스팅)에도 동기화되어, Render 재배포·슬립으로 로컬 디스크가 초기화돼도 데이터가 살아남음. `turso db show <db> --url` |
+| `GLOWSEARCH_TURSO_AUTH_TOKEN` | — | Turso 인증 토큰. `turso db tokens create <db>` |
+| `GLOWSEARCH_TURSO_SYNC_INTERVAL_SECONDS` | — | 설정 시 이 주기(초)로 원격 변경사항을 로컬 replica로 자동 pull |
 
 ### 수집기
 

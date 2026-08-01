@@ -109,6 +109,9 @@ class Settings(BaseSettings):
     product_index_enabled: bool = True
     product_index_path: Path = BACKEND_DIR / "data" / "product_index.sqlite3"
     product_index_admin_token: str | None = None
+    turso_database_url: str | None = None
+    turso_auth_token: str | None = None
+    turso_sync_interval_seconds: float | None = None
     product_index_min_results: int = 1
     product_index_background_refresh_enabled: bool = True
     product_index_background_refresh_limit: int = 1200

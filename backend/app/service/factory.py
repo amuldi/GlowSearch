@@ -37,7 +37,12 @@ def get_search_service() -> SearchService:
     normalizer = ProductNormalizer(brand_resolver, settings.oliveyoung_base_url)
     cache = AsyncTTLCache(ttl_seconds=settings.cache_ttl_seconds)
     index_store = (
-        SQLiteProductIndexStore(settings.product_index_path)
+        SQLiteProductIndexStore(
+            settings.product_index_path,
+            turso_sync_url=settings.turso_database_url,
+            turso_auth_token=settings.turso_auth_token,
+            turso_sync_interval_seconds=settings.turso_sync_interval_seconds,
+        )
         if settings.product_index_enabled
         else None
     )
@@ -104,6 +109,11 @@ def get_search_provider() -> SQLiteSearchProvider:
     settings = get_settings()
     brand_resolver = BrandResolver(settings.brand_registry_path)
     normalizer = ProductNormalizer(brand_resolver, settings.oliveyoung_base_url)
+    # Deliberately local-only: get_search_service() already owns the Turso
+    # embedded-replica sync relationship for this same file. Turso's docs warn
+    # against opening the local db while a sync is in flight, so a second
+    # independent sync_url connection here risks corruption; this store just
+    # reads/writes the same on-disk file that the other connection commits to.
     index_store = SQLiteProductIndexStore(settings.product_index_path)
     index_store.seed_brand_aliases(normalizer.index_aliases())
     return SQLiteSearchProvider(
