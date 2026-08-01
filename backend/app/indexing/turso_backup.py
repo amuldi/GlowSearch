@@ -8,13 +8,18 @@ startup blocked the whole app from serving traffic; doing it against the
 live connection risks the file-corruption Turso's docs warn about when a
 sync is in flight.
 
-Instead this module always operates through a *separate* pure-remote
-connection (SQLiteProductIndexStore.for_remote — no local file at all) and a
-short-lived local connection of its own, run entirely inside
-asyncio.to_thread / a background asyncio task that is created (never
-awaited) from the app lifespan. However long Turso takes, it can never
-delay startup or a request — worst case, a given restore/backup cycle is
-just late.
+Correctness note learned the hard way: it is not enough to thread just the
+*connection* step. SQLiteProductIndexStore's methods (all_products,
+upsert_search_results) are async only for their asyncio.Lock — the actual
+`self._connection.execute(...)` calls inside them are synchronous, and for a
+`for_remote()` store each one is a blocking HTTP round-trip to Turso. Awaiting
+them directly on the app's event loop (with WEB_CONCURRENCY=1 in production)
+blocked every other request — including /health — until Render's own health
+check killed and restarted the instance. So every read/write against a
+remote store must happen inside the *same* asyncio.to_thread call as the
+connect, via a synchronous helper that drives its own throwaway event loop
+with asyncio.run(). Nothing here ever touches the live local connection that
+SearchService serves requests from.
 """
 
 from __future__ import annotations
@@ -25,6 +30,7 @@ from pathlib import Path
 
 from app.core.config import Settings
 from app.indexing.store import SQLiteProductIndexStore
+from app.models.product import ProductSourceRecord
 
 logger = logging.getLogger(__name__)
 
@@ -33,27 +39,49 @@ _BACKUP_QUERY_KEY = "turso-backup"
 _DEFAULT_INTERVAL_SECONDS = 1800.0
 
 
+def _fetch_all_from_remote(url: str, auth_token: str | None) -> list[ProductSourceRecord]:
+    """Synchronous, self-contained: connect, read, close. Must only ever be
+    called via asyncio.to_thread — never awaited directly."""
+
+    async def _run() -> list[ProductSourceRecord]:
+        remote = SQLiteProductIndexStore.for_remote(url, auth_token)
+        try:
+            return await remote.all_products()
+        finally:
+            await remote.close()
+
+    return asyncio.run(_run())
+
+
+def _push_all_to_remote(
+    url: str,
+    auth_token: str | None,
+    records: list[ProductSourceRecord],
+) -> None:
+    """Synchronous, self-contained: connect, write, close."""
+
+    async def _run() -> None:
+        remote = SQLiteProductIndexStore.for_remote(url, auth_token)
+        try:
+            await remote.upsert_search_results(_BACKUP_QUERY_KEY, records)
+        finally:
+            await remote.close()
+
+    asyncio.run(_run())
+
+
 async def restore_from_turso(db_path: Path, settings: Settings) -> int:
     """Pulls whatever products Turso already has into the local index. Meant
     to run once, early, after a fresh/empty boot — but never blocks it."""
     if not settings.turso_database_url:
         return 0
     try:
-        remote = await asyncio.to_thread(
-            SQLiteProductIndexStore.for_remote,
-            settings.turso_database_url,
-            settings.turso_auth_token,
+        records = await asyncio.to_thread(
+            _fetch_all_from_remote, settings.turso_database_url, settings.turso_auth_token
         )
     except Exception:
-        logger.warning("Turso restore: could not connect", exc_info=True)
+        logger.warning("Turso restore: could not read from remote", exc_info=True)
         return 0
-    try:
-        records = await remote.all_products()
-    except Exception:
-        logger.warning("Turso restore: could not read products", exc_info=True)
-        return 0
-    finally:
-        await asyncio.to_thread(remote.close)
     if not records:
         return 0
     local = SQLiteProductIndexStore(db_path)
@@ -77,21 +105,12 @@ async def backup_to_turso(db_path: Path, settings: Settings) -> int:
     if not records:
         return 0
     try:
-        remote = await asyncio.to_thread(
-            SQLiteProductIndexStore.for_remote,
-            settings.turso_database_url,
-            settings.turso_auth_token,
+        await asyncio.to_thread(
+            _push_all_to_remote, settings.turso_database_url, settings.turso_auth_token, records
         )
     except Exception:
-        logger.warning("Turso backup: could not connect", exc_info=True)
+        logger.warning("Turso backup: could not write to remote", exc_info=True)
         return 0
-    try:
-        await remote.upsert_search_results(_BACKUP_QUERY_KEY, records)
-    except Exception:
-        logger.warning("Turso backup: could not write products", exc_info=True)
-        return 0
-    finally:
-        await asyncio.to_thread(remote.close)
     logger.info("Turso backup: pushed %d products", len(records))
     return len(records)
 

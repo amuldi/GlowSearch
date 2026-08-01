@@ -11,7 +11,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from app.core.config import get_settings
 from app.data_collector.base import SearchCriteria
 from app.editor.batch import EditorBatchService
-from app.indexing import turso_backup
 from app.models.editor import (
     EditorBatchRequest,
     EditorBatchResponse,
@@ -355,24 +354,22 @@ async def run_catalog_jobs(
     return asdict(summary)
 
 
+_TURSO_DISABLED_REASON = (
+    "Disabled: confirmed in production that libsql's blocking network calls "
+    "do not release the GIL, so running them even via asyncio.to_thread "
+    "freezes the entire process (all requests, health checks included) for "
+    "as long as Turso takes to respond. Do not re-enable without real "
+    "process isolation (subprocess), not just threading."
+)
+
+
 @router.post("/index/turso/backup")
 async def turso_backup_now(
     request: Request,
     token: Annotated[str | None, Query(description="GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN")] = None,
 ) -> dict[str, object]:
-    """Admin-only: manually triggers a backup cycle (app/indexing/turso_backup.py)
-    instead of waiting for the periodic interval. Runs through asyncio.to_thread
-    so a slow/unreachable Turso endpoint delays only this request, never other
-    traffic (WEB_CONCURRENCY=1 in production)."""
     _require_index_admin(request, token)
-    settings = get_settings()
-    if not settings.turso_database_url:
-        return {"ok": False, "error": "GLOWSEARCH_TURSO_DATABASE_URL is not set"}
-    try:
-        count = await turso_backup.backup_to_turso(settings.product_index_path, settings)
-        return {"ok": True, "products_backed_up": count}
-    except Exception as exc:
-        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    return {"ok": False, "error": _TURSO_DISABLED_REASON}
 
 
 @router.post("/index/turso/restore")
@@ -380,16 +377,8 @@ async def turso_restore_now(
     request: Request,
     token: Annotated[str | None, Query(description="GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN")] = None,
 ) -> dict[str, object]:
-    """Admin-only: manually triggers a restore-from-Turso cycle."""
     _require_index_admin(request, token)
-    settings = get_settings()
-    if not settings.turso_database_url:
-        return {"ok": False, "error": "GLOWSEARCH_TURSO_DATABASE_URL is not set"}
-    try:
-        count = await turso_backup.restore_from_turso(settings.product_index_path, settings)
-        return {"ok": True, "products_restored": count}
-    except Exception as exc:
-        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    return {"ok": False, "error": _TURSO_DISABLED_REASON}
 
 
 @router.post("/index/warm")
