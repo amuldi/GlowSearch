@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from app.core.config import get_settings
 from app.data_collector.base import SearchCriteria
 from app.editor.batch import EditorBatchService
+from app.indexing import turso_backup
 from app.models.editor import (
     EditorBatchRequest,
     EditorBatchResponse,
@@ -354,51 +355,41 @@ async def run_catalog_jobs(
     return asdict(summary)
 
 
-@router.get("/index/turso-check")
-async def turso_check(
+@router.post("/index/turso/backup")
+async def turso_backup_now(
     request: Request,
     token: Annotated[str | None, Query(description="GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN")] = None,
 ) -> dict[str, object]:
-    """Admin-only: probes the configured Turso database directly (a fresh,
-    isolated connection, independent of the running index store) so we can
-    tell whether GLOWSEARCH_TURSO_DATABASE_URL/_AUTH_TOKEN are actually wired
-    up correctly from inside this exact runtime, without exposing the token
-    itself over an unauthenticated endpoint."""
+    """Admin-only: manually triggers a backup cycle (app/indexing/turso_backup.py)
+    instead of waiting for the periodic interval. Runs through asyncio.to_thread
+    so a slow/unreachable Turso endpoint delays only this request, never other
+    traffic (WEB_CONCURRENCY=1 in production)."""
     _require_index_admin(request, token)
     settings = get_settings()
     if not settings.turso_database_url:
         return {"ok": False, "error": "GLOWSEARCH_TURSO_DATABASE_URL is not set"}
-    import libsql
-
-    result: dict[str, object] = {
-        "database_url": settings.turso_database_url,
-        "auth_token_configured": bool(settings.turso_auth_token),
-        "auth_token_length": len(settings.turso_auth_token) if settings.turso_auth_token else 0,
-    }
-    probe_path = "/tmp/turso_probe.db"
-    for suffix in ("", "-wal", "-shm"):
-        Path(probe_path + suffix).unlink(missing_ok=True)
     try:
-        conn = libsql.connect(
-            probe_path,
-            sync_url=settings.turso_database_url,
-            auth_token=settings.turso_auth_token or "",
-        )
-        conn.sync()
-        conn.execute("CREATE TABLE IF NOT EXISTS _turso_probe (id INTEGER PRIMARY KEY, note TEXT)")
-        conn.execute("INSERT INTO _turso_probe (note) VALUES (?)", ("probe-from-render",))
-        conn.commit()
-        row = conn.execute("SELECT COUNT(*) FROM _turso_probe").fetchone()
-        conn.close()
-        result["ok"] = True
-        result["probe_row_count"] = row[0]
+        count = await turso_backup.backup_to_turso(settings.product_index_path, settings)
+        return {"ok": True, "products_backed_up": count}
     except Exception as exc:
-        result["ok"] = False
-        result["error"] = f"{type(exc).__name__}: {exc}"
-    finally:
-        for suffix in ("", "-wal", "-shm"):
-            Path(probe_path + suffix).unlink(missing_ok=True)
-    return result
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@router.post("/index/turso/restore")
+async def turso_restore_now(
+    request: Request,
+    token: Annotated[str | None, Query(description="GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN")] = None,
+) -> dict[str, object]:
+    """Admin-only: manually triggers a restore-from-Turso cycle."""
+    _require_index_admin(request, token)
+    settings = get_settings()
+    if not settings.turso_database_url:
+        return {"ok": False, "error": "GLOWSEARCH_TURSO_DATABASE_URL is not set"}
+    try:
+        count = await turso_backup.restore_from_turso(settings.product_index_path, settings)
+        return {"ok": True, "products_restored": count}
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
 @router.post("/index/warm")
