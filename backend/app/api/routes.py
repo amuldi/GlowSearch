@@ -367,7 +367,11 @@ async def turso_backup_now(
     if not settings.turso_database_url:
         return {"ok": False, "error": "GLOWSEARCH_TURSO_DATABASE_URL is not set"}
     count = await turso_http.backup_to_turso(settings.product_index_path, settings)
-    return {"ok": True, "products_backed_up": count}
+    return {
+        "ok": True,
+        "products_backed_up": count,
+        "product_index_path": str(settings.product_index_path),
+    }
 
 
 @router.post("/index/turso/restore")
