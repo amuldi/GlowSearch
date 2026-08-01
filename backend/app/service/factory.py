@@ -36,13 +36,18 @@ def get_search_service() -> SearchService:
     brand_resolver = BrandResolver(settings.brand_registry_path)
     normalizer = ProductNormalizer(brand_resolver, settings.oliveyoung_base_url)
     cache = AsyncTTLCache(ttl_seconds=settings.cache_ttl_seconds)
+    # Turso sync is deliberately NOT wired in here for now: connecting with
+    # sync_url performs a blocking network call inside libsql's Rust binding
+    # that does not reliably yield the GIL, so it can't be bounded by a
+    # Python-side timeout. Observed in production: what took ~75s against an
+    # unreachable test endpoint took several minutes (and counting) against
+    # the real Turso URL from Render's network, blocking app startup the
+    # whole time. Needs a properly decoupled (separate-process or
+    # after-startup, non-file-sharing) sync design before it's safe to
+    # enable. settings.turso_database_url/_auth_token are still read from
+    # config so that work can pick up here later.
     index_store = (
-        SQLiteProductIndexStore(
-            settings.product_index_path,
-            turso_sync_url=settings.turso_database_url,
-            turso_auth_token=settings.turso_auth_token,
-            turso_sync_interval_seconds=settings.turso_sync_interval_seconds,
-        )
+        SQLiteProductIndexStore(settings.product_index_path)
         if settings.product_index_enabled
         else None
     )
