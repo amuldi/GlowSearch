@@ -1,3 +1,4 @@
+import asyncio
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
@@ -10,6 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.api.routes import router
 from app.api.search_routes import router as search_router
 from app.core.config import get_settings
+from app.indexing import turso_http
 from app.service.factory import get_search_provider, get_search_service
 
 
@@ -45,15 +47,7 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # Turso's periodic backup/restore task is NOT started here, even
-        # though it looked event-loop-safe (connect/read/write all pushed
-        # into asyncio.to_thread). Confirmed live in production: libsql's
-        # blocking network calls do not release the GIL, so a "background"
-        # thread doing Turso I/O freezes the *entire* process, including the
-        # main event loop — every request, health checks included, until it
-        # finishes or Render kills the instance. This is not fixable with
-        # threading in-process; it would need real process isolation
-        # (subprocess) to be safe. See app/indexing/turso_backup.py.
+        turso_task: asyncio.Task | None = None
         if settings.product_index_enabled:
             service = get_search_service()
             if settings.product_index_verified_catalog_backfill_on_startup:
@@ -62,7 +56,19 @@ def create_app() -> FastAPI:
                 )
             if settings.product_index_warmup_on_startup:
                 app.state.product_index_warmup_scheduled_queries = service.schedule_warm_index()
+            if settings.turso_database_url:
+                # app/indexing/turso_http.py — httpx-based, not libsql. An
+                # earlier libsql-based version of this (even threaded via
+                # asyncio.to_thread) froze the whole process because libsql's
+                # blocking calls don't release the GIL; httpx is a
+                # well-behaved async library so a slow/unreachable Turso
+                # endpoint only delays this one task, never a request.
+                turso_task = asyncio.create_task(
+                    turso_http.run_periodic(settings.product_index_path, settings)
+                )
         yield
+        if turso_task is not None:
+            turso_task.cancel()
         await get_search_service().close()
         if get_search_provider.cache_info().currsize:
             await get_search_provider().close()

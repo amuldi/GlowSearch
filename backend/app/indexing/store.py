@@ -106,40 +106,15 @@ class ProductIndexStore(Protocol):
 
 
 class SQLiteProductIndexStore:
-    def __init__(
-        self,
-        db_path: Path,
-        *,
-        turso_sync_url: str | None = None,
-        turso_auth_token: str | None = None,
-        turso_sync_interval_seconds: float | None = None,
-    ):
+    def __init__(self, db_path: Path):
         self._db_path = db_path
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection = LibsqlConnection(
-            str(self._db_path),
-            sync_url=turso_sync_url,
-            auth_token=turso_auth_token,
-            sync_interval_seconds=turso_sync_interval_seconds,
-        )
+        self._connection = LibsqlConnection(str(self._db_path))
         self._connection.execute("PRAGMA journal_mode=WAL")
         self._connection.execute("PRAGMA synchronous=NORMAL")
         self._lock = asyncio.Lock()
         self._fts_enabled = True
         self._ensure_schema()
-
-    @classmethod
-    def for_remote(cls, url: str, auth_token: str | None) -> "SQLiteProductIndexStore":
-        """Pure-remote Turso instance (no local file, no PRAGMA calls that
-        only make sense for a local file) for app/indexing/turso_backup.py.
-        Reuses all the normal schema/upsert/read logic below unchanged."""
-        instance = cls.__new__(cls)
-        instance._db_path = None
-        instance._connection = LibsqlConnection(url, auth_token=auth_token, remote_only=True)
-        instance._lock = asyncio.Lock()
-        instance._fts_enabled = True
-        instance._ensure_schema()
-        return instance
 
     async def search(self, query: str, limit: int) -> list[ProductSourceRecord]:
         query_key = _key(query)
