@@ -73,14 +73,25 @@ _COLUMNS = [
     "updated_at",
 ]
 
+# A dedicated, deliberately unique table name: earlier attempts tonight
+# (the now-deleted libsql-based turso_backup.py, and manual debugging via
+# `turso db shell`) may have left a `products` table on the remote database
+# with a different, incompatible schema. CREATE TABLE IF NOT EXISTS silently
+# no-ops against a pre-existing table, so reusing that name would appear to
+# work right up until a query referenced a column that isn't actually there
+# (which is exactly what happened - "no such column: updated_at"). Rather
+# than guess at or DROP whatever is already on the database, just don't
+# collide with it.
+_TABLE_NAME = "glowsearch_products_backup"
+
 _CREATE_TABLE_SQL = f"""
-CREATE TABLE IF NOT EXISTS products (
+CREATE TABLE IF NOT EXISTS {_TABLE_NAME} (
     {", ".join(f"{col} TEXT" if col != "record_key" else f"{col} TEXT PRIMARY KEY" for col in _COLUMNS)}
 )
 """
 
 _UPSERT_SQL = f"""
-INSERT INTO products({", ".join(_COLUMNS)})
+INSERT INTO {_TABLE_NAME}({", ".join(_COLUMNS)})
 VALUES({", ".join("?" for _ in _COLUMNS)})
 ON CONFLICT(record_key) DO UPDATE SET
 {", ".join(f"{col} = excluded.{col}" for col in _COLUMNS if col != "record_key")}
@@ -255,7 +266,12 @@ async def restore_from_turso(db_path: Path, settings: Settings) -> int:
                 client,
                 base_url,
                 auth_token,
-                [{"type": "execute", "stmt": {"sql": f"SELECT {', '.join(_COLUMNS)} FROM products"}}],
+                [
+                    {
+                        "type": "execute",
+                        "stmt": {"sql": f"SELECT {', '.join(_COLUMNS)} FROM {_TABLE_NAME}"},
+                    }
+                ],
             )
         except Exception:
             logger.warning("Turso restore: failed", exc_info=True)
