@@ -128,6 +128,19 @@ class SQLiteProductIndexStore:
         self._fts_enabled = True
         self._ensure_schema()
 
+    @classmethod
+    def for_remote(cls, url: str, auth_token: str | None) -> "SQLiteProductIndexStore":
+        """Pure-remote Turso instance (no local file, no PRAGMA calls that
+        only make sense for a local file) for app/indexing/turso_backup.py.
+        Reuses all the normal schema/upsert/read logic below unchanged."""
+        instance = cls.__new__(cls)
+        instance._db_path = None
+        instance._connection = LibsqlConnection(url, auth_token=auth_token, remote_only=True)
+        instance._lock = asyncio.Lock()
+        instance._fts_enabled = True
+        instance._ensure_schema()
+        return instance
+
     async def search(self, query: str, limit: int) -> list[ProductSourceRecord]:
         query_key = _key(query)
         if not query_key or limit <= 0:

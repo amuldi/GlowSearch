@@ -1,3 +1,4 @@
+import asyncio
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
@@ -10,6 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.api.routes import router
 from app.api.search_routes import router as search_router
 from app.core.config import get_settings
+from app.indexing import turso_backup
 from app.service.factory import get_search_provider, get_search_service
 
 
@@ -45,6 +47,7 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        turso_task: asyncio.Task | None = None
         if settings.product_index_enabled:
             service = get_search_service()
             if settings.product_index_verified_catalog_backfill_on_startup:
@@ -53,7 +56,15 @@ def create_app() -> FastAPI:
                 )
             if settings.product_index_warmup_on_startup:
                 app.state.product_index_warmup_scheduled_queries = service.schedule_warm_index()
+            if settings.turso_database_url:
+                # Fire-and-forget: never awaited here, so however long Turso
+                # takes to respond can never delay startup or a request.
+                turso_task = asyncio.create_task(
+                    turso_backup.run_periodic(settings.product_index_path, settings)
+                )
         yield
+        if turso_task is not None:
+            turso_task.cancel()
         await get_search_service().close()
         if get_search_provider.cache_info().currsize:
             await get_search_provider().close()

@@ -82,7 +82,18 @@ class LibsqlConnection:
         sync_url: str | None = None,
         auth_token: str | None = None,
         sync_interval_seconds: float | None = None,
+        remote_only: bool = False,
     ):
+        if remote_only:
+            # Pure HTTP connection to Turso Cloud, no local file at all — used
+            # by app/indexing/turso_backup.py for background backup/restore,
+            # which must never touch (or block behind) the live local index
+            # connection. Callers are responsible for running this off the
+            # event loop (e.g. via asyncio.to_thread), since connecting here
+            # is a blocking network call with no reliable way to bound it
+            # from Python (see _try_connect_with_sync's docstring).
+            self._connection = libsql.connect(database=database, auth_token=auth_token or "")
+            return
         connection = None
         if sync_url:
             connection = self._try_connect_with_sync(
