@@ -355,6 +355,37 @@ async def run_catalog_jobs(
     return asdict(summary)
 
 
+@router.get("/index/turso/debug")
+async def turso_debug(
+    request: Request,
+    token: Annotated[str | None, Query(description="GLOWSEARCH_PRODUCT_INDEX_ADMIN_TOKEN")] = None,
+) -> dict[str, object]:
+    """Admin-only: isolates the local-read step used by backup_to_turso,
+    with raw filesystem facts, to debug why it reports 0 products when
+    /index/status reports otherwise."""
+    _require_index_admin(request, token)
+    settings = get_settings()
+    path = settings.product_index_path
+    result: dict[str, object] = {
+        "product_index_path": str(path),
+        "path_exists": path.exists(),
+        "path_size_bytes": path.stat().st_size if path.exists() else None,
+    }
+    from app.indexing.store import SQLiteProductIndexStore
+
+    local = SQLiteProductIndexStore(path)
+    try:
+        records = await local.all_products()
+        result["all_products_count"] = len(records)
+        raw = local._connection.execute("SELECT COUNT(*) AS c FROM products").fetchone()
+        result["raw_count_query"] = raw["c"]
+    except Exception as exc:
+        result["error"] = f"{type(exc).__name__}: {exc}"
+    finally:
+        await local.close()
+    return result
+
+
 @router.post("/index/turso/backup")
 async def turso_backup_now(
     request: Request,
