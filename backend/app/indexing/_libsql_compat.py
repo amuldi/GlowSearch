@@ -19,9 +19,15 @@ optionally on an interval via `sync_interval`.
 
 from __future__ import annotations
 
+import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from typing import Any
 
 import libsql
+
+logger = logging.getLogger(__name__)
+
+_CONNECT_TIMEOUT_SECONDS = 15.0
 
 
 class Row:
@@ -77,15 +83,61 @@ class LibsqlConnection:
         auth_token: str | None = None,
         sync_interval_seconds: float | None = None,
     ):
-        kwargs: dict[str, Any] = {}
+        connection = None
         if sync_url:
-            kwargs["sync_url"] = sync_url
-            kwargs["auth_token"] = auth_token or ""
+            connection = self._try_connect_with_sync(
+                database,
+                sync_url=sync_url,
+                auth_token=auth_token or "",
+                sync_interval_seconds=sync_interval_seconds,
+            )
+        self._connection = connection or libsql.connect(database)
+
+    @staticmethod
+    def _try_connect_with_sync(
+        database: str,
+        *,
+        sync_url: str,
+        auth_token: str,
+        sync_interval_seconds: float | None,
+    ) -> Any | None:
+        """Connects with Turso sync in a worker thread with a best-effort
+        timeout, so a failed/unreachable Turso endpoint degrades to a plain
+        local connection instead of crashing (or, previously, hanging) app
+        startup. Note: libsql's connect+sync is a blocking Rust call that does
+        not reliably yield the GIL, so `future.result(timeout=...)` can't
+        actually preempt it early — in practice a bad sync_url still takes as
+        long as the OS-level TCP timeout (~75s) to fail. This still matters
+        because it converts that eventual failure into a graceful fallback
+        instead of an uncaught exception."""
+
+        def connect_and_sync() -> Any:
+            kwargs: dict[str, Any] = {"sync_url": sync_url, "auth_token": auth_token}
             if sync_interval_seconds:
                 kwargs["sync_interval"] = sync_interval_seconds
-        self._connection = libsql.connect(database, **kwargs)
-        if sync_url:
-            self._connection.sync()
+            conn = libsql.connect(database, **kwargs)
+            conn.sync()
+            return conn
+
+        # Deliberately not a context manager: ThreadPoolExecutor.__exit__ calls
+        # shutdown(wait=True), which would block on exactly the hung call
+        # we're trying to time out. If the future never completes, this
+        # executor (and its one worker thread) is simply abandoned.
+        executor = ThreadPoolExecutor(max_workers=1)
+        future = executor.submit(connect_and_sync)
+        try:
+            return future.result(timeout=_CONNECT_TIMEOUT_SECONDS)
+        except FutureTimeoutError:
+            logger.warning(
+                "Turso sync timed out after %ss; falling back to local-only index",
+                _CONNECT_TIMEOUT_SECONDS,
+            )
+            return None
+        except Exception:
+            logger.warning("Turso connect/sync failed; falling back to local-only index", exc_info=True)
+            return None
+        finally:
+            executor.shutdown(wait=False)
 
     def execute(self, sql: str, params: tuple[Any, ...] = ()) -> _CursorProxy:
         return _CursorProxy(self._connection.execute(sql, params))
