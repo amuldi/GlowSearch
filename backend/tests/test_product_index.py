@@ -1443,3 +1443,189 @@ async def test_product_ingestion_enriches_details_before_indexing(tmp_path) -> N
     assert indexed[0].product_name_ko == "뮤드 상세 상품명"
     assert indexed[0].original_price == 17000
     assert indexed[0].sale_price == 12600
+
+
+# --- product_offers persistence (milestone 2) ---
+
+
+@pytest.mark.asyncio
+async def test_product_offers_persist_on_first_ingest(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "로션",
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-lotion-1",
+                source_brand_name="새브랜드",
+                product_name_ko="새브랜드 로션",
+                source="oliveyoung",
+                source_product_id="offer-1",
+                source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=offer-1",
+                original_price=20000,
+                sale_price=15000,
+                currency="KRW",
+                image_url="https://image.example/offer-1.jpg",
+                sold_out=False,
+                updated_at="2026-08-10T00:00:00+00:00",
+            )
+        ],
+    )
+    offers = await store.get_offers(["verified-lotion-1"])
+    await store.close()
+
+    assert [offer.source for offer in offers["verified-lotion-1"]] == ["oliveyoung"]
+    offer = offers["verified-lotion-1"][0]
+    assert offer.source_product_id == "offer-1"
+    assert (
+        offer.source_url
+        == "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=offer-1"
+    )
+    assert offer.original_price == 20000
+    assert offer.sale_price == 15000
+    assert offer.price == 15000  # derived: sale_price wins when present
+    assert offer.sold_out is False
+    assert offer.updated_at == "2026-08-10T00:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_product_offers_reingest_updates_in_place_without_duplicating(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    base_record = ProductSourceRecord(
+        canonical_product_id="verified-lotion-1",
+        source_brand_name="새브랜드",
+        product_name_ko="새브랜드 로션",
+        source="oliveyoung",
+        source_product_id="offer-1",
+        source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=offer-1",
+        original_price=20000,
+        sale_price=15000,
+        image_url="https://image.example/offer-1.jpg",
+        sold_out=False,
+    )
+    await store.upsert_search_results("로션", [base_record])
+
+    # Re-ingest: the sale ended (sale_price -> None, should overwrite to None),
+    # a new URL is reported (should overwrite), but this pass didn't capture an
+    # image (None should NOT clobber the previously known-good image_url).
+    await store.upsert_search_results(
+        "로션",
+        [
+            base_record.model_copy(
+                update={
+                    "source_url": "https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=offer-1&v=2",
+                    "sale_price": None,
+                    "image_url": None,
+                    "sold_out": True,
+                }
+            )
+        ],
+    )
+    offers = await store.get_offers(["verified-lotion-1"])
+    stats = await store.stats()
+    await store.close()
+
+    assert len(offers["verified-lotion-1"]) == 1  # no duplicate row
+    offer = offers["verified-lotion-1"][0]
+    assert offer.source_url.endswith("v=2")  # URL updated
+    assert offer.sale_price is None  # promotion ending is a meaningful overwrite
+    assert offer.price == 20000  # derived price falls back to original_price
+    assert (
+        offer.image_url == "https://image.example/offer-1.jpg"
+    )  # preserved, not clobbered by None
+    assert offer.sold_out is True
+    assert stats["offer_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_product_offers_excluded_without_source_product_id(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "로션",
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-lotion-2",
+                source_brand_name="새브랜드",
+                product_name_ko="새브랜드 크림",
+                source="oliveyoung",
+                source_product_id=None,
+                source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=unknown",
+                original_price=10000,
+            )
+        ],
+    )
+    offers = await store.get_offers(["verified-lotion-2"])
+    stats = await store.stats()
+    indexed = await store.search("로션", 10)
+    await store.close()
+
+    # No offer row was written (no stable per-retailer id to key on)...
+    assert offers.get("verified-lotion-2") is None
+    assert stats["offer_count"] == 0
+    # ...but the record itself is still indexed as before (unchanged behavior).
+    assert any(record.canonical_product_id == "verified-lotion-2" for record in indexed)
+
+
+@pytest.mark.asyncio
+async def test_product_offers_do_not_silently_relink_on_canonical_conflict(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "로션",
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-lotion-1",
+                source="oliveyoung",
+                source_product_id="offer-1",
+                source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=offer-1",
+                original_price=20000,
+            )
+        ],
+    )
+    # Same (source, source_product_id) but a *different* canonical_product_id —
+    # must not silently move the offer to a different product.
+    await store.upsert_search_results(
+        "로션",
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-lotion-99",
+                source="oliveyoung",
+                source_product_id="offer-1",
+                source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=offer-1",
+                original_price=999,
+            )
+        ],
+    )
+    offers_original = await store.get_offers(["verified-lotion-1"])
+    offers_conflicting = await store.get_offers(["verified-lotion-99"])
+    stats = await store.stats()
+    await store.close()
+
+    assert len(offers_original["verified-lotion-1"]) == 1
+    assert offers_original["verified-lotion-1"][0].original_price == 20000  # untouched
+    assert offers_conflicting.get("verified-lotion-99") is None  # never linked
+    assert stats["offer_canonical_conflicts"] == 1
+
+
+@pytest.mark.asyncio
+async def test_product_offers_survive_store_close_and_reopen(tmp_path) -> None:
+    db_path = tmp_path / "product_index.sqlite3"
+    store = SQLiteProductIndexStore(db_path)
+    await store.upsert_search_results(
+        "로션",
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-lotion-1",
+                source="oliveyoung",
+                source_product_id="offer-1",
+                source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=offer-1",
+                original_price=20000,
+            )
+        ],
+    )
+    await store.close()
+
+    reopened = SQLiteProductIndexStore(db_path)
+    offers = await reopened.get_offers(["verified-lotion-1"])
+    await reopened.close()
+
+    assert offers["verified-lotion-1"][0].source_product_id == "offer-1"
+    assert offers["verified-lotion-1"][0].original_price == 20000

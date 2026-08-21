@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Protocol
 
 from app.indexing._libsql_compat import LibsqlConnection, Row
-from app.models.product import ProductSourceRecord
+from app.models.product import ProductOffer, ProductSourceRecord
 from app.normalizer.brand import BrandAlias
 from app.search.synonyms import search_key
 
@@ -100,6 +100,8 @@ class ProductIndexStore(Protocol):
 
     async def stats(self) -> dict[str, int | str | None]: ...
 
+    async def get_offers(self, canonical_product_ids: list[str]) -> dict[str, list[ProductOffer]]: ...
+
     async def all_products(self, limit: int | None = None) -> list[ProductSourceRecord]: ...
 
     async def close(self) -> None: ...
@@ -114,6 +116,7 @@ class SQLiteProductIndexStore:
         self._connection.execute("PRAGMA synchronous=NORMAL")
         self._lock = asyncio.Lock()
         self._fts_enabled = True
+        self._offer_canonical_conflicts = 0
         self._ensure_schema()
 
     async def search(self, query: str, limit: int) -> list[ProductSourceRecord]:
@@ -552,6 +555,8 @@ class SQLiteProductIndexStore:
         async with self._lock:
             for rank, record in enumerate(records, start=1):
                 product_id = self._upsert_product(record, now)
+                if record.canonical_product_id and record.source_product_id and record.source_url:
+                    self._upsert_offer(record, now)
                 self._connection.execute(
                     """
                     INSERT INTO query_products(query_key, product_id, rank, refreshed_at)
@@ -588,6 +593,9 @@ class SQLiteProductIndexStore:
             last_gap_at = self._connection.execute(
                 "SELECT MAX(last_seen_at) AS value FROM search_gaps"
             ).fetchone()["value"]
+            offer_count = self._connection.execute(
+                "SELECT COUNT(*) AS count FROM product_offers"
+            ).fetchone()["count"]
         return {
             "product_count": int(product_count or 0),
             "query_count": int(query_count or 0),
@@ -595,7 +603,24 @@ class SQLiteProductIndexStore:
             "search_gap_count": int(gap_count or 0),
             "last_refreshed_at": last_refreshed_at,
             "last_search_gap_at": last_gap_at,
+            "offer_count": int(offer_count or 0),
+            "offer_canonical_conflicts": self._offer_canonical_conflicts,
         }
+
+    async def get_offers(self, canonical_product_ids: list[str]) -> dict[str, list[ProductOffer]]:
+        ids = [cid for cid in dict.fromkeys(canonical_product_ids) if cid]
+        if not ids:
+            return {}
+        placeholders = ",".join("?" for _ in ids)
+        async with self._lock:
+            rows = self._connection.execute(
+                f"SELECT * FROM product_offers WHERE canonical_product_id IN ({placeholders})",
+                tuple(ids),
+            ).fetchall()
+        grouped: dict[str, list[ProductOffer]] = {}
+        for row in rows:
+            grouped.setdefault(row["canonical_product_id"], []).append(_row_to_offer(row))
+        return grouped
 
     async def all_products(self, limit: int | None = None) -> list[ProductSourceRecord]:
         sql = "SELECT * FROM products ORDER BY last_seen_at DESC, id DESC"
@@ -763,6 +788,29 @@ class SQLiteProductIndexStore:
             ON editor_confirmed_mappings(normalized_query)
             """
         )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS product_offers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                canonical_product_id TEXT NOT NULL,
+                source TEXT NOT NULL,
+                source_product_id TEXT NOT NULL,
+                source_url TEXT NOT NULL,
+                original_price REAL,
+                sale_price REAL,
+                currency TEXT,
+                image_url TEXT,
+                sold_out INTEGER,
+                source_updated_at TEXT,
+                first_seen_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                UNIQUE(canonical_product_id, source, source_product_id)
+            )
+            """
+        )
+        self._connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_product_offers_canonical ON product_offers(canonical_product_id)"
+        )
         self._ensure_fts_table()
         self._connection.commit()
 
@@ -928,6 +976,56 @@ class SQLiteProductIndexStore:
         ).fetchone()
         self._upsert_product_fts(record_key, record)
         return int(row["id"])
+
+    def _upsert_offer(self, record: ProductSourceRecord, now: str) -> None:
+        """Persist a per-retailer offer row. Only called when canonical_product_id,
+        source_product_id and source_url are all present (see upsert_search_results) —
+        this mirrors exactly the condition ProductNormalizer._offers() already uses to
+        decide whether an offer exists at all, plus a stable per-source identifier.
+        A conflicting canonical_product_id for the same (source, source_product_id) is
+        never silently re-linked: the existing verified link is preserved and the
+        attempt is counted in self._offer_canonical_conflicts (exposed via stats())."""
+        conflict = self._connection.execute(
+            "SELECT canonical_product_id FROM product_offers WHERE source = ? AND source_product_id = ?",
+            (record.source, record.source_product_id),
+        ).fetchone()
+        if conflict is not None and conflict["canonical_product_id"] != record.canonical_product_id:
+            self._offer_canonical_conflicts += 1
+            return
+        source_updated_at = record.updated_at or now
+        self._connection.execute(
+            """
+            INSERT INTO product_offers(
+                canonical_product_id, source, source_product_id, source_url,
+                original_price, sale_price, currency, image_url, sold_out,
+                source_updated_at, first_seen_at, last_seen_at
+            )
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(canonical_product_id, source, source_product_id) DO UPDATE SET
+                source_url = COALESCE(excluded.source_url, product_offers.source_url),
+                original_price = COALESCE(excluded.original_price, product_offers.original_price),
+                sale_price = excluded.sale_price,
+                currency = COALESCE(excluded.currency, product_offers.currency),
+                image_url = COALESCE(excluded.image_url, product_offers.image_url),
+                sold_out = COALESCE(excluded.sold_out, product_offers.sold_out),
+                source_updated_at = COALESCE(excluded.source_updated_at, excluded.last_seen_at),
+                last_seen_at = excluded.last_seen_at
+            """,
+            (
+                record.canonical_product_id,
+                record.source,
+                record.source_product_id,
+                record.source_url,
+                record.original_price,
+                record.sale_price,
+                record.currency,
+                record.image_url,
+                _sqlite_bool(record.sold_out),
+                source_updated_at,
+                now,
+                now,
+            ),
+        )
 
     def _upsert_product_fts(self, record_key: str, record: ProductSourceRecord) -> None:
         if not self._fts_enabled:
@@ -1173,6 +1271,24 @@ def _row_to_record(row: Row) -> ProductSourceRecord:
         source_url=row["source_url"],
         source_product_id=row["source_product_id"],
         updated_at=row["source_updated_at"] or row["last_refreshed_at"],
+    )
+
+
+def _row_to_offer(row: Row) -> ProductOffer:
+    original_price = row["original_price"]
+    sale_price = row["sale_price"]
+    display_price = sale_price if sale_price is not None else original_price
+    return ProductOffer(
+        source=row["source"],
+        source_url=row["source_url"],
+        source_product_id=row["source_product_id"],
+        price=display_price,
+        original_price=original_price,
+        sale_price=sale_price,
+        currency=row["currency"],
+        image_url=row["image_url"],
+        sold_out=_bool_from_sqlite(row["sold_out"]),
+        updated_at=row["source_updated_at"],
     )
 
 

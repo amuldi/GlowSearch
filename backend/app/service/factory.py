@@ -107,6 +107,7 @@ def get_search_service() -> SearchService:
         },
         source_policy=SourcePolicy(allowed_prefixes=settings.result_source_prefixes),
         defer_ordinary_query_live_collect=settings.defer_ordinary_query_live_collect,
+        product_offers_enabled=settings.product_offers_enabled,
     )
 
 

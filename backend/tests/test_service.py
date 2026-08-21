@@ -2615,3 +2615,121 @@ async def test_search_service_defer_flag_can_be_disabled_to_restore_legacy_behav
     assert response.completeness == "complete"
     assert response.data_freshness is not None
     assert response.data_freshness.origin == "live_collection"
+
+
+# --- persisted product_offers merged into search responses (milestone 2) ---
+
+
+@pytest.mark.asyncio
+async def test_search_service_merges_persisted_offers_not_returned_by_index_lookup(
+    tmp_path,
+) -> None:
+    """A second, verified offer that is persisted in product_offers but is NOT
+    itself returned by the index lookup for this query (different product text,
+    never mapped to this query_key) must still show up in offers[] — proving the
+    new SQLite-persisted-offer attachment path, not just in-memory same-request
+    merging of index rows."""
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "크로스 세럼",
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-cross-1",
+                source_brand_name="크로스브랜드",
+                product_name_ko="크로스 세럼",
+                source="oliveyoung",
+                source_product_id="cross-oy-1",
+                source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=cross-oy-1",
+                original_price=25000,
+            )
+        ],
+    )
+    await store.upsert_search_results(
+        "은하수 무드등",  # deliberately unrelated text/query so it never maps to "크로스 세럼"
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-cross-1",
+                source_brand_name="다른표기",
+                product_name_ko="은하수 무드등",
+                source="official",
+                source_product_id="cross-official-1",
+                source_url="https://cross-brand.example/products/cross-official-1",
+                original_price=25000,
+            )
+        ],
+    )
+    service = SearchService(
+        collectors=[],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        index_background_refresh_enabled=False,
+    )
+
+    response = await service.search("크로스 세럼", SearchCriteria(limit=24))
+    await service.drain_background_tasks()
+    await service.close()
+
+    assert response.count == 1
+    assert [offer.source for offer in response.results[0].offers] == ["oliveyoung", "official"]
+    assert all(offer.source_url for offer in response.results[0].offers)
+
+
+@pytest.mark.asyncio
+async def test_search_service_product_offers_disabled_flag_skips_attachment(tmp_path) -> None:
+    """Rollback lever: product_offers_enabled=False restores the pre-milestone-2
+    behavior (only whatever the index/live path already produced in-memory)."""
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "크로스 세럼",
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-cross-1",
+                source_brand_name="크로스브랜드",
+                product_name_ko="크로스 세럼",
+                source="oliveyoung",
+                source_product_id="cross-oy-1",
+                source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=cross-oy-1",
+                original_price=25000,
+            )
+        ],
+    )
+    await store.upsert_search_results(
+        "은하수 무드등",
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-cross-1",
+                source_brand_name="다른표기",
+                product_name_ko="은하수 무드등",
+                source="official",
+                source_product_id="cross-official-1",
+                source_url="https://cross-brand.example/products/cross-official-1",
+                original_price=25000,
+            )
+        ],
+    )
+    service = SearchService(
+        collectors=[],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        index_background_refresh_enabled=False,
+        product_offers_enabled=False,
+    )
+
+    response = await service.search("크로스 세럼", SearchCriteria(limit=24))
+    await service.drain_background_tasks()
+    await service.close()
+
+    assert response.count == 1
+    assert [offer.source for offer in response.results[0].offers] == ["oliveyoung"]

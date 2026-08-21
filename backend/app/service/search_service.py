@@ -67,6 +67,7 @@ class SearchService:
         source_policy: SourcePolicy | None = None,
         metrics: SearchMetrics | None = None,
         defer_ordinary_query_live_collect: bool = True,
+        product_offers_enabled: bool = True,
     ):
         self._collectors = collectors
         self._normalizer = normalizer
@@ -91,6 +92,7 @@ class SearchService:
         )
         self._metrics = metrics or SearchMetrics()
         self._defer_ordinary_query_live_collect = defer_ordinary_query_live_collect
+        self._product_offers_enabled = product_offers_enabled
         self._background_tasks: set[asyncio.Task[None]] = set()
         self._background_refresh_keys: set[str] = set()
         self._last_index_error: str | None = None
@@ -205,7 +207,7 @@ class SearchService:
                 or cached_collected.has_official_records
             ):
                 self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
-                return self._finalize_response(
+                return await self._finalize_response(
                     query=cleaned_query,
                     results=[] if require_relevant and cached_top_score <= 0 else cached_results,
                     criteria=criteria,
@@ -260,7 +262,7 @@ class SearchService:
         ):
             await self._cache.set(cache_key, indexed_collected)
             self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
-            return self._finalize_response(
+            return await self._finalize_response(
                 query=cleaned_query,
                 results=indexed_results,
                 criteria=criteria,
@@ -273,7 +275,7 @@ class SearchService:
             if indexed_results and (indexed_top_score > 0 or indexed_collected.has_official_records):
                 await self._cache.set(cache_key, indexed_collected)
                 self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
-                return self._finalize_response(
+                return await self._finalize_response(
                     query=cleaned_query,
                     results=indexed_results,
                     criteria=criteria,
@@ -290,14 +292,14 @@ class SearchService:
             )
             if verified_results and verified_top_score > 0:
                 await self._cache.set(cache_key, verified_collected)
-                return self._finalize_response(
+                return await self._finalize_response(
                     query=cleaned_query,
                     results=verified_results,
                     criteria=criteria,
                     freshness_origin="verified_catalog",
                     ran_live_collection=False,
                 )
-            return self._finalize_response(
+            return await self._finalize_response(
                 query=cleaned_query,
                 results=[],
                 criteria=criteria,
@@ -320,7 +322,7 @@ class SearchService:
                 if verified_top_score > 0:
                     if not self._prefer_live_official_results:
                         await self._cache.set(cache_key, verified_collected)
-                    return self._finalize_response(
+                    return await self._finalize_response(
                         query=cleaned_query,
                         results=verified_results,
                         criteria=criteria,
@@ -337,7 +339,7 @@ class SearchService:
                 and self._is_ordinary_query(brand_match, product_query, cleaned_query)
             ):
                 self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
-                return self._finalize_response(
+                return await self._finalize_response(
                     query=cleaned_query,
                     results=fallback_results or indexed_results,
                     criteria=criteria,
@@ -420,7 +422,7 @@ class SearchService:
             if full_index_top_score > 0:
                 fallback_results = full_index_results
         if (top_score <= 0 or not results) and fallback_results and not require_relevant:
-            return self._finalize_response(
+            return await self._finalize_response(
                 query=cleaned_query,
                 results=fallback_results[: criteria.limit],
                 criteria=criteria,
@@ -438,7 +440,7 @@ class SearchService:
                 preserve_order=browser_collected.has_official_records,
             )
             if browser_top_score > 0:
-                return self._finalize_response(
+                return await self._finalize_response(
                     query=cleaned_query,
                     results=browser_results,
                     criteria=criteria,
@@ -447,7 +449,7 @@ class SearchService:
                 )
 
         results = [] if require_relevant and top_score <= 0 else results
-        return self._finalize_response(
+        return await self._finalize_response(
             query=cleaned_query,
             results=results,
             criteria=criteria,
@@ -1520,7 +1522,7 @@ class SearchService:
             return result_count > 0
         return result_count >= self._search_gap_threshold(criteria)
 
-    def _finalize_response(
+    async def _finalize_response(
         self,
         *,
         query: str,
@@ -1535,7 +1537,10 @@ class SearchService:
         a "complete" answer. `ran_live_collection` records whether *this*
         response involved a synchronous live-collection wait (as opposed to
         being served from the cache/index/verified catalog, or deferred to an
-        async catalog job)."""
+        async catalog job). Also attaches any persisted per-retailer offers for
+        canonical-id-bearing results before computing count/completeness, so a
+        stored official-mall offer can turn an otherwise-thin result complete."""
+        results = await self._attach_persisted_offers(results)
         count = len(results)
         if count == 0:
             catalog_job_expected = self._product_index is not None and criteria.record_gaps
@@ -1562,6 +1567,45 @@ class SearchService:
     def _latest_updated_at(results: list[ProductSearchResult]) -> str | None:
         timestamps = [result.updated_at for result in results if result.updated_at]
         return max(timestamps) if timestamps else None
+
+    async def _attach_persisted_offers(
+        self,
+        results: list[ProductSearchResult],
+    ) -> list[ProductSearchResult]:
+        """Merge in offers persisted to the SQLite index (milestone 2) for any
+        result carrying a canonical_product_id. Reuses the existing in-memory
+        merge/backfill logic (_merge_offers, _offer_backfill_update) so the
+        combined offer list is deduped/ordered exactly like same-request
+        cross-source merges already are. A storage read error is logged and
+        swallowed — it must never fail the search itself."""
+        if not self._product_offers_enabled or self._product_index is None or not results:
+            return results
+        get_offers = getattr(self._product_index, "get_offers", None)
+        if get_offers is None:
+            return results
+        canonical_ids = [result.canonical_product_id for result in results if result.canonical_product_id]
+        if not canonical_ids:
+            return results
+        try:
+            stored = await get_offers(canonical_ids)
+        except Exception as exc:
+            self._last_index_error = f"{type(exc).__name__}: {exc}"
+            self._metrics.record_background_index_error(self._last_index_error)
+            return results
+        if not stored:
+            return results
+        updated: list[ProductSearchResult] = []
+        for result in results:
+            persisted = stored.get(result.canonical_product_id) if result.canonical_product_id else None
+            if not persisted:
+                updated.append(result)
+                continue
+            stamped = [self._stamp_offer_source_metadata(offer) for offer in persisted]
+            merged_offers = self._merge_offers([*result.offers, *stamped])
+            update = self._offer_backfill_update(result, merged_offers)
+            update["offers"] = merged_offers
+            updated.append(result.model_copy(update=update))
+        return updated
 
     @classmethod
     def _should_use_full_index_first(cls, query: str, product_query: str) -> bool:
@@ -1810,24 +1854,8 @@ class SearchService:
         update: dict[str, object] = {
             "offers": offers,
             "quality_score": max(existing.quality_score, incoming.quality_score),
+            **cls._offer_backfill_update(representative, offers),
         }
-        priced_offer = cls._first_priced_offer(offers)
-        if priced_offer is not None:
-            price_updated = False
-            if representative.price is None and priced_offer.price is not None:
-                update["price"] = priced_offer.price
-                price_updated = True
-            if representative.original_price is None and priced_offer.original_price is not None:
-                update["original_price"] = priced_offer.original_price
-                price_updated = True
-            if representative.sale_price is None and priced_offer.sale_price is not None:
-                update["sale_price"] = priced_offer.sale_price
-                price_updated = True
-            if price_updated and priced_offer.currency:
-                update["currency"] = priced_offer.currency
-        image_offer = cls._first_image_offer(offers)
-        if representative.image_url is None and image_offer is not None:
-            update["image_url"] = image_offer.image_url
         for field in [
             "brand_ko",
             "brand_en",
@@ -1948,6 +1976,36 @@ class SearchService:
         return next((offer for offer in offers if offer.image_url), None)
 
     @classmethod
+    def _offer_backfill_update(
+        cls,
+        representative: ProductSearchResult,
+        offers: list[ProductOffer],
+    ) -> dict[str, object]:
+        """Fields to backfill on `representative` from `offers` when the
+        representative doesn't already have its own value. Shared by
+        `_merge_duplicate_product` (merging two in-request results) and
+        `_attach_persisted_offers` (merging in offers persisted to SQLite)."""
+        update: dict[str, object] = {}
+        priced_offer = cls._first_priced_offer(offers)
+        if priced_offer is not None:
+            price_updated = False
+            if representative.price is None and priced_offer.price is not None:
+                update["price"] = priced_offer.price
+                price_updated = True
+            if representative.original_price is None and priced_offer.original_price is not None:
+                update["original_price"] = priced_offer.original_price
+                price_updated = True
+            if representative.sale_price is None and priced_offer.sale_price is not None:
+                update["sale_price"] = priced_offer.sale_price
+                price_updated = True
+            if price_updated and priced_offer.currency:
+                update["currency"] = priced_offer.currency
+        image_offer = cls._first_image_offer(offers)
+        if representative.image_url is None and image_offer is not None:
+            update["image_url"] = image_offer.image_url
+        return update
+
+    @classmethod
     def _source_coverage_missing_fields(cls, product: ProductSearchResult) -> list[str]:
         missing: list[str] = []
         if not product.brand_en:
@@ -1991,16 +2049,16 @@ class SearchService:
             )
         return filtered
 
+    def _stamp_offer_source_metadata(self, offer: ProductOffer) -> ProductOffer:
+        return offer.model_copy(
+            update={
+                "source_label": self._source_policy.label(offer.source),
+                "source_priority": self._source_policy.priority(offer.source),
+            }
+        )
+
     def _with_source_metadata(self, product: ProductSearchResult) -> ProductSearchResult:
-        offers = [
-            offer.model_copy(
-                update={
-                    "source_label": self._source_policy.label(offer.source),
-                    "source_priority": self._source_policy.priority(offer.source),
-                }
-            )
-            for offer in product.offers
-        ]
+        offers = [self._stamp_offer_source_metadata(offer) for offer in product.offers]
         updated = product.model_copy(
             update={
                 "source_label": self._source_policy.label(product.source),
