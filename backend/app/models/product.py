@@ -6,6 +6,7 @@ PriceValue = int | float
 
 CompletenessState = Literal["complete", "partial", "empty_pending", "unavailable"]
 DataFreshnessOrigin = Literal["index_cache", "verified_catalog", "live_collection", "mixed"]
+MatchReviewState = Literal["verified", "pending_review", "rejected", "invalid"]
 
 
 class ProductSourceRecord(BaseModel):
@@ -49,6 +50,12 @@ class ProductOffer(BaseModel):
     image_url: str | None = Field(default=None)
     sold_out: bool | None = Field(default=None)
     updated_at: str | None = Field(default=None)
+    # None = no product_match record exists for this offer (e.g. it was only
+    # merged in-memory within this request, same as before milestone 3) — it
+    # is shown exactly as today. "verified"/None are the only states ever
+    # included in a ProductSearchResult.offers list; pending_review/rejected/
+    # invalid offers are held back (see SearchResponse.pending_offer_count).
+    review_state: MatchReviewState | None = Field(default=None)
 
 
 class ProductSearchResult(BaseModel):
@@ -96,6 +103,7 @@ class SearchResponse(BaseModel):
     source_errors: list[str] = Field(default_factory=list)
     completeness: CompletenessState = Field(default="complete")
     data_freshness: DataFreshness | None = Field(default=None)
+    pending_offer_count: int = Field(default=0)
 
 
 class SuggestionResponse(BaseModel):

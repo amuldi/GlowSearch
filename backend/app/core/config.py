@@ -115,6 +115,7 @@ class Settings(BaseSettings):
     product_index_min_results: int = 1
     defer_ordinary_query_live_collect: bool = True
     product_offers_enabled: bool = True
+    product_match_enabled: bool = True
     product_index_background_refresh_enabled: bool = True
     product_index_background_refresh_limit: int = 1200
     product_index_warmup_on_startup: bool = False

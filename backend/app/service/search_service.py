@@ -68,6 +68,7 @@ class SearchService:
         metrics: SearchMetrics | None = None,
         defer_ordinary_query_live_collect: bool = True,
         product_offers_enabled: bool = True,
+        product_match_enabled: bool = True,
     ):
         self._collectors = collectors
         self._normalizer = normalizer
@@ -93,6 +94,7 @@ class SearchService:
         self._metrics = metrics or SearchMetrics()
         self._defer_ordinary_query_live_collect = defer_ordinary_query_live_collect
         self._product_offers_enabled = product_offers_enabled
+        self._product_match_enabled = product_match_enabled
         self._background_tasks: set[asyncio.Task[None]] = set()
         self._background_refresh_keys: set[str] = set()
         self._last_index_error: str | None = None
@@ -1539,8 +1541,10 @@ class SearchService:
         being served from the cache/index/verified catalog, or deferred to an
         async catalog job). Also attaches any persisted per-retailer offers for
         canonical-id-bearing results before computing count/completeness, so a
-        stored official-mall offer can turn an otherwise-thin result complete."""
-        results = await self._attach_persisted_offers(results)
+        stored official-mall offer can turn an otherwise-thin result complete.
+        Offers still awaiting match review are held back from offers[] (see
+        _attach_persisted_offers) and only counted in pending_offer_count."""
+        results, pending_offer_count = await self._attach_persisted_offers(results)
         count = len(results)
         if count == 0:
             catalog_job_expected = self._product_index is not None and criteria.record_gaps
@@ -1561,6 +1565,7 @@ class SearchService:
             source_errors=source_errors or [],
             completeness=completeness,
             data_freshness=freshness,
+            pending_offer_count=pending_offer_count,
         )
 
     @staticmethod
@@ -1571,30 +1576,40 @@ class SearchService:
     async def _attach_persisted_offers(
         self,
         results: list[ProductSearchResult],
-    ) -> list[ProductSearchResult]:
+    ) -> tuple[list[ProductSearchResult], int]:
         """Merge in offers persisted to the SQLite index (milestone 2) for any
         result carrying a canonical_product_id. Reuses the existing in-memory
         merge/backfill logic (_merge_offers, _offer_backfill_update) so the
         combined offer list is deduped/ordered exactly like same-request
         cross-source merges already are. A storage read error is logged and
-        swallowed — it must never fail the search itself."""
+        swallowed — it must never fail the search itself.
+
+        Offers carrying a product_match review_state of 'pending_review',
+        'rejected', or 'invalid' (milestone 3) are held back from the
+        returned offers[] — only 'verified' and unmatched (review_state=None,
+        i.e. no product_match record at all — the same-request in-memory
+        offers that existed before milestone 3) offers are ever exposed
+        automatically. The count of 'pending_review' offers held back is
+        returned separately so a caller can surface "N more offers awaiting
+        review" without exposing the unverified links themselves."""
         if not self._product_offers_enabled or self._product_index is None or not results:
-            return results
+            return results, 0
         get_offers = getattr(self._product_index, "get_offers", None)
         if get_offers is None:
-            return results
+            return results, 0
         canonical_ids = [result.canonical_product_id for result in results if result.canonical_product_id]
         if not canonical_ids:
-            return results
+            return results, 0
         try:
             stored = await get_offers(canonical_ids)
         except Exception as exc:
             self._last_index_error = f"{type(exc).__name__}: {exc}"
             self._metrics.record_background_index_error(self._last_index_error)
-            return results
+            return results, 0
         if not stored:
-            return results
+            return results, 0
         updated: list[ProductSearchResult] = []
+        pending_offer_count = 0
         for result in results:
             persisted = stored.get(result.canonical_product_id) if result.canonical_product_id else None
             if not persisted:
@@ -1602,10 +1617,21 @@ class SearchService:
                 continue
             stamped = [self._stamp_offer_source_metadata(offer) for offer in persisted]
             merged_offers = self._merge_offers([*result.offers, *stamped])
-            update = self._offer_backfill_update(result, merged_offers)
-            update["offers"] = merged_offers
+            if self._product_match_enabled:
+                visible_offers = [
+                    offer for offer in merged_offers if offer.review_state in (None, "verified")
+                ]
+                pending_offer_count += sum(
+                    1 for offer in merged_offers if offer.review_state == "pending_review"
+                )
+            else:
+                # Rollback lever: pre-milestone-3 behavior — every persisted
+                # offer is shown regardless of review_state.
+                visible_offers = merged_offers
+            update = self._offer_backfill_update(result, visible_offers)
+            update["offers"] = visible_offers
             updated.append(result.model_copy(update=update))
-        return updated
+        return updated, pending_offer_count
 
     @classmethod
     def _should_use_full_index_first(cls, query: str, product_query: str) -> bool:
@@ -1928,7 +1954,7 @@ class SearchService:
                 continue
             key = cls._offer_key(offer)
             existing = merged.get(key)
-            if existing is None or cls._offer_completeness(offer) > cls._offer_completeness(existing):
+            if existing is None or cls._offer_rank(offer) > cls._offer_rank(existing):
                 merged[key] = offer
         return sorted(
             merged.values(),
@@ -1960,6 +1986,17 @@ class SearchService:
             if value is not None:
                 score += 1
         return score
+
+    @classmethod
+    def _offer_rank(cls, offer: ProductOffer) -> tuple[int, int]:
+        """Merge-tiebreak key: an offer backed by a product_match record
+        (milestone 3) always outranks an in-memory-only duplicate for the
+        same (source, source_product_id), regardless of which one happens to
+        have more populated price/image fields this request — a live
+        re-scrape picking up one extra field (e.g. a today-only sale_price)
+        must not silently drop a curated review_state. Field completeness
+        still breaks ties within the same review tier."""
+        return (0 if offer.review_state is None else 1, cls._offer_completeness(offer))
 
     @staticmethod
     def _first_priced_offer(offers: list[ProductOffer]) -> ProductOffer | None:

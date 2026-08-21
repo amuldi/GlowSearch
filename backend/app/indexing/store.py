@@ -102,6 +102,28 @@ class ProductIndexStore(Protocol):
 
     async def get_offers(self, canonical_product_ids: list[str]) -> dict[str, list[ProductOffer]]: ...
 
+    async def record_candidate_match(
+        self,
+        *,
+        canonical_product_id: str,
+        offer_id: int,
+        confidence: float,
+        match_method: str,
+        evidence: list[dict[str, object]] | None = None,
+    ) -> str | None: ...
+
+    async def set_match_review_state(
+        self,
+        match_id: str,
+        *,
+        review_state: str,
+        reviewed_by: str,
+    ) -> bool: ...
+
+    async def backfill_verified_catalog_matches(self, *, actor: str) -> int: ...
+
+    async def backfill_editor_confirmed_matches(self, *, actor: str) -> int: ...
+
     async def all_products(self, limit: int | None = None) -> list[ProductSourceRecord]: ...
 
     async def close(self) -> None: ...
@@ -614,13 +636,225 @@ class SQLiteProductIndexStore:
         placeholders = ",".join("?" for _ in ids)
         async with self._lock:
             rows = self._connection.execute(
-                f"SELECT * FROM product_offers WHERE canonical_product_id IN ({placeholders})",
+                f"""
+                SELECT po.*, pm.review_state AS match_review_state
+                FROM product_offers po
+                LEFT JOIN product_matches pm
+                    ON pm.offer_id = po.id AND pm.canonical_product_id = po.canonical_product_id
+                WHERE po.canonical_product_id IN ({placeholders})
+                """,
                 tuple(ids),
             ).fetchall()
         grouped: dict[str, list[ProductOffer]] = {}
         for row in rows:
             grouped.setdefault(row["canonical_product_id"], []).append(_row_to_offer(row))
         return grouped
+
+    async def record_candidate_match(
+        self,
+        *,
+        canonical_product_id: str,
+        offer_id: int,
+        confidence: float,
+        match_method: str,
+        evidence: list[dict[str, object]] | None = None,
+    ) -> str | None:
+        """Upsert a candidate match produced by an automatic process (title
+        similarity, embeddings, LLM judgement, or even a strong structured
+        field match). Always written as review_state='pending_review' — no
+        automatic method can ever set 'verified' through this method; only
+        set_match_review_state(), called with an explicit reviewed_by, can do
+        that. Re-running this for the same (canonical_product_id, offer_id)
+        only updates confidence/evidence while the match is still pending —
+        it never overwrites a human's verified/rejected/invalid decision.
+        Returns None if offer_id doesn't resolve to a known offer."""
+        async with self._lock:
+            offer_row = self._connection.execute(
+                "SELECT source, source_product_id FROM product_offers WHERE id = ?",
+                (offer_id,),
+            ).fetchone()
+            if offer_row is None:
+                return None
+            match_id = f"match:{canonical_product_id}:{offer_row['source']}:{offer_row['source_product_id']}"
+            now = datetime.now(tz=UTC).isoformat()
+            evidence_json = json.dumps(evidence or [])
+            self._connection.execute(
+                """
+                INSERT INTO product_matches(
+                    match_id, canonical_product_id, offer_id, confidence, match_method,
+                    evidence_json, review_state, created_at, updated_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?, 'pending_review', ?, ?)
+                ON CONFLICT(match_id) DO UPDATE SET
+                    confidence = excluded.confidence,
+                    match_method = excluded.match_method,
+                    evidence_json = excluded.evidence_json,
+                    updated_at = excluded.updated_at
+                WHERE product_matches.review_state = 'pending_review'
+                """,
+                (
+                    match_id,
+                    canonical_product_id,
+                    offer_id,
+                    confidence,
+                    match_method,
+                    evidence_json,
+                    now,
+                    now,
+                ),
+            )
+            self._connection.commit()
+        return match_id
+
+    async def set_match_review_state(
+        self,
+        match_id: str,
+        *,
+        review_state: str,
+        reviewed_by: str,
+    ) -> bool:
+        """The only path that can set a match to 'verified' (or explicitly to
+        'rejected'/'invalid'). Requires a non-empty reviewed_by — enforced
+        here in addition to the DB CHECK constraint on 'verified', so every
+        state change (including 'invalid' set by an automated integrity
+        check) carries an attributed actor."""
+        if review_state not in ("verified", "pending_review", "rejected", "invalid"):
+            raise ValueError(f"invalid review_state: {review_state!r}")
+        if not reviewed_by or not reviewed_by.strip():
+            raise ValueError("reviewed_by is required to set a match review_state")
+        now = datetime.now(tz=UTC).isoformat()
+        async with self._lock:
+            cursor = self._connection.execute(
+                """
+                UPDATE product_matches
+                SET review_state = ?, reviewed_by = ?, reviewed_at = ?, updated_at = ?
+                WHERE match_id = ?
+                """,
+                (review_state, reviewed_by, now, now, match_id),
+            )
+            self._connection.commit()
+        return bool(cursor.rowcount)
+
+    async def backfill_verified_catalog_matches(self, *, actor: str) -> int:
+        """One-time migration: every product_offers row today originates from
+        a canonical_product_id-bearing record, which (per milestone 2's
+        persistence gate) only ever comes from verified_products.json — so
+        each existing offer becomes a 'verified' product_matches row with
+        match_method='verified_catalog'. Idempotent via match_id's UNIQUE
+        constraint (ON CONFLICT DO NOTHING) — never overwrites an existing
+        match of any review_state. Returns the number of offers processed."""
+        now = datetime.now(tz=UTC).isoformat()
+        async with self._lock:
+            offer_rows = self._connection.execute(
+                "SELECT id, canonical_product_id, source, source_product_id FROM product_offers"
+            ).fetchall()
+            for row in offer_rows:
+                match_id = f"match:{row['canonical_product_id']}:{row['source']}:{row['source_product_id']}"
+                evidence_json = json.dumps(
+                    [{"type": "verified_catalog_entry", "value": row["canonical_product_id"]}]
+                )
+                self._connection.execute(
+                    """
+                    INSERT INTO product_matches(
+                        match_id, canonical_product_id, offer_id, confidence, match_method,
+                        evidence_json, review_state, reviewed_by, reviewed_at, created_at, updated_at
+                    )
+                    VALUES(?, ?, ?, 1.0, 'verified_catalog', ?, 'verified', ?, ?, ?, ?)
+                    ON CONFLICT(match_id) DO NOTHING
+                    """,
+                    (
+                        match_id,
+                        row["canonical_product_id"],
+                        row["id"],
+                        evidence_json,
+                        actor,
+                        now,
+                        now,
+                        now,
+                    ),
+                )
+            self._connection.commit()
+        return len(offer_rows)
+
+    async def backfill_editor_confirmed_matches(self, *, actor: str) -> int:
+        """One-time migration: editor_confirmed_mappings rows a human already
+        confirmed via POST /editor/confirm, but which were never linked to a
+        product_offers row (that table didn't exist yet). Rows missing
+        canonical_product_id/source_url/source_product_id are skipped — no
+        identifier is fabricated for them. If no matching product_offers row
+        exists yet, one is created via the same upsert path used at ingest
+        time. Idempotent via match_id's UNIQUE constraint. Returns the number
+        of mapping rows successfully processed (skipped rows not counted)."""
+        now = datetime.now(tz=UTC).isoformat()
+        async with self._lock:
+            mapping_rows = self._connection.execute(
+                """
+                SELECT canonical_product_id, source, source_url, source_product_id, created_at
+                FROM editor_confirmed_mappings
+                WHERE canonical_product_id IS NOT NULL AND canonical_product_id != ''
+                  AND source_url IS NOT NULL AND source_url != ''
+                  AND source_product_id IS NOT NULL AND source_product_id != ''
+                """
+            ).fetchall()
+            processed = 0
+            for row in mapping_rows:
+                offer_row = self._connection.execute(
+                    """
+                    SELECT id FROM product_offers
+                    WHERE source = ? AND source_product_id = ? AND canonical_product_id = ?
+                    """,
+                    (row["source"], row["source_product_id"], row["canonical_product_id"]),
+                ).fetchone()
+                if offer_row is None:
+                    self._upsert_offer(
+                        ProductSourceRecord(
+                            canonical_product_id=row["canonical_product_id"],
+                            source=row["source"],
+                            source_product_id=row["source_product_id"],
+                            source_url=row["source_url"],
+                        ),
+                        now,
+                    )
+                    offer_row = self._connection.execute(
+                        """
+                        SELECT id FROM product_offers
+                        WHERE source = ? AND source_product_id = ? AND canonical_product_id = ?
+                        """,
+                        (row["source"], row["source_product_id"], row["canonical_product_id"]),
+                    ).fetchone()
+                    if offer_row is None:
+                        # _upsert_offer refused the write (canonical_product_id
+                        # conflict with an existing offer for this source +
+                        # source_product_id) — preserve that existing link
+                        # rather than fabricating a match for it.
+                        continue
+                match_id = f"match:{row['canonical_product_id']}:{row['source']}:{row['source_product_id']}"
+                evidence_json = json.dumps(
+                    [{"type": "editor_confirmed_mapping", "value": row["canonical_product_id"]}]
+                )
+                self._connection.execute(
+                    """
+                    INSERT INTO product_matches(
+                        match_id, canonical_product_id, offer_id, confidence, match_method,
+                        evidence_json, review_state, reviewed_by, reviewed_at, created_at, updated_at
+                    )
+                    VALUES(?, ?, ?, 1.0, 'editor_confirmed', ?, 'verified', ?, ?, ?, ?)
+                    ON CONFLICT(match_id) DO NOTHING
+                    """,
+                    (
+                        match_id,
+                        row["canonical_product_id"],
+                        offer_row["id"],
+                        evidence_json,
+                        actor,
+                        row["created_at"] or now,
+                        now,
+                        now,
+                    ),
+                )
+                processed += 1
+            self._connection.commit()
+        return processed
 
     async def all_products(self, limit: int | None = None) -> list[ProductSourceRecord]:
         sql = "SELECT * FROM products ORDER BY last_seen_at DESC, id DESC"
@@ -810,6 +1044,37 @@ class SQLiteProductIndexStore:
         )
         self._connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_product_offers_canonical ON product_offers(canonical_product_id)"
+        )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS product_matches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                match_id TEXT NOT NULL UNIQUE,
+                canonical_product_id TEXT NOT NULL,
+                variant_id TEXT,
+                offer_id INTEGER NOT NULL REFERENCES product_offers(id) ON DELETE CASCADE,
+                confidence REAL NOT NULL,
+                match_method TEXT NOT NULL,
+                evidence_json TEXT,
+                review_state TEXT NOT NULL DEFAULT 'pending_review',
+                reviewed_by TEXT,
+                reviewed_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(canonical_product_id, offer_id),
+                CHECK (review_state IN ('verified', 'pending_review', 'rejected', 'invalid')),
+                CHECK (review_state != 'verified' OR reviewed_by IS NOT NULL)
+            )
+            """
+        )
+        self._connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_product_matches_canonical ON product_matches(canonical_product_id)"
+        )
+        self._connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_product_matches_offer ON product_matches(offer_id)"
+        )
+        self._connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_product_matches_review_state ON product_matches(review_state)"
         )
         self._ensure_fts_table()
         self._connection.commit()
@@ -1278,6 +1543,7 @@ def _row_to_offer(row: Row) -> ProductOffer:
     original_price = row["original_price"]
     sale_price = row["sale_price"]
     display_price = sale_price if sale_price is not None else original_price
+    review_state = row["match_review_state"] if "match_review_state" in row.keys() else None
     return ProductOffer(
         source=row["source"],
         source_url=row["source_url"],
@@ -1289,6 +1555,7 @@ def _row_to_offer(row: Row) -> ProductOffer:
         image_url=row["image_url"],
         sold_out=_bool_from_sqlite(row["sold_out"]),
         updated_at=row["source_updated_at"],
+        review_state=review_state,
     )
 
 

@@ -1629,3 +1629,195 @@ async def test_product_offers_survive_store_close_and_reopen(tmp_path) -> None:
 
     assert offers["verified-lotion-1"][0].source_product_id == "offer-1"
     assert offers["verified-lotion-1"][0].original_price == 20000
+
+
+# --- product_matches (milestone 3) ---
+
+
+@pytest.mark.asyncio
+async def test_backfill_verified_catalog_matches_marks_existing_offers_verified(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "로션",
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-lotion-1",
+                source="oliveyoung",
+                source_product_id="offer-1",
+                source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=offer-1",
+                original_price=20000,
+            )
+        ],
+    )
+
+    processed = await store.backfill_verified_catalog_matches(actor="verified_catalog_migration")
+    offers = await store.get_offers(["verified-lotion-1"])
+    row = store._connection.execute(
+        "SELECT match_method, reviewed_by, reviewed_at FROM product_matches"
+    ).fetchone()
+    await store.close()
+
+    assert processed == 1
+    assert offers["verified-lotion-1"][0].review_state == "verified"
+    assert row["match_method"] == "verified_catalog"
+    assert row["reviewed_by"] == "verified_catalog_migration"
+    assert row["reviewed_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_backfill_verified_catalog_matches_is_idempotent(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "로션",
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-lotion-1",
+                source="oliveyoung",
+                source_product_id="offer-1",
+                source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=offer-1",
+                original_price=20000,
+            )
+        ],
+    )
+
+    await store.backfill_verified_catalog_matches(actor="migration")
+    await store.backfill_verified_catalog_matches(actor="migration")
+    count = store._connection.execute("SELECT COUNT(*) AS c FROM product_matches").fetchone()["c"]
+    await store.close()
+
+    assert count == 1
+
+
+@pytest.mark.asyncio
+async def test_backfill_editor_confirmed_matches_skips_rows_missing_identifiers(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    # Missing source_product_id — cannot be linked to a stable offer identity.
+    await store.record_editor_confirmed_mapping(
+        raw_text="브랜드 상품명 확인됨",
+        normalized_query="브랜드 상품명",
+        source="oliveyoung",
+        source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=incomplete",
+        source_product_id=None,
+        canonical_product_id="verified-incomplete-1",
+    )
+    # Fully populated — should be migrated.
+    await store.record_editor_confirmed_mapping(
+        raw_text="브랜드 다른상품 확인됨",
+        normalized_query="브랜드 다른상품",
+        source="official",
+        source_url="https://brand.example/complete-1",
+        source_product_id="complete-1",
+        canonical_product_id="verified-complete-1",
+    )
+
+    processed = await store.backfill_editor_confirmed_matches(actor="editor_confirm_migration")
+    offers = await store.get_offers(["verified-complete-1", "verified-incomplete-1"])
+    await store.close()
+
+    assert processed == 1
+    assert offers.get("verified-incomplete-1") is None  # no offer fabricated for it
+    assert offers["verified-complete-1"][0].review_state == "verified"
+    assert offers["verified-complete-1"][0].source == "official"
+
+
+@pytest.mark.asyncio
+async def test_record_candidate_match_always_pending_regardless_of_confidence(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "세럼",
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-serum-1",
+                source="musinsa",
+                source_product_id="ms-1",
+                source_url="https://musinsa.example/ms-1",
+                original_price=20000,
+            )
+        ],
+    )
+    offer_id = store._connection.execute("SELECT id FROM product_offers").fetchone()["id"]
+
+    match_id = await store.record_candidate_match(
+        canonical_product_id="verified-serum-1",
+        offer_id=offer_id,
+        confidence=0.95,  # even a very high automatic confidence...
+        match_method="gtin_exact",
+        evidence=[{"type": "gtin_exact", "value": "8809563991234", "weight": 0.95}],
+    )
+    offers = await store.get_offers(["verified-serum-1"])
+
+    with pytest.raises(ValueError):
+        await store.set_match_review_state(match_id, review_state="verified", reviewed_by="")
+
+    await store.close()
+
+    assert offers["verified-serum-1"][0].review_state == "pending_review"  # ...never auto-verified
+
+
+@pytest.mark.asyncio
+async def test_set_match_review_state_requires_human_reviewer_to_verify(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "세럼",
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-serum-2",
+                source="musinsa",
+                source_product_id="ms-2",
+                source_url="https://musinsa.example/ms-2",
+                original_price=20000,
+            )
+        ],
+    )
+    offer_id = store._connection.execute("SELECT id FROM product_offers").fetchone()["id"]
+    match_id = await store.record_candidate_match(
+        canonical_product_id="verified-serum-2",
+        offer_id=offer_id,
+        confidence=0.6,
+        match_method="brand_name_exact",
+    )
+
+    ok = await store.set_match_review_state(match_id, review_state="verified", reviewed_by="alice")
+    offers = await store.get_offers(["verified-serum-2"])
+    await store.close()
+
+    assert ok is True
+    assert offers["verified-serum-2"][0].review_state == "verified"
+
+
+@pytest.mark.asyncio
+async def test_rejected_match_is_not_overwritten_by_a_later_automatic_candidate(tmp_path) -> None:
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "세럼",
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-serum-3",
+                source="musinsa",
+                source_product_id="ms-3",
+                source_url="https://musinsa.example/ms-3",
+                original_price=20000,
+            )
+        ],
+    )
+    offer_id = store._connection.execute("SELECT id FROM product_offers").fetchone()["id"]
+    match_id = await store.record_candidate_match(
+        canonical_product_id="verified-serum-3",
+        offer_id=offer_id,
+        confidence=0.4,
+        match_method="title_similarity",
+    )
+    await store.set_match_review_state(match_id, review_state="rejected", reviewed_by="bob")
+
+    # An automatic matcher retries with much stronger evidence — must not
+    # silently resurrect the rejected match.
+    await store.record_candidate_match(
+        canonical_product_id="verified-serum-3",
+        offer_id=offer_id,
+        confidence=0.95,
+        match_method="gtin_exact",
+    )
+    offers = await store.get_offers(["verified-serum-3"])
+    await store.close()
+
+    assert offers["verified-serum-3"][0].review_state == "rejected"

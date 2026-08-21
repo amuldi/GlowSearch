@@ -8,7 +8,7 @@ from app.cache.ttl import AsyncTTLCache
 from app.data_collector.base import SearchCriteria, SourceUnavailableError
 from app.indexing.agents import ProductIngestionAgent
 from app.indexing.store import SQLiteProductIndexStore
-from app.models.product import ProductSourceRecord
+from app.models.product import ProductOffer, ProductSourceRecord
 from app.normalizer.brand import BrandResolver
 from app.normalizer.product import ProductNormalizer
 from app.service.search_service import SearchService, _CollectedResult
@@ -2733,3 +2733,157 @@ async def test_search_service_product_offers_disabled_flag_skips_attachment(tmp_
 
     assert response.count == 1
     assert [offer.source for offer in response.results[0].offers] == ["oliveyoung"]
+
+
+# --- product_match review_state gating in search responses (milestone 3) ---
+
+
+@pytest.mark.asyncio
+async def test_search_service_hides_pending_review_offers_but_counts_them(tmp_path) -> None:
+    """A pending_review offer never appears in offers[], but is reflected in
+    pending_offer_count; a verified offer for the same product still shows."""
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "듀얼 세럼",
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-dual-1",
+                source_brand_name="듀얼브랜드",
+                product_name_ko="듀얼 세럼",
+                source="oliveyoung",
+                source_product_id="dual-oy-1",
+                source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=dual-oy-1",
+                original_price=20000,
+            )
+        ],
+    )
+    await store.upsert_search_results(
+        "은하수 무드등",
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-dual-1",
+                source_brand_name="다른표기",
+                product_name_ko="은하수 무드등",
+                source="musinsa",
+                source_product_id="dual-musinsa-1",
+                source_url="https://musinsa.example/dual-musinsa-1",
+                original_price=20000,
+            )
+        ],
+    )
+    await store.backfill_verified_catalog_matches(actor="verified_catalog_migration")
+    # Downgrade the musinsa match back to pending_review, as if it had instead
+    # come from an automatic (not verified-catalog) matcher.
+    conflict_row = store._connection.execute(
+        "SELECT match_id FROM product_matches WHERE offer_id = (SELECT id FROM product_offers WHERE source = 'musinsa')"
+    ).fetchone()
+    store._connection.execute(
+        "UPDATE product_matches SET review_state = 'pending_review', reviewed_by = NULL WHERE match_id = ?",
+        (conflict_row["match_id"],),
+    )
+    store._connection.commit()
+
+    service = SearchService(
+        collectors=[],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        index_background_refresh_enabled=False,
+    )
+
+    response = await service.search("듀얼 세럼", SearchCriteria(limit=24))
+    await service.drain_background_tasks()
+    await service.close()
+
+    assert response.count == 1
+    assert [offer.source for offer in response.results[0].offers] == ["oliveyoung"]
+    assert response.pending_offer_count == 1
+
+
+@pytest.mark.asyncio
+async def test_search_service_match_gating_can_be_disabled(tmp_path) -> None:
+    """Rollback lever: product_match_enabled=False shows every persisted
+    offer regardless of review_state, exactly like milestone 2 did."""
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "듀얼 세럼",
+        [
+            ProductSourceRecord(
+                canonical_product_id="verified-dual-2",
+                source_brand_name="듀얼브랜드",
+                product_name_ko="듀얼 세럼",
+                source="oliveyoung",
+                source_product_id="dual-oy-2",
+                source_url="https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=dual-oy-2",
+                original_price=20000,
+            )
+        ],
+    )
+    offer_id = store._connection.execute(
+        "SELECT id FROM product_offers WHERE source_product_id = 'dual-oy-2'"
+    ).fetchone()["id"]
+    await store.record_candidate_match(
+        canonical_product_id="verified-dual-2",
+        offer_id=offer_id,
+        confidence=0.5,
+        match_method="brand_name_exact",
+    )
+
+    service = SearchService(
+        collectors=[],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        index_background_refresh_enabled=False,
+        product_match_enabled=False,
+    )
+
+    response = await service.search("듀얼 세럼", SearchCriteria(limit=24))
+    await service.drain_background_tasks()
+    await service.close()
+
+    assert response.count == 1
+    assert [offer.source for offer in response.results[0].offers] == ["oliveyoung"]
+    assert response.pending_offer_count == 0
+
+
+def test_merge_offers_prefers_reviewed_offer_over_a_more_complete_unreviewed_duplicate() -> None:
+    """Regression test: a same-request live re-scrape can end up with one more
+    populated field (e.g. a today-only sale_price) than the persisted offer
+    for the exact same (source, source_product_id) — that must never cause
+    the persisted offer's product_match review_state to be silently dropped
+    in favor of the unreviewed duplicate."""
+    unreviewed_but_more_complete = ProductOffer(
+        source="oliveyoung",
+        source_url="https://oy.example/goods/1",
+        source_product_id="oy-1",
+        price=11000,
+        original_price=13000,
+        sale_price=11000,
+        image_url="https://img.example/1.jpg",
+        updated_at="2026-08-21T00:00:00+00:00",
+        review_state=None,
+    )
+    reviewed_but_less_complete = ProductOffer(
+        source="oliveyoung",
+        source_url="https://oy.example/goods/1",
+        source_product_id="oy-1",
+        price=13000,
+        original_price=13000,
+        review_state="verified",
+    )
+
+    merged = SearchService._merge_offers([unreviewed_but_more_complete, reviewed_but_less_complete])
+
+    assert len(merged) == 1
+    assert merged[0].review_state == "verified"
