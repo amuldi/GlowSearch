@@ -12,7 +12,15 @@ from app.data_collector.base import ProductCollector, SearchCriteria, SourceUnav
 from app.ingestion.oliveyoung_pipeline import IngestionSummary, OliveYoungIngestionPipeline
 from app.indexing.agents import ProductIngestionAgent, SourceDiscoveryAgent
 from app.indexing.store import ProductIndexStore
-from app.models.product import ProductOffer, ProductSearchResult, ProductSourceRecord, SearchResponse
+from app.models.product import (
+    CompletenessState,
+    DataFreshness,
+    DataFreshnessOrigin,
+    ProductOffer,
+    ProductSearchResult,
+    ProductSourceRecord,
+    SearchResponse,
+)
 from app.normalizer.brand import BrandMatch
 from app.normalizer.product import ProductNormalizer
 from app.normalizer.text import clean_text
@@ -58,6 +66,7 @@ class SearchService:
         allowed_result_source_prefixes: tuple[str, ...] | None = None,
         source_policy: SourcePolicy | None = None,
         metrics: SearchMetrics | None = None,
+        defer_ordinary_query_live_collect: bool = True,
     ):
         self._collectors = collectors
         self._normalizer = normalizer
@@ -81,6 +90,7 @@ class SearchService:
             allowed_prefixes=allowed_result_source_prefixes
         )
         self._metrics = metrics or SearchMetrics()
+        self._defer_ordinary_query_live_collect = defer_ordinary_query_live_collect
         self._background_tasks: set[asyncio.Task[None]] = set()
         self._background_refresh_keys: set[str] = set()
         self._last_index_error: str | None = None
@@ -195,11 +205,13 @@ class SearchService:
                 or cached_collected.has_official_records
             ):
                 self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
-                return SearchResponse(
+                return self._finalize_response(
                     query=cleaned_query,
-                    count=len(cached_results),
                     results=[] if require_relevant and cached_top_score <= 0 else cached_results,
+                    criteria=criteria,
                     source_errors=cached_collected.errors,
+                    freshness_origin="index_cache",
+                    ran_live_collection=False,
                 )
             if cached_top_score > 0 or (
                 cached_collected.has_official_records and cached_results
@@ -248,11 +260,12 @@ class SearchService:
         ):
             await self._cache.set(cache_key, indexed_collected)
             self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
-            return SearchResponse(
+            return self._finalize_response(
                 query=cleaned_query,
-                count=len(indexed_results),
                 results=indexed_results,
-                source_errors=[],
+                criteria=criteria,
+                freshness_origin="index_cache",
+                ran_live_collection=False,
             )
 
         # index_only: skip live collection, return best available local results immediately
@@ -260,11 +273,12 @@ class SearchService:
             if indexed_results and (indexed_top_score > 0 or indexed_collected.has_official_records):
                 await self._cache.set(cache_key, indexed_collected)
                 self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
-                return SearchResponse(
+                return self._finalize_response(
                     query=cleaned_query,
-                    count=len(indexed_results),
                     results=indexed_results,
-                    source_errors=[],
+                    criteria=criteria,
+                    freshness_origin="index_cache",
+                    ran_live_collection=False,
                 )
             verified_collected = await self._collect_verified_cache(collect_queries, collect_limit)
             verified_results, verified_top_score = self._build_results(
@@ -276,13 +290,20 @@ class SearchService:
             )
             if verified_results and verified_top_score > 0:
                 await self._cache.set(cache_key, verified_collected)
-                return SearchResponse(
+                return self._finalize_response(
                     query=cleaned_query,
-                    count=len(verified_results),
                     results=verified_results,
-                    source_errors=[],
+                    criteria=criteria,
+                    freshness_origin="verified_catalog",
+                    ran_live_collection=False,
                 )
-            return SearchResponse(query=cleaned_query, count=0, results=[], source_errors=[])
+            return self._finalize_response(
+                query=cleaned_query,
+                results=[],
+                criteria=criteria,
+                freshness_origin="index_cache",
+                ran_live_collection=False,
+            )
 
         collected = None
         collected_from_live = False
@@ -299,12 +320,31 @@ class SearchService:
                 if verified_top_score > 0:
                     if not self._prefer_live_official_results:
                         await self._cache.set(cache_key, verified_collected)
-                    return SearchResponse(
+                    return self._finalize_response(
                         query=cleaned_query,
-                        count=len(verified_results),
                         results=verified_results,
-                        source_errors=[],
+                        criteria=criteria,
+                        freshness_origin="verified_catalog",
+                        ran_live_collection=False,
                     )
+
+            if (
+                self._defer_ordinary_query_live_collect
+                and not require_relevant
+                and criteria.record_gaps
+                and not self._prefer_live_official_results
+                and self._product_index is not None
+                and self._is_ordinary_query(brand_match, product_query, cleaned_query)
+            ):
+                self._schedule_index_refresh(cleaned_query, collect_queries, collect_limit)
+                return self._finalize_response(
+                    query=cleaned_query,
+                    results=fallback_results or indexed_results,
+                    criteria=criteria,
+                    source_errors=indexed_collected.errors,
+                    freshness_origin="index_cache",
+                    ran_live_collection=False,
+                )
 
             collected = await self._collect(
                 live_collect_queries,
@@ -380,11 +420,13 @@ class SearchService:
             if full_index_top_score > 0:
                 fallback_results = full_index_results
         if (top_score <= 0 or not results) and fallback_results and not require_relevant:
-            return SearchResponse(
+            return self._finalize_response(
                 query=cleaned_query,
-                count=len(fallback_results[: criteria.limit]),
                 results=fallback_results[: criteria.limit],
+                criteria=criteria,
                 source_errors=collected.errors,
+                freshness_origin="mixed",
+                ran_live_collection=True,
             )
         if require_relevant and allow_browser_retry and top_score <= 0 and collected.records:
             browser_collected = await self._collect_browser(collect_queries, collect_limit)
@@ -396,19 +438,22 @@ class SearchService:
                 preserve_order=browser_collected.has_official_records,
             )
             if browser_top_score > 0:
-                return SearchResponse(
+                return self._finalize_response(
                     query=cleaned_query,
-                    count=len(browser_results),
                     results=browser_results,
-                    source_errors=[],
+                    criteria=criteria,
+                    freshness_origin="live_collection",
+                    ran_live_collection=True,
                 )
 
         results = [] if require_relevant and top_score <= 0 else results
-        return SearchResponse(
+        return self._finalize_response(
             query=cleaned_query,
-            count=len(results),
             results=results,
+            criteria=criteria,
             source_errors=collected.errors,
+            freshness_origin="live_collection",
+            ran_live_collection=True,
         )
 
     async def _collect_index(
@@ -903,6 +948,24 @@ class SearchService:
     @staticmethod
     def _is_brand_only_query(brand_match: BrandMatch | None, product_query: str) -> bool:
         return brand_match is not None and not clean_text(product_query)
+
+    def _is_ordinary_query(
+        self,
+        brand_match: BrandMatch | None,
+        product_query: str,
+        query: str,
+    ) -> bool:
+        """True for a plain, single-product-style query: not brand-only, not a
+        broad related/discovery query, not a benefit/category discovery query.
+        These are the queries `_has_sufficient_index_results` already treats as
+        "any relevant result is enough" — this reuses the same predicates so an
+        ordinary query with a thin/empty index can be deferred to an async
+        catalog job instead of blocking the request on live collection."""
+        return not (
+            self._is_brand_only_query(brand_match, product_query)
+            or self._is_broad_related_query(query)
+            or self._is_benefit_discovery_query(product_query or query)
+        )
 
     @staticmethod
     def _broad_related_return_threshold(limit: int) -> int:
@@ -1456,6 +1519,49 @@ class SearchService:
         ):
             return result_count > 0
         return result_count >= self._search_gap_threshold(criteria)
+
+    def _finalize_response(
+        self,
+        *,
+        query: str,
+        results: list[ProductSearchResult],
+        criteria: SearchCriteria,
+        source_errors: list[str] | None = None,
+        freshness_origin: DataFreshnessOrigin,
+        ran_live_collection: bool,
+    ) -> SearchResponse:
+        """Build a SearchResponse with `completeness`/`data_freshness` filled in
+        consistently, so a single indexed result is never silently reported as
+        a "complete" answer. `ran_live_collection` records whether *this*
+        response involved a synchronous live-collection wait (as opposed to
+        being served from the cache/index/verified catalog, or deferred to an
+        async catalog job)."""
+        count = len(results)
+        if count == 0:
+            catalog_job_expected = self._product_index is not None and criteria.record_gaps
+            completeness: CompletenessState = (
+                "unavailable" if ran_live_collection or not catalog_job_expected else "empty_pending"
+            )
+            freshness = None
+        else:
+            completeness = "complete" if (count >= criteria.limit or ran_live_collection) else "partial"
+            freshness = DataFreshness(
+                origin=freshness_origin,
+                checked_at=self._latest_updated_at(results),
+            )
+        return SearchResponse(
+            query=query,
+            count=count,
+            results=results,
+            source_errors=source_errors or [],
+            completeness=completeness,
+            data_freshness=freshness,
+        )
+
+    @staticmethod
+    def _latest_updated_at(results: list[ProductSearchResult]) -> str | None:
+        timestamps = [result.updated_at for result in results if result.updated_at]
+        return max(timestamps) if timestamps else None
 
     @classmethod
     def _should_use_full_index_first(cls, query: str, product_query: str) -> bool:

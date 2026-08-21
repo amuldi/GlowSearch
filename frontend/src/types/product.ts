@@ -45,11 +45,22 @@ export type Product = {
   updated_at?: string | null;
 };
 
+export type SearchCompleteness = "complete" | "partial" | "empty_pending" | "unavailable";
+
+export type DataFreshness = {
+  origin: "index_cache" | "verified_catalog" | "live_collection" | "mixed";
+  checked_at?: string | null;
+};
+
 export type SearchResponse = {
   query: string;
   count: number;
   results: Product[];
   source_errors: string[];
+  // Optional: older/newer backend deploys may omit these. Treat a missing
+  // `completeness` as "complete" so the UI degrades gracefully.
+  completeness?: SearchCompleteness;
+  data_freshness?: DataFreshness | null;
 };
 
 export type SuggestionResponse = {

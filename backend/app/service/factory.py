@@ -106,6 +106,7 @@ def get_search_service() -> SearchService:
             settings.barcode_lookup_api_source: settings.barcode_lookup_api_timeout_seconds,
         },
         source_policy=SourcePolicy(allowed_prefixes=settings.result_source_prefixes),
+        defer_ordinary_query_live_collect=settings.defer_ordinary_query_live_collect,
     )
 
 

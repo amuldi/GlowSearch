@@ -1121,6 +1121,9 @@ async def test_search_service_skips_slow_index_read_before_network(tmp_path) -> 
         product_index=SlowProductIndexStore(),
         index_background_refresh_enabled=False,
         allowed_result_source_prefixes=("oliveyoung",),
+        # This test targets the index-read-timeout -> live-collect fallback
+        # specifically, not the ordinary-query deferral added alongside it.
+        defer_ordinary_query_live_collect=False,
     )
 
     started_at = time.perf_counter()
@@ -1403,6 +1406,9 @@ async def test_search_service_ingests_live_results_into_index(tmp_path) -> None:
         index_min_results=1,
         index_background_refresh_enabled=False,
         allowed_result_source_prefixes=("oliveyoung",),
+        # This test targets live-result-ingestion-into-index specifically, not
+        # the ordinary-query deferral added alongside it.
+        defer_ordinary_query_live_collect=False,
     )
 
     response = await service.search("실시간 제품", SearchCriteria(limit=10))

@@ -1,6 +1,11 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 PriceValue = int | float
+
+CompletenessState = Literal["complete", "partial", "empty_pending", "unavailable"]
+DataFreshnessOrigin = Literal["index_cache", "verified_catalog", "live_collection", "mixed"]
 
 
 class ProductSourceRecord(BaseModel):
@@ -79,11 +84,18 @@ class ProductSearchResult(BaseModel):
     updated_at: str | None = Field(default=None)
 
 
+class DataFreshness(BaseModel):
+    origin: DataFreshnessOrigin
+    checked_at: str | None = Field(default=None)
+
+
 class SearchResponse(BaseModel):
     query: str
     count: int
     results: list[ProductSearchResult]
     source_errors: list[str] = Field(default_factory=list)
+    completeness: CompletenessState = Field(default="complete")
+    data_freshness: DataFreshness | None = Field(default=None)
 
 
 class SuggestionResponse(BaseModel):

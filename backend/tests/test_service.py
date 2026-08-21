@@ -1958,6 +1958,8 @@ async def test_search_service_records_empty_and_low_result_gaps(tmp_path) -> Non
     await service.close()
 
     assert response.count == 0
+    assert response.completeness == "empty_pending"
+    assert response.data_freshness is None
     assert gaps[0]["query"] == "없는 상품"
     assert gaps[0]["last_reason"] == "empty_result"
     assert jobs[0]["query"] == "없는 상품"
@@ -2043,6 +2045,9 @@ async def test_search_service_enqueues_low_result_index_gap(tmp_path) -> None:
     await service.close()
 
     assert response.count == 1
+    assert response.completeness == "partial"
+    assert response.data_freshness is not None
+    assert response.data_freshness.origin == "index_cache"
     assert gaps[0]["query"] == "투쿨포스쿨"
     assert gaps[0]["last_reason"] == "low_result_count"
     assert any(job["query"] == "투쿨포스쿨" for job in jobs)
@@ -2437,3 +2442,176 @@ async def test_search_service_keeps_sold_out_results_without_price(tmp_path) -> 
     assert response.count == 1
     assert response.results[0].brand_en == "the SAEM"
     assert response.results[0].price is None
+
+
+# --- completeness / data_freshness + ordinary-query deferral (search completeness model) ---
+
+
+@pytest.mark.asyncio
+async def test_search_service_defers_ordinary_query_instead_of_blocking_on_live_collect(
+    tmp_path,
+) -> None:
+    """An ordinary query with an empty index and a configured product_index
+    must not synchronously wait on live collection: it should come back fast
+    with completeness=='empty_pending' and defer to the async catalog-job
+    pipeline instead."""
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    service = SearchService(
+        collectors=[VerySlowCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        index_background_refresh_enabled=False,
+    )
+
+    started_at = time.perf_counter()
+    response = await service.search("생소한 신상품", SearchCriteria(limit=24))
+    elapsed = time.perf_counter() - started_at
+    await service.drain_background_tasks()
+    await service.close()
+
+    assert elapsed < 0.3
+    assert response.count == 0
+    assert response.completeness == "empty_pending"
+    assert response.data_freshness is None
+
+
+@pytest.mark.asyncio
+async def test_search_service_still_collects_synchronously_without_product_index(tmp_path) -> None:
+    """Regression guard for the `product_index is not None` gate: with no
+    persisted index configured, there is nowhere to defer to, so an ordinary
+    query must keep collecting live synchronously exactly as before."""
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    service = SearchService(
+        collectors=[SecondFakeCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+    )
+
+    response = await service.search("다른", SearchCriteria(limit=24))
+
+    assert response.count == 1
+    assert response.completeness == "complete"
+    assert response.data_freshness is not None
+    assert response.data_freshness.origin == "live_collection"
+
+
+@pytest.mark.asyncio
+async def test_search_service_marks_thin_index_only_ordinary_result_as_partial(tmp_path) -> None:
+    """The core fix: a single indexed result for an ordinary query is no
+    longer reported as a complete answer."""
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    await store.upsert_search_results(
+        "새브랜드 보습로션",
+        [
+            ProductSourceRecord(
+                source_brand_name="새브랜드",
+                product_name_ko="새브랜드 보습 로션",
+                regular_price=12000,
+                source="oliveyoung",
+                source_product_id="thin-index-1",
+                updated_at="2026-08-10T00:00:00+00:00",
+            )
+        ],
+    )
+    service = SearchService(
+        collectors=[],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        index_background_refresh_enabled=False,
+    )
+
+    response = await service.search("새브랜드 보습로션", SearchCriteria(limit=48))
+    await service.drain_background_tasks()
+    await service.close()
+
+    assert response.count == 1
+    assert response.completeness == "partial"
+    assert response.data_freshness is not None
+    assert response.data_freshness.origin == "index_cache"
+    assert response.data_freshness.checked_at == "2026-08-10T00:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_search_service_still_collects_synchronously_for_brand_only_query(tmp_path) -> None:
+    """Scope-boundary regression test: brand-only queries keep today's
+    synchronous live-collect behavior even with an empty persisted index —
+    the deferral only applies to ordinary queries."""
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text(
+        (
+            '{"entries":['
+            '{"official_en":"mude","aliases":["뮤드"],"sources":[]},'
+            '{"official_en":"colorgram","aliases":["컬러그램"],"sources":[]}'
+            "]}"
+        ),
+        encoding="utf-8",
+    )
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    service = SearchService(
+        collectors=[BrandCollisionCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        index_background_refresh_enabled=False,
+        allowed_result_source_prefixes=("oliveyoung",),
+    )
+
+    response = await service.search("뮤드", SearchCriteria(limit=24))
+    await service.drain_background_tasks()
+    await service.close()
+
+    assert response.count == 1
+    assert response.results[0].brand_en == "mude"
+    assert response.completeness == "complete"
+    assert response.data_freshness is not None
+    assert response.data_freshness.origin == "live_collection"
+
+
+@pytest.mark.asyncio
+async def test_search_service_defer_flag_can_be_disabled_to_restore_legacy_behavior(
+    tmp_path,
+) -> None:
+    """Rollback lever: setting defer_ordinary_query_live_collect=False restores
+    the pre-change synchronous behavior instantly, with no code revert."""
+    registry_path = tmp_path / "brand_registry.json"
+    registry_path.write_text('{"entries":[]}', encoding="utf-8")
+    store = SQLiteProductIndexStore(tmp_path / "product_index.sqlite3")
+    service = SearchService(
+        collectors=[SecondFakeCollector()],
+        normalizer=ProductNormalizer(
+            BrandResolver(registry_path),
+            base_url="https://www.oliveyoung.co.kr",
+        ),
+        cache=AsyncTTLCache[_CollectedResult](ttl_seconds=60),
+        product_index=store,
+        index_background_refresh_enabled=False,
+        defer_ordinary_query_live_collect=False,
+    )
+
+    response = await service.search("다른", SearchCriteria(limit=24))
+    await service.drain_background_tasks()
+    await service.close()
+
+    assert response.count == 1
+    assert response.completeness == "complete"
+    assert response.data_freshness is not None
+    assert response.data_freshness.origin == "live_collection"

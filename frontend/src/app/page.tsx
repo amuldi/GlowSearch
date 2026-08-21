@@ -50,7 +50,7 @@ export default function Home() {
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [sourceFilter, setSourceFilter] = useState<"all" | "oliveyoung" | "musinsa" | "official">("all");
   const [isLoading, setIsLoading] = useState(false);
-  const [isRefining, setIsRefining] = useState(false);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [isSearchButtonPressed, setIsSearchButtonPressed] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
@@ -93,6 +93,12 @@ export default function Home() {
   const visibleStartIndex = (boundedCurrentPage - 1) * RESULT_PAGE_SIZE;
   const visibleEndIndex = visibleStartIndex + RESULT_PAGE_SIZE;
   const visibleResults = response?.results.slice(visibleStartIndex, visibleEndIndex) ?? [];
+  const completeness = response?.completeness ?? "complete";
+  const canFetchMore = Boolean(
+    response &&
+      !isSubmittedBatchQuery &&
+      (completeness === "partial" || completeness === "empty_pending"),
+  );
 
   const sourceCounts = useMemo(() => {
     const all = response?.results ?? [];
@@ -129,7 +135,7 @@ export default function Home() {
     if (!trimmedSubmittedQuery) {
       searchRequestIdRef.current += 1;
       setIsLoading(false);
-      setIsRefining(false);
+      setIsFetchingMore(false);
       setErrorMessage(null);
       return;
     }
@@ -140,30 +146,22 @@ export default function Home() {
     const runSearch = async () => {
       const startedAt = Date.now();
       setIsLoading(true);
-      setIsRefining(false);
+      setIsFetchingMore(false);
       setErrorMessage(null);
       const limit = isSubmittedBatchQuery ? Math.min(submittedQueryCount, MAX_RESULT_LIMIT) : resultLimit;
 
-      // Phase 1: fire index-only request immediately (skip for batch queries)
-      let fullResponseArrived = false;
-      if (!isSubmittedBatchQuery) {
-        searchProducts({ query: trimmedSubmittedQuery, limit, index_only: true }, controller.signal)
-          .then((fastData) => {
-            if (fullResponseArrived) return;
-            if (searchRequestIdRef.current !== requestId) return;
-            if (fastData.results.length > 0) {
-              setResponse(fastData);
-              setIsLoading(false);
-              setIsRefining(true);
-            }
-          })
-          .catch(() => {});
-      }
+      // Batch queries already require an authoritative per-line match, so they
+      // keep doing a single full (live-eligible) search as before. A regular
+      // query does one fast index-only search; if the backend reports the
+      // index result as partial/empty_pending, the user can explicitly ask
+      // for more via fetchMoreResults() instead of a second call firing
+      // automatically on every search.
+      const params = isSubmittedBatchQuery
+        ? { query: trimmedSubmittedQuery, limit }
+        : { query: trimmedSubmittedQuery, limit, index_only: true };
 
-      // Phase 2: full search with live collection
       try {
-        const data = await searchProducts({ query: trimmedSubmittedQuery, limit }, controller.signal);
-        fullResponseArrived = true;
+        const data = await searchProducts(params, controller.signal);
         if (searchRequestIdRef.current !== requestId) return;
         setResponse(data);
       } catch (error) {
@@ -177,7 +175,6 @@ export default function Home() {
         }
         if (searchRequestIdRef.current === requestId) {
           setIsLoading(false);
-          setIsRefining(false);
         }
       }
     };
@@ -286,6 +283,26 @@ export default function Home() {
 
   const chooseSuggestion = (suggestion: string) => {
     submitSearch(suggestion);
+  };
+
+  const fetchMoreResults = async () => {
+    if (!trimmedSubmittedQuery || isSubmittedBatchQuery || isLoading || isFetchingMore) {
+      return;
+    }
+    const requestId = searchRequestIdRef.current;
+    setIsFetchingMore(true);
+    try {
+      const data = await searchProducts({ query: trimmedSubmittedQuery, limit: resultLimit });
+      if (searchRequestIdRef.current !== requestId) return;
+      setResponse(data);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setErrorMessage("검색 중 문제가 발생했습니다.");
+    } finally {
+      if (searchRequestIdRef.current === requestId) {
+        setIsFetchingMore(false);
+      }
+    }
   };
 
   const goToPage = (page: number) => {
@@ -445,10 +462,10 @@ export default function Home() {
             </span>
             상품과 브랜드 정보를 찾는 중
           </div>
-        ) : isRefining ? (
+        ) : isFetchingMore ? (
           <div className="inline-flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-1.5 text-xs font-semibold text-neutral-500 shadow-soft">
             <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-            추가 결과 불러오는 중
+            실시간으로 더 찾는 중
           </div>
         ) : null}
           </>
@@ -467,6 +484,21 @@ export default function Home() {
           {response?.source_errors.length && response.results.length ? (
             <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               일부 소스가 지연되어 확인 가능한 결과부터 표시합니다.
+            </div>
+          ) : null}
+
+          {canFetchMore && completeness === "partial" && response && response.results.length > 0 ? (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blush/60 bg-blush-soft/60 px-4 py-3 text-sm text-rosewood">
+              <span>지금은 색인된 결과만 보여드리고 있어요. 더 있을 수 있어요.</span>
+              <button
+                type="button"
+                onClick={fetchMoreResults}
+                disabled={isFetchingMore}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-rosewood px-3 py-1.5 text-xs font-bold text-white transition hover:bg-[#873247] disabled:cursor-progress disabled:opacity-80"
+              >
+                {isFetchingMore ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
+                {isFetchingMore ? "찾는 중" : "실시간으로 더 찾기"}
+              </button>
             </div>
           ) : null}
 
@@ -517,7 +549,12 @@ export default function Home() {
           ) : null}
 
           {response && response.results.length === 0 && !isLoading ? (
-            <EmptySearchState onChoose={submitSearch} />
+            <EmptySearchState
+              onChoose={submitSearch}
+              onFetchMore={fetchMoreResults}
+              canFetchMore={canFetchMore && completeness === "empty_pending"}
+              isFetchingMore={isFetchingMore}
+            />
           ) : null}
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -583,13 +620,36 @@ function SourceFilterTab({
   );
 }
 
-function EmptySearchState({ onChoose }: { onChoose: (query: string) => void }) {
+function EmptySearchState({
+  onChoose,
+  onFetchMore,
+  canFetchMore,
+  isFetchingMore,
+}: {
+  onChoose: (query: string) => void;
+  onFetchMore: () => void;
+  canFetchMore: boolean;
+  isFetchingMore: boolean;
+}) {
   return (
     <div className="rounded-lg border border-blush/55 bg-white/88 px-5 py-8 text-center shadow-soft">
       <p className="text-base font-bold text-rosewood">검색 결과가 없습니다.</p>
       <p className="mt-2 text-sm text-neutral-600">
-        다른 표기나 대표 카테고리로 다시 검색해 보세요.
+        {canFetchMore
+          ? "아직 색인되지 않은 상품일 수 있어요. 실시간으로 더 찾아볼까요?"
+          : "다른 표기나 대표 카테고리로 다시 검색해 보세요."}
       </p>
+      {canFetchMore ? (
+        <button
+          type="button"
+          onClick={onFetchMore}
+          disabled={isFetchingMore}
+          className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-rosewood px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#873247] disabled:cursor-progress disabled:opacity-80"
+        >
+          {isFetchingMore ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
+          {isFetchingMore ? "실시간으로 찾는 중" : "실시간으로 더 찾기"}
+        </button>
+      ) : null}
       <div className="mt-5 flex flex-wrap justify-center gap-2">
         {EMPTY_SEARCH_SUGGESTIONS.map((suggestion) => (
           <button
