@@ -135,6 +135,20 @@ class ProductIndexStore(Protocol):
 
     async def backfill_editor_confirmed_matches(self, *, actor: str) -> int: ...
 
+    async def ensure_offer(
+        self,
+        *,
+        canonical_product_id: str,
+        source: str,
+        source_product_id: str,
+        source_url: str,
+        original_price: float | None = None,
+        sale_price: float | None = None,
+        currency: str | None = None,
+        image_url: str | None = None,
+        sold_out: bool | None = None,
+    ) -> int | None: ...
+
     async def list_pending_matches(
         self,
         *,
@@ -829,36 +843,18 @@ class SQLiteProductIndexStore:
             ).fetchall()
             processed = 0
             for row in mapping_rows:
-                offer_row = self._connection.execute(
-                    """
-                    SELECT id FROM product_offers
-                    WHERE source = ? AND source_product_id = ? AND canonical_product_id = ?
-                    """,
-                    (row["source"], row["source_product_id"], row["canonical_product_id"]),
-                ).fetchone()
-                if offer_row is None:
-                    self._upsert_offer(
-                        ProductSourceRecord(
-                            canonical_product_id=row["canonical_product_id"],
-                            source=row["source"],
-                            source_product_id=row["source_product_id"],
-                            source_url=row["source_url"],
-                        ),
-                        now,
-                    )
-                    offer_row = self._connection.execute(
-                        """
-                        SELECT id FROM product_offers
-                        WHERE source = ? AND source_product_id = ? AND canonical_product_id = ?
-                        """,
-                        (row["source"], row["source_product_id"], row["canonical_product_id"]),
-                    ).fetchone()
-                    if offer_row is None:
-                        # _upsert_offer refused the write (canonical_product_id
-                        # conflict with an existing offer for this source +
-                        # source_product_id) — preserve that existing link
-                        # rather than fabricating a match for it.
-                        continue
+                offer_id = self._ensure_offer_row_locked(
+                    canonical_product_id=row["canonical_product_id"],
+                    source=row["source"],
+                    source_product_id=row["source_product_id"],
+                    source_url=row["source_url"],
+                    now=now,
+                )
+                if offer_id is None:
+                    # A conflicting canonical_product_id already owns this
+                    # (source, source_product_id) — preserve that existing
+                    # link rather than fabricating a match for it.
+                    continue
                 match_id = f"match:{row['canonical_product_id']}:{row['source']}:{row['source_product_id']}"
                 evidence_json = json.dumps(
                     [{"type": "editor_confirmed_mapping", "value": row["canonical_product_id"]}]
@@ -875,7 +871,7 @@ class SQLiteProductIndexStore:
                     (
                         match_id,
                         row["canonical_product_id"],
-                        offer_row["id"],
+                        offer_id,
                         evidence_json,
                         actor,
                         row["created_at"] or now,
@@ -886,6 +882,91 @@ class SQLiteProductIndexStore:
                 processed += 1
             self._connection.commit()
         return processed
+
+    def _ensure_offer_row_locked(
+        self,
+        *,
+        canonical_product_id: str,
+        source: str,
+        source_product_id: str,
+        source_url: str,
+        now: str,
+        original_price: float | None = None,
+        sale_price: float | None = None,
+        currency: str | None = None,
+        image_url: str | None = None,
+        sold_out: bool | None = None,
+    ) -> int | None:
+        """Looks up an existing product_offers row for (source,
+        source_product_id, canonical_product_id); creates one via
+        _upsert_offer if missing. Returns the offer id, or None if
+        _upsert_offer refused the write (a conflicting canonical_product_id
+        already owns this (source, source_product_id) — the existing link is
+        preserved, no identifier is fabricated). Must only be called while
+        self._lock is already held. Shared by backfill_editor_confirmed_matches
+        and the public ensure_offer() (used by the pending-match import CLI,
+        milestone 5)."""
+        offer_row = self._connection.execute(
+            """
+            SELECT id FROM product_offers
+            WHERE source = ? AND source_product_id = ? AND canonical_product_id = ?
+            """,
+            (source, source_product_id, canonical_product_id),
+        ).fetchone()
+        if offer_row is not None:
+            return int(offer_row["id"])
+        self._upsert_offer(
+            ProductSourceRecord(
+                canonical_product_id=canonical_product_id,
+                source=source,
+                source_product_id=source_product_id,
+                source_url=source_url,
+                original_price=original_price,
+                sale_price=sale_price,
+                currency=currency,
+                image_url=image_url,
+                sold_out=sold_out,
+            ),
+            now,
+        )
+        offer_row = self._connection.execute(
+            """
+            SELECT id FROM product_offers
+            WHERE source = ? AND source_product_id = ? AND canonical_product_id = ?
+            """,
+            (source, source_product_id, canonical_product_id),
+        ).fetchone()
+        return int(offer_row["id"]) if offer_row is not None else None
+
+    async def ensure_offer(
+        self,
+        *,
+        canonical_product_id: str,
+        source: str,
+        source_product_id: str,
+        source_url: str,
+        original_price: float | None = None,
+        sale_price: float | None = None,
+        currency: str | None = None,
+        image_url: str | None = None,
+        sold_out: bool | None = None,
+    ) -> int | None:
+        now = datetime.now(tz=UTC).isoformat()
+        async with self._lock:
+            offer_id = self._ensure_offer_row_locked(
+                canonical_product_id=canonical_product_id,
+                source=source,
+                source_product_id=source_product_id,
+                source_url=source_url,
+                now=now,
+                original_price=original_price,
+                sale_price=sale_price,
+                currency=currency,
+                image_url=image_url,
+                sold_out=sold_out,
+            )
+            self._connection.commit()
+        return offer_id
 
     async def list_pending_matches(
         self,
