@@ -11,7 +11,16 @@ from app.cache.ttl import AsyncTTLCache
 from app.data_collector.base import ProductCollector, SearchCriteria, SourceUnavailableError
 from app.ingestion.oliveyoung_pipeline import IngestionSummary, OliveYoungIngestionPipeline
 from app.indexing.agents import ProductIngestionAgent, SourceDiscoveryAgent
-from app.indexing.store import ProductIndexStore
+from app.indexing.store import ProductIndexStore, ReviewOutcome
+from app.models.review import (
+    MatchDetail,
+    MatchEvidenceItem,
+    MatchOfferSummary,
+    MatchReviewEvent,
+    MatchTargetSummary,
+    PendingMatchListResponse,
+    PendingMatchSummary,
+)
 from app.models.product import (
     CompletenessState,
     DataFreshness,
@@ -1261,6 +1270,95 @@ class SearchService:
             product_name_ko=product_name_ko,
             product_name_en=product_name_en,
             shade=shade,
+        )
+
+    async def list_pending_matches(
+        self,
+        *,
+        limit: int,
+        after_id: int | None = None,
+        source: str | None = None,
+    ) -> PendingMatchListResponse:
+        if self._product_index is None:
+            return PendingMatchListResponse(items=[])
+        list_pending = getattr(self._product_index, "list_pending_matches", None)
+        if list_pending is None:
+            return PendingMatchListResponse(items=[])
+        rows = await list_pending(limit=limit + 1, after_id=after_id, source=source)
+        next_after_id = rows[limit]["id"] if len(rows) > limit else None
+        items = [self._pending_match_summary(row) for row in rows[:limit]]
+        return PendingMatchListResponse(items=items, next_after_id=next_after_id)
+
+    async def get_match_detail(self, match_id: str) -> MatchDetail | None:
+        if self._product_index is None:
+            return None
+        get_detail = getattr(self._product_index, "get_match_detail", None)
+        if get_detail is None:
+            return None
+        row = await get_detail(match_id)
+        if row is None:
+            return None
+        offer = self._match_offer_summary(row["offer"])
+        return MatchDetail(
+            match_id=row["match_id"],
+            canonical_product_id=row["canonical_product_id"],
+            review_state=row["review_state"],
+            confidence=row["confidence"],
+            match_method=row["match_method"],
+            evidence=[MatchEvidenceItem(**item) for item in row["evidence"]],
+            reviewed_by=row["reviewed_by"],
+            reviewed_at=row["reviewed_at"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            offer=offer,
+            target=MatchTargetSummary(**row["target"]) if row["target"] else None,
+            history=[MatchReviewEvent(**event) for event in row["history"]],
+        )
+
+    async def review_match(
+        self,
+        match_id: str,
+        *,
+        decision: str,
+        reviewer: str,
+        note: str | None = None,
+        expected_updated_at: str | None = None,
+    ) -> ReviewOutcome | None:
+        if self._product_index is None:
+            return None
+        review = getattr(self._product_index, "review_match", None)
+        if review is None:
+            return None
+        return await review(
+            match_id,
+            decision=decision,
+            reviewer=reviewer,
+            note=note,
+            expected_updated_at=expected_updated_at,
+        )
+
+    def _pending_match_summary(self, row: dict[str, object]) -> PendingMatchSummary:
+        return PendingMatchSummary(
+            match_id=row["match_id"],
+            id=row["id"],
+            canonical_product_id=row["canonical_product_id"],
+            confidence=row["confidence"],
+            match_method=row["match_method"],
+            created_at=row["created_at"],
+            offer=self._match_offer_summary(row["offer"]),
+            target=MatchTargetSummary(**row["target"]) if row["target"] else None,
+        )
+
+    def _match_offer_summary(self, offer: dict[str, object]) -> MatchOfferSummary:
+        return MatchOfferSummary(
+            source=offer["source"],
+            source_label=self._source_policy.label(offer["source"]),
+            source_url=offer["source_url"],
+            source_product_id=offer["source_product_id"],
+            price=offer["price"],
+            image_url=offer["image_url"],
+            sold_out=offer["sold_out"],
+            updated_at=offer["updated_at"],
         )
 
     def schedule_editor_search_gap(

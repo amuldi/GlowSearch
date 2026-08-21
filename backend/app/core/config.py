@@ -116,6 +116,8 @@ class Settings(BaseSettings):
     defer_ordinary_query_live_collect: bool = True
     product_offers_enabled: bool = True
     product_match_enabled: bool = True
+    admin_review_token: str | None = None
+    admin_review_api_enabled: bool = False
     product_index_background_refresh_enabled: bool = True
     product_index_background_refresh_limit: int = 1200
     product_index_warmup_on_startup: bool = False

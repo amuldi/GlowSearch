@@ -29,6 +29,17 @@ class CatalogIngestionJob:
     last_error: str | None = None
 
 
+@dataclass(frozen=True)
+class ReviewOutcome:
+    """Result of SQLiteProductIndexStore.review_match. `row` is the current
+    product_matches row (as a plain dict) for every status except
+    'not_found', including 'conflict' (so a caller can show the caller what
+    actually changed underneath them without a second query)."""
+
+    status: str  # "updated" | "noop" | "not_found" | "conflict"
+    row: dict[str, object] | None
+
+
 class ProductIndexStore(Protocol):
     async def search(self, query: str, limit: int) -> list[ProductSourceRecord]: ...
 
@@ -123,6 +134,26 @@ class ProductIndexStore(Protocol):
     async def backfill_verified_catalog_matches(self, *, actor: str) -> int: ...
 
     async def backfill_editor_confirmed_matches(self, *, actor: str) -> int: ...
+
+    async def list_pending_matches(
+        self,
+        *,
+        limit: int,
+        after_id: int | None = None,
+        source: str | None = None,
+    ) -> list[dict[str, object]]: ...
+
+    async def get_match_detail(self, match_id: str) -> dict[str, object] | None: ...
+
+    async def review_match(
+        self,
+        match_id: str,
+        *,
+        decision: str,
+        reviewer: str,
+        note: str | None = None,
+        expected_updated_at: str | None = None,
+    ) -> ReviewOutcome: ...
 
     async def all_products(self, limit: int | None = None) -> list[ProductSourceRecord]: ...
 
@@ -856,6 +887,148 @@ class SQLiteProductIndexStore:
             self._connection.commit()
         return processed
 
+    async def list_pending_matches(
+        self,
+        *,
+        limit: int,
+        after_id: int | None = None,
+        source: str | None = None,
+    ) -> list[dict[str, object]]:
+        conditions = ["pm.review_state = 'pending_review'"]
+        params: list[object] = []
+        if after_id is not None:
+            conditions.append("pm.id > ?")
+            params.append(after_id)
+        if source:
+            conditions.append("po.source = ?")
+            params.append(source)
+        where_clause = " AND ".join(conditions)
+        async with self._lock:
+            rows = self._connection.execute(
+                f"""
+                SELECT {_MATCH_OFFER_COLUMNS}
+                FROM product_matches pm
+                JOIN product_offers po ON po.id = pm.offer_id
+                WHERE {where_clause}
+                ORDER BY pm.id ASC
+                LIMIT ?
+                """,
+                (*params, max(limit, 1)),
+            ).fetchall()
+            return [
+                {**_match_row_to_dict(row), "target": self._representative_product_row_locked(row["canonical_product_id"])}
+                for row in rows
+            ]
+
+    async def get_match_detail(self, match_id: str) -> dict[str, object] | None:
+        async with self._lock:
+            row = self._connection.execute(
+                f"""
+                SELECT {_MATCH_OFFER_COLUMNS}
+                FROM product_matches pm
+                JOIN product_offers po ON po.id = pm.offer_id
+                WHERE pm.match_id = ?
+                """,
+                (match_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            entry = _match_row_to_dict(row)
+            entry["target"] = self._representative_product_row_locked(row["canonical_product_id"])
+            history_rows = self._connection.execute(
+                """
+                SELECT previous_review_state, new_review_state, reviewer, note, created_at
+                FROM product_match_review_events
+                WHERE match_id = ?
+                ORDER BY id ASC
+                """,
+                (match_id,),
+            ).fetchall()
+            entry["history"] = [
+                {
+                    "previous_review_state": history_row["previous_review_state"],
+                    "new_review_state": history_row["new_review_state"],
+                    "reviewer": history_row["reviewer"],
+                    "note": history_row["note"],
+                    "created_at": history_row["created_at"],
+                }
+                for history_row in history_rows
+            ]
+            return entry
+
+    def _representative_product_row_locked(self, canonical_product_id: str) -> dict[str, object] | None:
+        """Best available stand-in for "the product this offer is being
+        matched against" — no dedicated canonical-product table exists yet
+        (tracked as future work), so this picks one representative `products`
+        row sharing the same canonical_product_id. Must only be called while
+        self._lock is already held (no lock of its own)."""
+        row = self._connection.execute(
+            """
+            SELECT source_brand_name, source_brand_name_en, product_name_ko,
+                   product_name_display_ko, image_url
+            FROM products
+            WHERE canonical_product_id = ?
+            ORDER BY last_seen_at DESC
+            LIMIT 1
+            """,
+            (canonical_product_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "canonical_product_id": canonical_product_id,
+            "brand_ko": row["source_brand_name"],
+            "brand_en": row["source_brand_name_en"],
+            "product_name_ko": row["product_name_ko"],
+            "product_name_display_ko": row["product_name_display_ko"],
+            "image_url": row["image_url"],
+        }
+
+    async def review_match(
+        self,
+        match_id: str,
+        *,
+        decision: str,
+        reviewer: str,
+        note: str | None = None,
+        expected_updated_at: str | None = None,
+    ) -> ReviewOutcome:
+        now = datetime.now(tz=UTC).isoformat()
+        async with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM product_matches WHERE match_id = ?",
+                (match_id,),
+            ).fetchone()
+            if row is None:
+                return ReviewOutcome(status="not_found", row=None)
+            if expected_updated_at is not None and row["updated_at"] != expected_updated_at:
+                return ReviewOutcome(status="conflict", row=_row_to_plain_dict(row))
+            if row["review_state"] == decision:
+                return ReviewOutcome(status="noop", row=_row_to_plain_dict(row))
+            self._connection.execute(
+                """
+                UPDATE product_matches
+                SET review_state = ?, reviewed_by = ?, reviewed_at = ?, updated_at = ?
+                WHERE match_id = ?
+                """,
+                (decision, reviewer, now, now, match_id),
+            )
+            self._connection.execute(
+                """
+                INSERT INTO product_match_review_events(
+                    match_id, previous_review_state, new_review_state, reviewer, note, created_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?)
+                """,
+                (match_id, row["review_state"], decision, reviewer, note, now),
+            )
+            self._connection.commit()
+            updated_row = self._connection.execute(
+                "SELECT * FROM product_matches WHERE match_id = ?",
+                (match_id,),
+            ).fetchone()
+            return ReviewOutcome(status="updated", row=_row_to_plain_dict(updated_row))
+
     async def all_products(self, limit: int | None = None) -> list[ProductSourceRecord]:
         sql = "SELECT * FROM products ORDER BY last_seen_at DESC, id DESC"
         params: tuple[int, ...] = ()
@@ -1075,6 +1248,23 @@ class SQLiteProductIndexStore:
         )
         self._connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_product_matches_review_state ON product_matches(review_state)"
+        )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS product_match_review_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                match_id TEXT NOT NULL REFERENCES product_matches(match_id),
+                previous_review_state TEXT NOT NULL,
+                new_review_state TEXT NOT NULL,
+                reviewer TEXT NOT NULL,
+                note TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        self._connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_product_match_review_events_match "
+            "ON product_match_review_events(match_id)"
         )
         self._ensure_fts_table()
         self._connection.commit()
@@ -1557,6 +1747,66 @@ def _row_to_offer(row: Row) -> ProductOffer:
         updated_at=row["source_updated_at"],
         review_state=review_state,
     )
+
+
+_MATCH_OFFER_COLUMNS = """
+    pm.match_id AS match_id,
+    pm.id AS match_row_id,
+    pm.canonical_product_id AS canonical_product_id,
+    pm.confidence AS confidence,
+    pm.match_method AS match_method,
+    pm.evidence_json AS evidence_json,
+    pm.review_state AS review_state,
+    pm.reviewed_by AS reviewed_by,
+    pm.reviewed_at AS reviewed_at,
+    pm.created_at AS match_created_at,
+    pm.updated_at AS match_updated_at,
+    po.source AS offer_source,
+    po.source_url AS offer_source_url,
+    po.source_product_id AS offer_source_product_id,
+    po.original_price AS offer_original_price,
+    po.sale_price AS offer_sale_price,
+    po.image_url AS offer_image_url,
+    po.sold_out AS offer_sold_out,
+    po.source_updated_at AS offer_updated_at
+"""
+
+
+def _match_row_to_dict(row: Row) -> dict[str, object]:
+    """Parses one row from the product_matches JOIN product_offers query
+    (see _MATCH_OFFER_COLUMNS) into the plain-dict shape the admin review API
+    (app/service/search_service.py passthroughs -> app/models/review.py)
+    builds its Pydantic responses from. Does not include "target" — the
+    caller attaches that separately since it needs its own query."""
+    original_price = row["offer_original_price"]
+    sale_price = row["offer_sale_price"]
+    display_price = sale_price if sale_price is not None else original_price
+    return {
+        "match_id": row["match_id"],
+        "id": row["match_row_id"],
+        "canonical_product_id": row["canonical_product_id"],
+        "confidence": row["confidence"],
+        "match_method": row["match_method"],
+        "evidence": json.loads(row["evidence_json"]) if row["evidence_json"] else [],
+        "review_state": row["review_state"],
+        "reviewed_by": row["reviewed_by"],
+        "reviewed_at": row["reviewed_at"],
+        "created_at": row["match_created_at"],
+        "updated_at": row["match_updated_at"],
+        "offer": {
+            "source": row["offer_source"],
+            "source_url": row["offer_source_url"],
+            "source_product_id": row["offer_source_product_id"],
+            "price": display_price,
+            "image_url": row["offer_image_url"],
+            "sold_out": _bool_from_sqlite(row["offer_sold_out"]),
+            "updated_at": row["offer_updated_at"],
+        },
+    }
+
+
+def _row_to_plain_dict(row: Row) -> dict[str, object]:
+    return {key: row[key] for key in row.keys()}
 
 
 def _catalog_job_from_row(row: Row) -> CatalogIngestionJob:

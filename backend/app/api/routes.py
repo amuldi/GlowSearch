@@ -6,7 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 
 from app.core.config import get_settings
 from app.data_collector.base import SearchCriteria
@@ -19,6 +19,12 @@ from app.models.editor import (
     EditorConfirmResponse,
 )
 from app.models.product import SearchResponse, SuggestionResponse
+from app.models.review import (
+    MatchDetail,
+    MatchReviewRequest,
+    MatchReviewResponse,
+    PendingMatchListResponse,
+)
 from app.search_engine.analytics import InMemorySearchAnalytics
 from app.service.factory import get_search_analytics, get_search_service
 from app.service.search_service import SearchService
@@ -447,6 +453,99 @@ async def warm_index(
         "limit": limit,
         "wait": wait,
     }
+
+
+def _bearer_token(authorization: str | None) -> str | None:
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization.removeprefix("Bearer ").strip()
+    return token or None
+
+
+def _require_admin_review(
+    authorization: Annotated[str | None, Header()] = None,
+) -> None:
+    """Auth for the match-review API (milestone 4). Deliberately stricter
+    than _require_index_admin: no localhost fallback, and a dedicated
+    GLOWSEARCH_ADMIN_REVIEW_TOKEN separate from the index admin token. If
+    either the feature flag or the token is unset, every /index/matches/*
+    route 404s as if it doesn't exist, rather than 403 — an unconfigured
+    approval API should not even reveal its own existence."""
+    settings = get_settings()
+    if not settings.admin_review_api_enabled or not settings.admin_review_token:
+        raise HTTPException(status_code=404)
+    provided = _bearer_token(authorization)
+    if provided is not None and hmac.compare_digest(provided, settings.admin_review_token):
+        return
+    raise HTTPException(status_code=403, detail="Invalid admin review token.")
+
+
+@router.get(
+    "/index/matches/pending",
+    response_model=PendingMatchListResponse,
+    dependencies=[Depends(_require_admin_review)],
+)
+async def list_pending_matches(
+    limit: Annotated[int, Query(ge=1, le=100, description="반환 개수")] = 20,
+    after_id: Annotated[int | None, Query(ge=1, description="이 id보다 큰 매치부터")] = None,
+    source: Annotated[str | None, Query(description="판매처 필터")] = None,
+    service: SearchService = Depends(get_search_service),
+) -> PendingMatchListResponse:
+    return await service.list_pending_matches(limit=limit, after_id=after_id, source=source)
+
+
+@router.get(
+    "/index/matches/{match_id}",
+    response_model=MatchDetail,
+    dependencies=[Depends(_require_admin_review)],
+)
+async def get_match(
+    match_id: str,
+    service: SearchService = Depends(get_search_service),
+) -> MatchDetail:
+    detail = await service.get_match_detail(match_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Match not found.")
+    return detail
+
+
+@router.post(
+    "/index/matches/{match_id}/review",
+    response_model=MatchReviewResponse,
+    dependencies=[Depends(_require_admin_review)],
+)
+async def review_match(
+    match_id: str,
+    request: MatchReviewRequest,
+    service: SearchService = Depends(get_search_service),
+) -> MatchReviewResponse:
+    outcome = await service.review_match(
+        match_id,
+        decision=request.decision,
+        reviewer=request.reviewer,
+        note=request.note,
+        expected_updated_at=request.expected_updated_at,
+    )
+    if outcome is None or outcome.status == "not_found":
+        raise HTTPException(status_code=404, detail="Match not found.")
+    if outcome.status == "conflict":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Match has been updated since expected_updated_at.",
+                "current_updated_at": outcome.row["updated_at"],
+                "current_review_state": outcome.row["review_state"],
+            },
+        )
+    row = outcome.row
+    return MatchReviewResponse(
+        match_id=row["match_id"],
+        review_state=row["review_state"],
+        reviewed_by=row["reviewed_by"],
+        reviewed_at=row["reviewed_at"],
+        updated_at=row["updated_at"],
+        idempotent=(outcome.status == "noop"),
+    )
 
 
 def _require_index_admin(request: Request, token: str | None) -> None:
